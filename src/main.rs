@@ -1,4 +1,4 @@
-//! jj-release — semantic releases for Jujutsu repositories.
+//! jj-release, semantic releases for Jujutsu repositories.
 
 mod commits;
 mod config;
@@ -13,7 +13,7 @@ use anyhow::{bail, Context, Result};
 use clap::Parser;
 use semver::Version;
 
-use commits::{apply_bump, compute_bump, find_trigger, BumpKind};
+use commits::{apply_bump, compute_bump, find_trigger, latest_version_tag, BumpKind};
 use config::Config;
 use jj::{find_repo_root, JjBackend, ShellBackend};
 use manifest::{read_version, write_version};
@@ -195,7 +195,11 @@ fn resolve_bump(backend: &dyn JjBackend, config: &Config, _current: &Version) ->
         };
     }
 
-    let commits = backend.log_commits("root()..@")?;
+    let since = match latest_version_tag(backend, &config.release.tag_prefix)? {
+        Some(tag) => tag.name,
+        None => "root()".to_owned(),
+    };
+    let commits = backend.log_commits(&format!("{since}..@"))?;
     // Walk from the last version tag (or the root) to @.
     // TODO: wire up latest_version_tag() once list_tags is on the backend.
     // For now, scan all of @ ancestry.
