@@ -15,11 +15,6 @@ use crate::commits::CommitInfo;
 
 /// Everything jj-release needs from the VCS layer.
 pub trait JjBackend {
-    /// Run a revset query and return one commit id per matching revision,
-    /// ordered newest-first. The caller picks the revset language — whatever
-    /// `jj log -r <revset>` accepts.
-    fn query_revset(&self, revset: &str) -> Result<Vec<String>>;
-
     /// Return `(change_id, description)` pairs for every commit matched by
     /// `revset`, newest-first.
     fn log_commits(&self, revset: &str) -> Result<Vec<CommitInfo>>;
@@ -39,6 +34,8 @@ pub trait JjBackend {
 
     /// Export jj state to the colocated git repo (needed before raw git ops).
     fn git_export(&self) -> Result<()>;
+
+    /// List all local tag names.
     fn list_tags(&self) -> Result<Vec<String>>;
 }
 
@@ -88,26 +85,6 @@ impl ShellBackend {
 }
 
 impl JjBackend for ShellBackend {
-    fn query_revset(&self, revset: &str) -> Result<Vec<String>> {
-        // `-T 'commit_id ++ "\n"'` gives us one stable id per line.
-        let raw = self.run(&[
-            "log",
-            "--no-graph",
-            "-r",
-            revset,
-            "-T",
-            r#"commit_id ++ "\n""#,
-        ])?;
-
-        let ids = raw
-            .lines()
-            .map(|l| l.trim().to_owned())
-            .filter(|l| !l.is_empty())
-            .collect();
-
-        Ok(ids)
-    }
-
     fn log_commits(&self, revset: &str) -> Result<Vec<CommitInfo>> {
         // Use a separator that won't appear in commit messages.
         // Format: <change_id>\x1f<description>\x1e
@@ -149,7 +126,7 @@ impl JjBackend for ShellBackend {
     }
 
     fn create_tag(&self, tag: &str, revision: &str) -> Result<()> {
-        self.run_silent(&["tag", "set", tag, "-r", revision])
+        self.run_silent(&["tag", "set", tag, "-r", revision, "--allow-move"])
     }
 
     fn set_bookmark(&self, name: &str, revision: &str) -> Result<()> {

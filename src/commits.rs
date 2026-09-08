@@ -30,12 +30,12 @@ pub enum BumpKind {
 /// string anywhere in its commit message.  We check `@` (the working-copy
 /// parent stack) for the trigger commit.
 ///
-/// Returns the change_id of the trigger commit if found, `None` otherwise.
-pub fn find_trigger(backend: &dyn JjBackend, trigger: &str) -> Result<Option<String>> {
-    // Walk the very tip — just @ and its immediate parent chain up to 10 deep.
+/// Returns the `change_id` of the trigger commit if found, `None` otherwise.
+pub fn find_trigger(backend: &dyn JjBackend, trigger: &str, since: &str) -> Result<Option<String>> {
+    // Walk the very tip, just @ and its immediate parent chain up to 10 deep.
     // We don't want to scan the whole repo; the trigger should be recent.
     let commits = backend
-        .log_commits("@:: & ancestors(@, 10)")
+        .log_commits(&format!("{since}..@"))
         .context("scanning for trigger commit")?;
 
     for c in commits {
@@ -60,42 +60,6 @@ pub fn latest_version_tag(backend: &dyn JjBackend, prefix: &str) -> Result<Optio
         })
         .collect();
     Ok(highest_semver_tag(&tags).cloned())
-}
-
-/// Shell out to `jj tag list` (via the backend's query mechanism with a
-/// special template) to enumerate all tags and their targets, then return
-/// the highest semver tag reachable from `@`.
-fn find_latest_semver_tag(backend: &dyn JjBackend) -> Result<Option<(String, Version)>> {
-    // Use the revset: for each ancestor of @, emit "tag_name\x1fchange_id".
-    // jj's template language exposes `tags` on a commit as an iterator.
-    let raw = backend
-        .log_commits(r#"ancestors(@) & tags()"#)
-        .context("querying tagged ancestors")?;
-
-    // We can't get tag names from log_commits as-is because our template
-    // only emits change_id + description. We need a custom query here.
-    // This is a good example of where jj-lib would be cleaner.
-    //
-    // Workaround: use query_revset with a template that emits tag names.
-    // We'll add a dedicated `list_tags` method to the backend in a follow-up;
-    // for now, parse `jj tag list` output directly.
-    let _ = raw;
-
-    // Ask the backend with a revset that emits tag ref names via the template.
-    // jj log -r 'ancestors(@) & tags()' -T 'refs.tags().map(|t| t.name() ++ "\n")'
-    // This template syntax works in jj >= 0.21.
-    let tag_names_raw = backend.query_revset(
-        // query_revset uses commit_id template; we abuse it slightly here.
-        // TODO: add list_tags() to the trait for a cleaner approach.
-        "ancestors(@) & tags()",
-    )?;
-
-    // tag_names_raw is commit IDs, not tag names. We need a proper
-    // `list_version_tags` on the backend. For now, return None and note
-    // this is the next thing to wire up properly.
-    let _ = tag_names_raw;
-
-    Ok(None) // TODO: implement properly once list_tags is on the trait
 }
 
 /// Walk commits between `since_revision` (exclusive) and `@` (inclusive),
@@ -198,9 +162,6 @@ mod tests {
         }
         fn git_export(&self) -> Result<()> {
             Ok(())
-        }
-        fn query_revset(&self, _: &str) -> Result<Vec<String>> {
-            Ok(vec![])
         }
     }
 

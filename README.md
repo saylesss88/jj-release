@@ -126,7 +126,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install jj
-        run: cargo install jujutsu --locked
+        run: cargo install jj-cli --locked
 
       - name: Install jj-release
         run: cargo install jj-release --locked

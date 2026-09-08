@@ -12,7 +12,6 @@ use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
-use semver::Version;
 
 use commits::{apply_bump, compute_bump, find_trigger, latest_version_tag, BumpKind};
 use config::Config;
@@ -113,25 +112,41 @@ fn release_pipeline(
         ($($t:tt)*) => { if !quiet { println!($($t)*); } }
     }
 
+    let since = match latest_version_tag(backend, &config.release.tag_prefix)? {
+        Some(tag) => tag.name,
+        None => "root()".to_owned(),
+    };
+
     // 1. Detect trigger commit.
     info!(
         "→ Scanning for trigger commit {:?}…",
         config.release.trigger
     );
-    let Some(_trigger_id) = find_trigger(backend, &config.release.trigger)? else {
+    let Some(_trigger_id) = find_trigger(backend, &config.release.trigger, &since)? else {
         info!("No trigger commit found. Nothing to release.");
         return Ok(());
     };
     info!("  Found trigger commit.");
 
-    // 2. Find latest version tag (or treat as first release at 0.0.0).
+    // 2. Read current version.
     let cargo_toml = root.join("Cargo.toml");
     let current_version =
         read_version(&cargo_toml).context("reading current version from Cargo.toml")?;
     info!("  Current version: {current_version}");
 
-    // 3. Compute bump.
-    let bump = resolve_bump(backend, config, &current_version)?;
+    // 3. Fetch commits and compute bump — reuse commits for changelog.
+    let commits = backend.log_commits(&format!("{since}..@"))?;
+    let bump = if let Some(force) = &config.bump.force {
+        match force.as_str() {
+            "major" => BumpKind::Major,
+            "minor" => BumpKind::Minor,
+            "patch" => BumpKind::Patch,
+            other => bail!("unknown bump.force value {other:?} — must be major/minor/patch"),
+        }
+    } else {
+        compute_bump(&commits)
+    };
+
     if bump == BumpKind::None {
         info!("No releasable commits found since last tag. Nothing to release.");
         return Ok(());
@@ -149,11 +164,6 @@ fn release_pipeline(
     // 4. Write changelog.
     if config.changelog.enabled {
         info!("→ Writing changelog…");
-        let since = match latest_version_tag(backend, &config.release.tag_prefix)? {
-            Some(tag) => tag.name,
-            None => "root()".to_owned(),
-        };
-        let commits = backend.log_commits(&format!("{since}..@"))?;
         let changelog_path = root.join(&config.changelog.file);
         let existing = if changelog_path.exists() {
             std::fs::read_to_string(&changelog_path)?
@@ -165,10 +175,9 @@ fn release_pipeline(
         std::fs::write(&changelog_path, updated)?;
     }
 
-    // 5. Create the version-bump commit.
+    // 5. Bump Cargo.toml and create release commit.
     info!("→ Bumping Cargo.toml to {next_version}…");
     write_version(&cargo_toml, &next_version)?;
-
     let release_message = format!("chore: release {tag_name}");
     info!("→ Creating commit {:?}…", release_message);
     backend.new_commit(&release_message)?;
@@ -184,7 +193,6 @@ fn release_pipeline(
     // 8. Export to git and push.
     info!("→ Exporting to git…");
     backend.git_export()?;
-
     info!("→ Pushing bookmark and tags…");
     backend.git_push(&config.release.bookmark, Some(&tag_name))?;
 
@@ -211,7 +219,21 @@ fn print_next_version(
 ) -> Result<()> {
     let cargo_toml = root.join("Cargo.toml");
     let current = read_version(&cargo_toml)?;
-    let bump = resolve_bump(backend, config, &current)?;
+    let since = match latest_version_tag(backend, &config.release.tag_prefix)? {
+        Some(tag) => tag.name,
+        None => "root()".to_owned(),
+    };
+    let commits = backend.log_commits(&format!("{since}..@"))?;
+    let bump = if let Some(force) = &config.bump.force {
+        match force.as_str() {
+            "major" => BumpKind::Major,
+            "minor" => BumpKind::Minor,
+            "patch" => BumpKind::Patch,
+            other => bail!("unknown bump.force value {other:?} — must be major/minor/patch"),
+        }
+    } else {
+        compute_bump(&commits)
+    };
     let next = apply_bump(&current, bump);
     println!("{next}");
     Ok(())
@@ -219,29 +241,10 @@ fn print_next_version(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/// Resolve the bump kind: forced override from config wins, otherwise
-/// computed from commit history.
-fn resolve_bump(backend: &dyn JjBackend, config: &Config, _current: &Version) -> Result<BumpKind> {
-    if let Some(force) = &config.bump.force {
-        return match force.as_str() {
-            "major" => Ok(BumpKind::Major),
-            "minor" => Ok(BumpKind::Minor),
-            "patch" => Ok(BumpKind::Patch),
-            other => bail!("unknown bump.force value {other:?} — must be major/minor/patch"),
-        };
-    }
-
-    let since = match latest_version_tag(backend, &config.release.tag_prefix)? {
-        Some(tag) => tag.name,
-        None => "root()".to_owned(),
-    };
-    let commits = backend.log_commits(&format!("{since}..@"))?;
-    Ok(compute_bump(&commits))
-}
-
 fn cargo_publish(root: &std::path::Path, extra_flags: &[String]) -> Result<()> {
     let status = Command::new("cargo")
         .arg("publish")
+        .arg("--allow-dirty")
         .args(extra_flags)
         .current_dir(root)
         .status()

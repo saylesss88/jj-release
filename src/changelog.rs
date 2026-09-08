@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use git_conventional::Commit;
 use jiff::Zoned;
 use semver::Version;
@@ -26,7 +28,7 @@ pub fn render_changelog_section(commits: &[CommitInfo], version: &Version) -> St
             "feat" => added.push(entry),
             "fix" => fixed.push(entry),
             "perf" | "refactor" => changed.push(entry),
-            _ => continue,
+            _ => {}
         }
     }
 
@@ -37,9 +39,9 @@ pub fn render_changelog_section(commits: &[CommitInfo], version: &Version) -> St
         if entries.is_empty() {
             continue;
         }
-        out.push_str(&format!("\n### {heading}\n"));
+        let _ = write!(out, "\n### {heading}\n");
         for entry in entries {
-            out.push_str(&format!("- {entry}\n"));
+            let _ = writeln!(out, "- {entry}");
         }
     }
 
@@ -51,11 +53,10 @@ pub fn prepend_to_file(existing: &str, new_section: &str) -> String {
     if existing.is_empty() {
         return format!("{header}{new_section}");
     }
-    if let Some(rest) = existing.strip_prefix(header) {
-        format!("{header}{new_section}\n{rest}")
-    } else {
-        format!("{header}{new_section}\n{existing}")
-    }
+    existing.strip_prefix(header).map_or_else(
+        || format!("{header}{new_section}\n{existing}"),
+        |rest| format!("{header}{new_section}\n{rest}"),
+    )
 }
 
 #[cfg(test)]
