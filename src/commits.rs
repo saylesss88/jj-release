@@ -176,6 +176,16 @@ pub fn apply_bump(current: &Version, bump: BumpKind) -> Version {
     next
 }
 
+#[derive(Debug, Clone)]
+pub struct Tag {
+    pub name: String,
+    pub version: Version,
+}
+
+pub fn highest_semver_tag(tags: &[Tag]) -> Option<&Tag> {
+    tags.iter().max_by(|a, b| a.version.cmp(&b.version))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
