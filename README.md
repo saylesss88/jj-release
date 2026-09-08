@@ -226,4 +226,4 @@ If your version of jj doesn't support these flags, update jj first:
 
 ## License
 
-Apache-2.0
+- [Apache-2.0](https://github.com/saylesss88/jj-release/blob/main/LICENSE)
