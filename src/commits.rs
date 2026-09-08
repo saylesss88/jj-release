@@ -53,7 +53,7 @@ pub fn latest_version_tag(backend: &dyn JjBackend, prefix: &str) -> Result<Optio
     let raw_tags = backend.list_tags()?;
     let tags: Vec<Tag> = raw_tags
         .into_iter()
-        .filter_map(|(name, _change_id)| {
+        .filter_map(|name| {
             let stripped = name.strip_prefix(prefix)?;
             let version = Version::parse(stripped).ok()?;
             Some(Tag { name, version })
@@ -174,11 +174,11 @@ mod tests {
     use super::*;
 
     struct MockBackend {
-        tags: Vec<(String, String)>, // (tag_name, change_id)
+        tags: Vec<String>, // (tag_name, change_id)
     }
 
     impl JjBackend for MockBackend {
-        fn list_tags(&self) -> Result<Vec<(String, String)>> {
+        fn list_tags(&self) -> Result<Vec<String>> {
             Ok(self.tags.clone())
         }
         fn log_commits(&self, _: &str) -> Result<Vec<CommitInfo>> {
@@ -207,11 +207,7 @@ mod tests {
     #[test]
     fn latest_version_tag_finds_highest() {
         let backend = MockBackend {
-            tags: vec![
-                ("v0.1.0".into(), "abc123".into()),
-                ("v0.3.0".into(), "def456".into()),
-                ("v0.2.0".into(), "ghi789".into()),
-            ],
+            tags: vec!["v0.1.0".into(), "v0.3.0".into(), "v0.2.0".into()],
         };
         let result = latest_version_tag(&backend, "v").unwrap();
         assert_eq!(result.unwrap().name, "v0.3.0");
@@ -221,8 +217,10 @@ mod tests {
     fn latest_version_tag_ignores_non_semver() {
         let backend = MockBackend {
             tags: vec![
-                ("latest".into(), "abc123".into()),
-                ("v0.2.0".into(), "def456".into()),
+                "latest".into(),
+                "abc123".into(),
+                "v0.2.0".into(),
+                "def456".into(),
             ],
         };
         let result = latest_version_tag(&backend, "v").unwrap();

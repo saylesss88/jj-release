@@ -51,6 +51,8 @@ enum Subcommand {
     Run,
     /// Print the next version that would be released, then exit.
     NextVersion,
+    /// Generate changelog for commits since last tag and print to stdout.
+    Changelog,
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -81,9 +83,23 @@ fn run() -> Result<()> {
     match cli.command.unwrap_or(Subcommand::Run) {
         Subcommand::Run => release_pipeline(&backend, &config, &root, cli.dry_run, cli.quiet),
         Subcommand::NextVersion => print_next_version(&backend, &config, &root),
+        Subcommand::Changelog => print_changelog(&backend, &config, &root),
     }
 }
 
+fn print_changelog(backend: &dyn JjBackend, config: &Config, root: &std::path::Path) -> Result<()> {
+    let cargo_toml = root.join("Cargo.toml");
+    let current = read_version(&cargo_toml)?;
+    let since = match latest_version_tag(backend, &config.release.tag_prefix)? {
+        Some(tag) => tag.name,
+        None => "root()".to_owned(),
+    };
+    let commits = backend.log_commits(&format!("{since}..@"))?;
+    let next = apply_bump(&current, compute_bump(&commits));
+    let section = changelog::render_changelog_section(&commits, &next);
+    print!("{section}");
+    Ok(())
+}
 // ── Pipeline ──────────────────────────────────────────────────────────────────
 
 fn release_pipeline(
@@ -130,7 +146,26 @@ fn release_pipeline(
         return Ok(());
     }
 
-    // 4. Create the version-bump commit.
+    // 4. Write changelog.
+    if config.changelog.enabled {
+        info!("→ Writing changelog…");
+        let since = match latest_version_tag(backend, &config.release.tag_prefix)? {
+            Some(tag) => tag.name,
+            None => "root()".to_owned(),
+        };
+        let commits = backend.log_commits(&format!("{since}..@"))?;
+        let changelog_path = root.join(&config.changelog.file);
+        let existing = if changelog_path.exists() {
+            std::fs::read_to_string(&changelog_path)?
+        } else {
+            String::new()
+        };
+        let section = changelog::render_changelog_section(&commits, &next_version);
+        let updated = changelog::prepend_to_file(&existing, &section);
+        std::fs::write(&changelog_path, updated)?;
+    }
+
+    // 5. Create the version-bump commit.
     info!("→ Bumping Cargo.toml to {next_version}…");
     write_version(&cargo_toml, &next_version)?;
 
@@ -138,28 +173,28 @@ fn release_pipeline(
     info!("→ Creating commit {:?}…", release_message);
     backend.new_commit(&release_message)?;
 
-    // 5. Tag the release commit.
+    // 6. Tag the release commit.
     info!("→ Creating tag {tag_name}…");
     backend.create_tag(&tag_name, "@")?;
 
-    // 6. Advance the bookmark.
+    // 7. Advance the bookmark.
     info!("→ Moving bookmark {:?} to @…", config.release.bookmark);
     backend.set_bookmark(&config.release.bookmark, "@")?;
 
-    // 7. Export to git and push.
+    // 8. Export to git and push.
     info!("→ Exporting to git…");
     backend.git_export()?;
 
     info!("→ Pushing bookmark and tags…");
     backend.git_push(&config.release.bookmark, Some(&tag_name))?;
 
-    // 8. Cargo publish.
+    // 9. Cargo publish.
     if config.publish.cargo {
         info!("→ Running cargo publish…");
         cargo_publish(root, &config.publish.cargo_flags)?;
     }
 
-    // 9. GitHub release.
+    // 10. GitHub release.
     if config.release.github_release {
         info!("→ Creating GitHub release {tag_name}…");
         gh_release_create(&tag_name)?;
@@ -201,9 +236,6 @@ fn resolve_bump(backend: &dyn JjBackend, config: &Config, _current: &Version) ->
         None => "root()".to_owned(),
     };
     let commits = backend.log_commits(&format!("{since}..@"))?;
-    // Walk from the last version tag (or the root) to @.
-    // TODO: wire up latest_version_tag() once list_tags is on the backend.
-    // For now, scan all of @ ancestry.
     Ok(compute_bump(&commits))
 }
 
