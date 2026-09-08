@@ -195,10 +195,11 @@ fn resolve_bump(backend: &dyn JjBackend, config: &Config, _current: &Version) ->
         };
     }
 
+    let commits = backend.log_commits("root()..@")?;
     // Walk from the last version tag (or the root) to @.
     // TODO: wire up latest_version_tag() once list_tags is on the backend.
     // For now, scan all of @ ancestry.
-    compute_bump(backend, "root()")
+    Ok(compute_bump(&commits))
 }
 
 fn cargo_publish(root: &std::path::Path, extra_flags: &[String]) -> Result<()> {

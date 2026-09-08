@@ -117,16 +117,10 @@ fn find_latest_semver_tag(backend: &dyn JjBackend) -> Result<Option<(String, Ver
 
 /// Walk commits between `since_revision` (exclusive) and `@` (inclusive),
 /// parse conventional commit messages, and return the required bump kind.
-pub fn compute_bump(backend: &dyn JjBackend, since_revision: &str) -> Result<BumpKind> {
-    // Revset: descendants of since_revision up to @ (exclusive of the tag commit itself).
-    let revset = format!("({since_revision}..@)");
-    let commits = backend
-        .log_commits(&revset)
-        .context("walking commits for bump calculation")?;
-
+pub fn compute_bump(commits: &[CommitInfo]) -> BumpKind {
     let mut bump = BumpKind::None;
 
-    for commit in &commits {
+    for commit in commits {
         let kind = classify(&commit.description);
         if kind > bump {
             bump = kind;
@@ -136,8 +130,7 @@ pub fn compute_bump(backend: &dyn JjBackend, since_revision: &str) -> Result<Bum
             break;
         }
     }
-
-    Ok(bump)
+    bump
 }
 
 /// Classify a single commit description into a bump kind.
@@ -240,5 +233,45 @@ mod tests {
             apply_bump(&v, BumpKind::Major),
             Version::parse("2.0.0").unwrap()
         );
+    }
+
+    #[test]
+    fn compute_bump_takes_commits_directly() {
+        let commits = vec![
+            CommitInfo {
+                change_id: "abc".into(),
+                description: "feat: add thing".into(),
+            },
+            CommitInfo {
+                change_id: "def".into(),
+                description: "fix: patch thing".into(),
+            },
+        ];
+        assert_eq!(compute_bump(&commits), BumpKind::Minor);
+    }
+
+    #[test]
+    fn highest_semver_tag_picks_correct_version() {
+        let tags = vec![
+            Tag {
+                name: "v0.1.0".into(),
+                version: Version::parse("0.1.0").unwrap(),
+            },
+            Tag {
+                name: "v0.3.0".into(),
+                version: Version::parse("0.3.0").unwrap(),
+            },
+            Tag {
+                name: "v0.2.0".into(),
+                version: Version::parse("0.2.0").unwrap(),
+            },
+        ];
+        let latest = highest_semver_tag(&tags).unwrap();
+        assert_eq!(latest.name, "v0.3.0");
+    }
+
+    #[test]
+    fn highest_semver_tag_empty_returns_none() {
+        assert!(highest_semver_tag(&[]).is_none());
     }
 }
