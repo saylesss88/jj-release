@@ -7,12 +7,13 @@ use serde::{Deserialize, Serialize};
 
 // ── Config shape ──────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub release: ReleaseConfig,
     pub bump: BumpConfig,
     pub publish: PublishConfig,
+    pub changelog: ChangelogConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,7 +29,7 @@ pub struct ReleaseConfig {
     pub github_release: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BumpConfig {
     /// Force a specific bump kind regardless of commit analysis.
@@ -45,14 +46,20 @@ pub struct PublishConfig {
     pub cargo_flags: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChangelogConfig {
+    pub enabled: bool,
+    pub file: String,
+}
+
 // ── Defaults ──────────────────────────────────────────────────────────────────
 
-impl Default for Config {
+impl Default for ChangelogConfig {
     fn default() -> Self {
         Self {
-            release: ReleaseConfig::default(),
-            bump: BumpConfig::default(),
-            publish: PublishConfig::default(),
+            enabled: true,
+            file: "CHANGELOG.md".to_owned(),
         }
     }
 }
@@ -65,12 +72,6 @@ impl Default for ReleaseConfig {
             bookmark: "main".to_owned(),
             github_release: false,
         }
-    }
-}
-
-impl Default for BumpConfig {
-    fn default() -> Self {
-        Self { force: None }
     }
 }
 
