@@ -1,5 +1,6 @@
 //! jj-release, semantic releases for Jujutsu repositories.
 
+mod changelog;
 mod commits;
 mod config;
 mod jj;
