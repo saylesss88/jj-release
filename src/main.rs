@@ -18,8 +18,6 @@ use config::Config;
 use jj::{find_repo_root, JjBackend, ShellBackend};
 use manifest::{read_version, write_version};
 
-// ── CLI ───────────────────────────────────────────────────────────────────────
-
 #[derive(Parser, Debug)]
 #[command(
     name = "jj-release",
@@ -53,8 +51,6 @@ enum Subcommand {
     /// Generate changelog for commits since last tag and print to stdout.
     Changelog,
 }
-
-// ── Entry point ───────────────────────────────────────────────────────────────
 
 fn main() {
     if let Err(e) = run() {
@@ -99,7 +95,7 @@ fn print_changelog(backend: &dyn JjBackend, config: &Config, root: &std::path::P
     print!("{section}");
     Ok(())
 }
-// ── Pipeline ──────────────────────────────────────────────────────────────────
+// -- Pipeline --
 
 fn release_pipeline(
     backend: &dyn JjBackend,
@@ -238,8 +234,6 @@ fn print_next_version(
     println!("{next}");
     Ok(())
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 fn cargo_publish(root: &std::path::Path, extra_flags: &[String]) -> Result<()> {
     let status = Command::new("cargo")

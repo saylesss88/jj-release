@@ -6,7 +6,7 @@ use semver::Version;
 
 use crate::jj::JjBackend;
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// -- Types --
 
 /// Flat representation of a jj commit, as returned by the backend.
 #[derive(Debug, Clone)]
@@ -24,7 +24,7 @@ pub enum BumpKind {
     Major,
 }
 
-// ── Walking ───────────────────────────────────────────────────────────────────
+// -- Walking --
 
 /// Detect whether the tip of the current working copy contains the trigger
 /// string anywhere in its commit message.  We check `@` (the working-copy
@@ -95,7 +95,7 @@ fn classify(description: &str) -> BumpKind {
         };
     }
 
-    // Not a conventional commit — treat as no bump rather than erroring.
+    // Not a conventional commit, treat as no bump rather than erroring.
     BumpKind::None
 }
 
@@ -138,7 +138,7 @@ mod tests {
     use super::*;
 
     struct MockBackend {
-        tags: Vec<String>, // (tag_name, change_id)
+        tags: Vec<String>,
     }
 
     impl JjBackend for MockBackend {

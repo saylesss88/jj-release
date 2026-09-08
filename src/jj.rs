@@ -11,8 +11,6 @@ use anyhow::{bail, Context, Result};
 
 use crate::commits::CommitInfo;
 
-// ── Trait ────────────────────────────────────────────────────────────────────
-
 /// Everything jj-release needs from the VCS layer.
 pub trait JjBackend {
     /// Return `(change_id, description)` pairs for every commit matched by
@@ -39,7 +37,7 @@ pub trait JjBackend {
     fn list_tags(&self) -> Result<Vec<String>>;
 }
 
-// ── Shell implementation ──────────────────────────────────────────────────────
+// Shell implementation
 
 /// Shells out to the `jj` binary found on `$PATH`.
 pub struct ShellBackend {
@@ -117,7 +115,7 @@ impl JjBackend for ShellBackend {
 
     fn new_commit(&self, message: &str) -> Result<String> {
         // `jj describe` snapshots whatever is currently on disk into @ and
-        // sets the message — so edits made before this call (e.g. Cargo.toml)
+        // sets the message, so edits made before this call (e.g. Cargo.toml)
         // are captured in the commit rather than left as working-copy changes.
         self.run_silent(&["describe", "-m", message])?;
 
@@ -136,7 +134,7 @@ impl JjBackend for ShellBackend {
     fn git_push(&self, bookmark: &str, tag: Option<&str>) -> Result<()> {
         // Push the bookmark first.
         self.run_silent(&["git", "push", "--bookmark", bookmark])?;
-        // Push the tag by name — --tag is mutually exclusive with --bookmark.
+        // Push the tag by name, --tag is mutually exclusive with --bookmark.
         if let Some(tag) = tag {
             self.run_silent(&["git", "push", "--tag", tag])?;
         }
@@ -157,7 +155,7 @@ impl JjBackend for ShellBackend {
     }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// -- Helpers --
 
 /// Locate the repo root by walking up from `start` until we find `.jj/`.
 pub fn find_repo_root(start: &Path) -> Result<PathBuf> {

@@ -5,8 +5,6 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-// ── Config shape ──────────────────────────────────────────────────────────────
-
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -53,8 +51,6 @@ pub struct ChangelogConfig {
     pub file: String,
 }
 
-// ── Defaults ──────────────────────────────────────────────────────────────────
-
 impl Default for ChangelogConfig {
     fn default() -> Self {
         Self {
@@ -84,8 +80,6 @@ impl Default for PublishConfig {
     }
 }
 
-// ── Loading ───────────────────────────────────────────────────────────────────
-
 /// Load config from `<root>/release.toml`, falling back to defaults if the
 /// file doesn't exist.
 pub fn load(root: &Path) -> Result<Config> {
@@ -97,8 +91,6 @@ pub fn load(root: &Path) -> Result<Config> {
         std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     toml::from_str(&raw).with_context(|| format!("parsing {}", path.display()))
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 impl Config {
     /// Format a version as a tag name, e.g. `"v1.2.3"`.
