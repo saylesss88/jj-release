@@ -1,12 +1,24 @@
 # jj-release
 
-Automated semantic releases for [Jujutsu](https://github.com/jj-vcs/jj) repositories.
+Automated semantic releases for [Jujutsu](https://github.com/jj-vcs/jj)
+repositories.
 
 ## Why
 
-[semantic-release](https://github.com/semantic-release/semantic-release), [release-please](https://github.com/googleapis/release-please), and [cargo-release](https://github.com/crate-ci/cargo-release) are all great tools, but they assume Git's branch model. They expect a mutable `main` branch, branch-based triggers, and tags anchored to branch tips. Jujutsu's branchless, immutable-commit workflow breaks all of these assumptions in ways that are annoying to work around.
+[semantic-release](https://github.com/semantic-release/semantic-release),
+[release-please](https://github.com/googleapis/release-please), and
+[cargo-release](https://github.com/crate-ci/cargo-release) are all great tools,
+but they assume Git's branch model. They expect a mutable `main` branch,
+branch-based triggers, and tags anchored to branch tips. Jujutsu's branchless,
+immutable-commit workflow breaks all of these assumptions in ways that are
+annoying to work around.
 
-Trying to use semantic-release with jj means fighting the tool constantly: the colocated git repo gets out of sync, branch detection fails, and the trigger model doesn't map cleanly onto how jj users actually work. jj-release is built from scratch for jj: it speaks revsets, works with bookmarks instead of branches, and uses a simple commit-message trigger that fits naturally into the jj workflow.
+Trying to use semantic-release with `jj` means fighting the tool constantly: the
+colocated git repo gets out of sync, branch detection fails, and the trigger
+model doesn't map cleanly onto how `jj` users actually work. `jj-release` is built
+from scratch for `jj`: it uses `jj`'s revset language to walk commit history,
+works with bookmarks instead of branches, and uses a simple commit-message
+trigger that fits naturally into the `jj` workflow.
 
 Inspired by semantic-release, release-please, and cargo-release.
 
@@ -19,7 +31,10 @@ jj new -m "Release: please"
 jj git push --bookmark main
 ```
 
-CI detects the trigger, walks commits back to the last version tag, classifies them as patch/minor/major using [Conventional Commits](https://www.conventionalcommits.org), bumps `Cargo.toml`, writes a `CHANGELOG.md` entry, creates a tag, and pushes — all in one step.
+CI detects the trigger, walks commits back to the last version tag, classifies
+them as patch/minor/major using
+[Conventional Commits](https://www.conventionalcommits.org), bumps `Cargo.toml`,
+writes a `CHANGELOG.md` entry, creates a tag, and pushes — all in one step.
 
 ## Installation
 
@@ -27,7 +42,8 @@ CI detects the trigger, walks commits back to the last version tag, classifies t
 cargo install jj-release
 ```
 
-Requires `jj` on your PATH. For GitHub releases, `gh` must also be available in CI.
+Requires `jj` on your PATH. For GitHub releases, `gh` must also be available in
+CI.
 
 ## Usage
 
@@ -45,9 +61,49 @@ jj-release next-version
 jj-release changelog
 ```
 
+## First release
+
+For a first release, set your `Cargo.toml` version to `0.0.0` and let
+jj-release compute the initial version from your commit history. If you want
+to guarantee `0.1.0`, add a force override in `release.toml`:
+
+```toml
+[bump]
+force = "minor"
+```
+
+Remove `force` after the first release so subsequent versions are computed
+automatically from conventional commits.
+
+## Local usage
+
+`jj-release` doesn't require CI. If you have `jj` on your PATH and are logged in
+to crates.io (`cargo login`), you can run it directly:
+
+```sh
+jj new -m "Release: please"
+jj-release
+```
+
+Running `jj-release` locally does the full pipeline:
+
+1. Scans for the trigger commit since the last version tag
+2. Walks commits and computes the semver bump from conventional commit types
+3. Writes a new section to `CHANGELOG.md`
+4. Bumps the version in `Cargo.toml`
+5. Creates a `chore: release vX.Y.Z` commit containing both changes
+6. Tags the commit with `vX.Y.Z`
+7. Advances the bookmark and pushes to origin
+8. Runs `cargo publish`
+9. Creates a GitHub release (if `github_release = true`)
+
+The `CARGO_REGISTRY_TOKEN` environment variable is only needed in CI where
+there's no credentials file.
+
 ## Configuration
 
-Drop a `release.toml` in your repo root. All fields are optional, defaults are shown below:
+Drop a `release.toml` in your repo root. All fields are optional, defaults are
+shown below:
 
 ```toml
 [release]
@@ -70,20 +126,23 @@ file = "CHANGELOG.md"        # path to the changelog file
 
 ## Conventional Commits
 
-jj-release follows the [Conventional Commits](https://www.conventionalcommits.org) spec to determine the version bump:
+jj-release follows the
+[Conventional Commits](https://www.conventionalcommits.org) spec to determine
+the version bump:
 
-| Commit type | Bump |
-|---|---|
-| `feat:` | Minor |
-| `fix:`, `perf:`, `refactor:` | Patch |
-| `feat!:` or `BREAKING CHANGE` footer | Major |
-| `chore:`, `docs:`, `test:`, etc. | No release |
+| Commit type                          | Bump       |
+| ------------------------------------ | ---------- |
+| `feat:`                              | Minor      |
+| `fix:`, `perf:`, `refactor:`         | Patch      |
+| `feat!:` or `BREAKING CHANGE` footer | Major      |
+| `chore:`, `docs:`, `test:`, etc.     | No release |
 
 The highest bump across all commits since the last tag wins.
 
 ## Changelog format
 
-jj-release follows the [Keep a Changelog](https://keepachangelog.com) format. Each release prepends a new section to `CHANGELOG.md`:
+jj-release follows the [Keep a Changelog](https://keepachangelog.com) format.
+Each release prepends a new section to `CHANGELOG.md`:
 
 ```markdown
 # Changelog
@@ -91,10 +150,12 @@ jj-release follows the [Keep a Changelog](https://keepachangelog.com) format. Ea
 ## [0.2.0] - 2026-09-08
 
 ### Added
+
 - add wallpaper cycling support
 - add IPC command interface
 
 ### Fixed
+
 - prevent daemon crash on empty directory
 ```
 
@@ -144,8 +205,24 @@ jobs:
 ## Requirements
 
 - Rust 1.80+
-- jj 0.21+
-- A colocated jj/git repository (the default for most jj users on GitHub)
+- jj 0.43+ (tested on 0.43.0; earlier versions may work but tag and push flag
+  syntax differs: see [jj compatibility](#jj-compatibility) below)
+- A colocated jj/git repository (`jj git init --colocate`)
+
+## jj compatibility
+
+`jj-release` shells out to the `jj` binary and relies on specific flag syntax
+that has changed across versions. Known working on **jj 0.43.0**. If you hit
+errors, check these:
+
+| Operation     | Flag used                       | Added in |
+| ------------- | ------------------------------- | -------- |
+| Move a tag    | `jj tag set --allow-move`       | recent   |
+| Push tags     | `jj git push --tag <name>`      | recent   |
+| Push bookmark | `jj git push --bookmark <name>` | older    |
+
+If your version of jj doesn't support these flags, update jj first:
+`cargo install jj-cli --locked`
 
 ## License
 
