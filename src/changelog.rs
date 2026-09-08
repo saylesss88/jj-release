@@ -46,6 +46,18 @@ pub fn render_changelog_section(commits: &[CommitInfo], version: &Version) -> St
     out
 }
 
+pub fn prepend_to_file(existing: &str, new_section: &str) -> String {
+    let header = "# Changelog\n\n";
+    if existing.is_empty() {
+        return format!("{header}{new_section}");
+    }
+    if let Some(rest) = existing.strip_prefix(header) {
+        format!("{header}{new_section}\n{rest}")
+    } else {
+        format!("{header}{new_section}\n{existing}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -100,5 +112,20 @@ mod tests {
         let section = render_changelog_section(&commits, &Version::parse("1.0.0").unwrap());
         assert!(section.contains("### Added"));
         assert!(section.contains("**BREAKING**"));
+    }
+
+    #[test]
+    fn prepend_inserts_after_header() {
+        let existing = "# Changelog\n\n## [0.1.0] - 2024-01-01\n\n### Added\n- initial release\n";
+        let new_section = "## [0.2.0] - 2024-06-01\n\n### Added\n- new thing\n";
+        let result = prepend_to_file(existing, new_section);
+        assert!(result.starts_with("# Changelog\n\n## [0.2.0]"));
+        assert!(result.contains("## [0.1.0]"));
+    }
+
+    #[test]
+    fn prepend_creates_header_if_missing() {
+        let result = prepend_to_file("", "## [0.1.0] - 2024-01-01\n\n### Added\n- thing\n");
+        assert!(result.starts_with("# Changelog\n\n## [0.1.0]"));
     }
 }
