@@ -39,6 +39,7 @@ pub trait JjBackend {
 
     /// Export jj state to the colocated git repo (needed before raw git ops).
     fn git_export(&self) -> Result<()>;
+    fn list_tags(&self) -> Result<Vec<(String, String)>>;
 }
 
 // ── Shell implementation ──────────────────────────────────────────────────────
@@ -167,6 +168,22 @@ impl JjBackend for ShellBackend {
 
     fn git_export(&self) -> Result<()> {
         self.run_silent(&["git", "export"])
+    }
+
+    fn list_tags(&self) -> Result<Vec<(String, String)>> {
+        let raw = self.run(&[
+            "tag",
+            "list",
+            "--template",
+            r#"name ++ "\x1f" ++ commit_id ++ "\n""#,
+        ])?;
+        let mut tags = Vec::new();
+        for line in raw.lines() {
+            if let Some((name, id)) = line.split_once('\x1f') {
+                tags.push((name.trim().to_owned(), id.trim().to_owned()));
+            }
+        }
+        Ok(tags)
     }
 }
 

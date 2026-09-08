@@ -49,34 +49,17 @@ pub fn find_trigger(backend: &dyn JjBackend, trigger: &str) -> Result<Option<Str
 /// Return the latest `vX.Y.Z` tag reachable from `@`, as a `(tag_name,
 /// Version)` pair.  Returns `None` if no version tag exists yet (first
 /// release).
-pub fn latest_version_tag(backend: &dyn JjBackend) -> Result<Option<(String, Version)>> {
-    // Ask jj for all tags reachable from @.
-    // We list tags via `jj tag list` and then cross-reference with ancestors.
-    // Simpler: query revset `tags()` which gives revisions that have tags,
-    // then pick the highest semver one among ancestors of @.
-    let tag_revs = backend
-        .query_revset("ancestors(@) & tags()")
-        .context("listing version tags")?;
-
-    if tag_revs.is_empty() {
-        return Ok(None);
-    }
-
-    // For each tagged revision, get its tags via log template.
-    // jj's `tags` template gives the tag names.
-    let raw = {
-        // Build a revset that selects exactly those commits.
-        // We'll just ask for all of them in one log call.
-        backend.log_commits("ancestors(@) & tags()")?
-    };
-
-    // The description field won't have the tag name; we need a different
-    // approach — shell to `jj tag list` and parse.
-    // We use the backend directly for this one edge case via a helper.
-    let _ = (tag_revs, raw); // suppress unused warnings for now
-
-    // Delegate to the tag-listing helper below.
-    find_latest_semver_tag(backend)
+pub fn latest_version_tag(backend: &dyn JjBackend, prefix: &str) -> Result<Option<Tag>> {
+    let raw_tags = backend.list_tags()?;
+    let tags: Vec<Tag> = raw_tags
+        .into_iter()
+        .filter_map(|(name, _change_id)| {
+            let stripped = name.strip_prefix(prefix)?;
+            let version = Version::parse(stripped).ok()?;
+            Some(Tag { name, version })
+        })
+        .collect();
+    Ok(highest_semver_tag(&tags).cloned())
 }
 
 /// Shell out to `jj tag list` (via the backend's query mechanism with a
@@ -190,6 +173,68 @@ pub fn highest_semver_tag(tags: &[Tag]) -> Option<&Tag> {
 mod tests {
     use super::*;
 
+    struct MockBackend {
+        tags: Vec<(String, String)>, // (tag_name, change_id)
+    }
+
+    impl JjBackend for MockBackend {
+        fn list_tags(&self) -> Result<Vec<(String, String)>> {
+            Ok(self.tags.clone())
+        }
+        fn log_commits(&self, _: &str) -> Result<Vec<CommitInfo>> {
+            Ok(vec![])
+        }
+        fn new_commit(&self, _: &str) -> Result<String> {
+            Ok(String::new())
+        }
+        fn create_tag(&self, _: &str, _: &str) -> Result<()> {
+            Ok(())
+        }
+        fn set_bookmark(&self, _: &str, _: &str) -> Result<()> {
+            Ok(())
+        }
+        fn git_push(&self, _: &str, _: Option<&str>) -> Result<()> {
+            Ok(())
+        }
+        fn git_export(&self) -> Result<()> {
+            Ok(())
+        }
+        fn query_revset(&self, _: &str) -> Result<Vec<String>> {
+            Ok(vec![])
+        }
+    }
+
+    #[test]
+    fn latest_version_tag_finds_highest() {
+        let backend = MockBackend {
+            tags: vec![
+                ("v0.1.0".into(), "abc123".into()),
+                ("v0.3.0".into(), "def456".into()),
+                ("v0.2.0".into(), "ghi789".into()),
+            ],
+        };
+        let result = latest_version_tag(&backend, "v").unwrap();
+        assert_eq!(result.unwrap().name, "v0.3.0");
+    }
+
+    #[test]
+    fn latest_version_tag_ignores_non_semver() {
+        let backend = MockBackend {
+            tags: vec![
+                ("latest".into(), "abc123".into()),
+                ("v0.2.0".into(), "def456".into()),
+            ],
+        };
+        let result = latest_version_tag(&backend, "v").unwrap();
+        assert_eq!(result.unwrap().name, "v0.2.0");
+    }
+
+    #[test]
+    fn latest_version_tag_empty_returns_none() {
+        let backend = MockBackend { tags: vec![] };
+        let result = latest_version_tag(&backend, "v").unwrap();
+        assert!(result.is_none());
+    }
     fn bump(msg: &str) -> BumpKind {
         classify(msg)
     }
