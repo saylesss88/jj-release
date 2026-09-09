@@ -10,7 +10,7 @@ use clap::Parser;
 use jj_release::config::{self, Config};
 use jj_release::forge::{ForgeBackend, GitHubForge, GitLabForge, NoForge};
 use jj_release::jj::{JjBackend, ShellBackend};
-use jj_release::manifest::{CargoManifest, ManifestBackend};
+use jj_release::manifest::{CargoManifest, GoManifest, ManifestBackend};
 use jj_release::{changelog, commits, commits::BumpKind, jj};
 
 #[derive(Parser, Debug)]
@@ -68,8 +68,11 @@ fn run() -> Result<()> {
 
     // Load config (falls back to defaults if release.toml absent).
     let config = config::load(&root)?;
-    let manifest = CargoManifest;
 
+    let manifest: Box<dyn ManifestBackend> = match config.manifest_backend.as_str() {
+        "go" => Box::new(GoManifest),
+        _ => Box::new(CargoManifest), // default to cargo
+    };
     // Set up the backend.
     let backend = ShellBackend::new(&root)?;
 
@@ -82,18 +85,18 @@ fn run() -> Result<()> {
     match cli.command.unwrap_or(Subcommand::Run) {
         Subcommand::Run => release_pipeline(
             &backend,
-            &manifest,
+            manifest.as_ref(),
             forge.as_ref(),
             &config,
             &root,
             cli.dry_run,
             cli.quiet,
         ),
-        Subcommand::NextVersion => print_next_version(&backend, &manifest, &config, &root),
-        Subcommand::Changelog => print_changelog(&backend, &manifest, &config, &root),
+        Subcommand::NextVersion => print_next_version(&backend, manifest.as_ref(), &config, &root),
+        Subcommand::Changelog => print_changelog(&backend, manifest.as_ref(), &config, &root),
         Subcommand::Pr => release_pr(
             &backend,
-            &manifest,
+            manifest.as_ref(),
             forge.as_ref(),
             &config,
             &root,

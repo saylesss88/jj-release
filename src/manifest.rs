@@ -12,6 +12,7 @@ pub trait ManifestBackend {
 }
 
 pub struct CargoManifest;
+pub struct GoManifest;
 
 impl ManifestBackend for CargoManifest {
     fn read_version(&self, root: &Path) -> Result<Version> {
@@ -20,6 +21,18 @@ impl ManifestBackend for CargoManifest {
 
     fn write_version(&self, root: &Path, version: &Version) -> Result<()> {
         write_version(&root.join("Cargo.toml"), version)
+    }
+}
+
+impl ManifestBackend for GoManifest {
+    fn read_version(&self, _root: &Path) -> Result<Version> {
+        // Go modules are versioned by tag only, no manifest version field.
+        // Return 0.0.0 so the bump logic computes from scratch.
+        Ok(Version::new(0, 0, 0))
+    }
+
+    fn write_version(&self, _root: &Path, _version: &Version) -> Result<()> {
+        Ok(())
     }
 }
 
@@ -157,5 +170,21 @@ edition = "2024"
         let updated = std::fs::read_to_string(&cargo_toml).unwrap();
         assert!(updated.contains("\"1.4.0\""));
         assert!(!updated.contains("\"1.2.3\""));
+    }
+
+    #[test]
+    fn go_manifest_write_version_is_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = GoManifest;
+        // should succeed without creating any files
+        manifest
+            .write_version(dir.path(), &Version::parse("1.2.0").unwrap())
+            .unwrap();
+        assert!(!dir.path().join("go.mod").exists());
+    }
+
+    #[test]
+    fn go_manifest_implements_trait() {
+        let _manifest: &dyn ManifestBackend = &GoManifest;
     }
 }

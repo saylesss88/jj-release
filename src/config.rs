@@ -5,13 +5,14 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub release: ReleaseConfig,
     pub bump: BumpConfig,
     pub publish: PublishConfig,
     pub changelog: ChangelogConfig,
+    pub manifest_backend: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,6 +52,18 @@ pub struct PublishConfig {
 pub struct ChangelogConfig {
     pub enabled: bool,
     pub file: String,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            release: ReleaseConfig::default(),
+            bump: BumpConfig::default(),
+            publish: PublishConfig::default(),
+            changelog: ChangelogConfig::default(),
+            manifest_backend: "cargo".to_owned(),
+        }
+    }
 }
 
 impl Default for ChangelogConfig {
