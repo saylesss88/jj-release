@@ -1,5 +1,6 @@
 //! Edit `Cargo.toml` version fields without destroying formatting.
 
+use std::fs;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
@@ -40,8 +41,8 @@ impl ManifestBackend for GoManifest {
 impl ManifestBackend for NpmManifest {
     fn read_version(&self, root: &Path) -> Result<Version> {
         let path = root.join("package.json");
-        let raw = std::fs::read_to_string(&path)
-            .with_context(|| format!("reading {}", path.display()))?;
+        let raw =
+            fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
         let json: serde_json::Value =
             serde_json::from_str(&raw).with_context(|| format!("parsing {}", path.display()))?;
         let version_str = json["version"]
@@ -53,20 +54,20 @@ impl ManifestBackend for NpmManifest {
 
     fn write_version(&self, root: &Path, version: &Version) -> Result<()> {
         let path = root.join("package.json");
-        let raw = std::fs::read_to_string(&path)
-            .with_context(|| format!("reading {}", path.display()))?;
+        let raw =
+            fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
         let mut json: serde_json::Value =
             serde_json::from_str(&raw).with_context(|| format!("parsing {}", path.display()))?;
         json["version"] = serde_json::Value::String(version.to_string());
-        std::fs::write(&path, serde_json::to_string_pretty(&json)?)
+        fs::write(&path, serde_json::to_string_pretty(&json)?)
             .with_context(|| format!("writing {}", path.display()))?;
         Ok(())
     }
 }
 
 /// Read the current `[package].version` from `Cargo.toml`.
-pub fn read_version(cargo_toml: &Path) -> Result<Version> {
-    let raw = std::fs::read_to_string(cargo_toml)
+pub(crate) fn read_version(cargo_toml: &Path) -> Result<Version> {
+    let raw = fs::read_to_string(cargo_toml)
         .with_context(|| format!("reading {}", cargo_toml.display()))?;
 
     let doc: DocumentMut = raw
@@ -85,8 +86,8 @@ pub fn read_version(cargo_toml: &Path) -> Result<Version> {
 
 /// Write `new_version` into `[package].version` in `Cargo.toml`, preserving
 /// all comments and formatting.
-pub fn write_version(cargo_toml: &Path, new_version: &Version) -> Result<()> {
-    let raw = std::fs::read_to_string(cargo_toml)
+pub(crate) fn write_version(cargo_toml: &Path, new_version: &Version) -> Result<()> {
+    let raw = fs::read_to_string(cargo_toml)
         .with_context(|| format!("reading {}", cargo_toml.display()))?;
 
     let mut doc: DocumentMut = raw
@@ -100,7 +101,7 @@ pub fn write_version(cargo_toml: &Path, new_version: &Version) -> Result<()> {
 
     doc["package"]["version"] = toml_edit::value(new_version.to_string());
 
-    std::fs::write(cargo_toml, doc.to_string())
+    fs::write(cargo_toml, doc.to_string())
         .with_context(|| format!("writing {}", cargo_toml.display()))?;
 
     Ok(())

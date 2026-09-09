@@ -7,3 +7,6 @@ pub mod manifest;
 pub mod pipeline;
 pub mod publish;
 pub mod workspace;
+
+pub use commits::{BumpKind, CommitInfo, Tag};
+pub use config::Config;

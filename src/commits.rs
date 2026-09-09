@@ -31,7 +31,11 @@ pub enum BumpKind {
 /// parent stack) for the trigger commit.
 ///
 /// Returns the `change_id` of the trigger commit if found, `None` otherwise.
-pub fn find_trigger(backend: &dyn JjBackend, trigger: &str, since: &str) -> Result<Option<String>> {
+pub(crate) fn find_trigger(
+    backend: &dyn JjBackend,
+    trigger: &str,
+    since: &str,
+) -> Result<Option<String>> {
     // Walk the very tip, just @ and its immediate parent chain up to 10 deep.
     // We don't want to scan the whole repo; the trigger should be recent.
     let commits = backend
@@ -49,7 +53,7 @@ pub fn find_trigger(backend: &dyn JjBackend, trigger: &str, since: &str) -> Resu
 /// Return the latest `vX.Y.Z` tag reachable from `@`, as a `(tag_name,
 /// Version)` pair.  Returns `None` if no version tag exists yet (first
 /// release).
-pub fn latest_version_tag(backend: &dyn JjBackend, prefix: &str) -> Result<Option<Tag>> {
+pub(crate) fn latest_version_tag(backend: &dyn JjBackend, prefix: &str) -> Result<Option<Tag>> {
     let raw_tags = backend.list_tags()?;
     let tags: Vec<Tag> = raw_tags
         .into_iter()
@@ -65,7 +69,7 @@ pub fn latest_version_tag(backend: &dyn JjBackend, prefix: &str) -> Result<Optio
 /// Walk commits between `since_revision` (exclusive) and `@` (inclusive),
 /// parse conventional commit messages, and return the required bump kind.
 #[must_use]
-pub fn compute_bump(commits: &[CommitInfo]) -> BumpKind {
+pub(crate) fn compute_bump(commits: &[CommitInfo]) -> BumpKind {
     let mut bump = BumpKind::None;
 
     for commit in commits {
@@ -81,7 +85,7 @@ pub fn compute_bump(commits: &[CommitInfo]) -> BumpKind {
     bump
 }
 
-pub fn resolve_bump(force: Option<&String>, commits: &[CommitInfo]) -> Result<BumpKind> {
+pub(crate) fn resolve_bump(force: Option<&String>, commits: &[CommitInfo]) -> Result<BumpKind> {
     if let Some(force) = force {
         return match force.as_str() {
             "major" => Ok(BumpKind::Major),
@@ -114,7 +118,7 @@ fn classify(description: &str) -> BumpKind {
 
 /// Apply a bump to a version, returning the new version.
 #[must_use]
-pub fn apply_bump(current: &Version, bump: BumpKind) -> Version {
+pub(crate) fn apply_bump(current: &Version, bump: BumpKind) -> Version {
     let mut next = current.clone();
     match bump {
         BumpKind::Major => {

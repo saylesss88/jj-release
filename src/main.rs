@@ -77,16 +77,16 @@ fn run() -> Result<()> {
         _ => Box::new(NoPublish),
     };
 
-    let manifest: Box<dyn ManifestBackend> =
-        if config.workspace.as_ref().map_or(false, |w| w.enabled) {
-            Box::new(WorkspaceManifest)
-        } else {
-            match config.manifest_backend.as_str() {
-                "go" => Box::new(GoManifest),
-                "npm" => Box::new(NpmManifest),
-                _ => Box::new(CargoManifest),
-            }
-        };
+    let manifest: Box<dyn ManifestBackend> = if config.workspace.as_ref().is_some_and(|w| w.enabled)
+    {
+        Box::new(WorkspaceManifest)
+    } else {
+        match config.manifest_backend.as_str() {
+            "go" => Box::new(GoManifest),
+            "npm" => Box::new(NpmManifest),
+            _ => Box::new(CargoManifest),
+        }
+    };
     // Set up the backend.
     let backend = ShellBackend::new(&root)?;
 
