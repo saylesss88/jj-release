@@ -10,7 +10,7 @@ use clap::Parser;
 use jj_release::config::{self, Config};
 use jj_release::forge::{ForgeBackend, GitHubForge, GitLabForge, NoForge};
 use jj_release::jj::{JjBackend, ShellBackend};
-use jj_release::manifest::{CargoManifest, GoManifest, ManifestBackend};
+use jj_release::manifest::{CargoManifest, GoManifest, ManifestBackend, NpmManifest};
 use jj_release::{changelog, commits, commits::BumpKind, jj};
 
 #[derive(Parser, Debug)]
@@ -71,6 +71,7 @@ fn run() -> Result<()> {
 
     let manifest: Box<dyn ManifestBackend> = match config.manifest_backend.as_str() {
         "go" => Box::new(GoManifest),
+        "npm" => Box::new(NpmManifest),
         _ => Box::new(CargoManifest), // default to cargo
     };
     // Set up the backend.
