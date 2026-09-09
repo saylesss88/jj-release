@@ -39,6 +39,43 @@ impl ForgeBackend for GitHubForge {
     }
 }
 
+pub struct GitLabForge;
+
+impl ForgeBackend for GitLabForge {
+    fn create_release(&self, tag: &str) -> Result<()> {
+        let status = Command::new("glab")
+            .args(["release", "create", tag, "--generate-notes"])
+            .status()
+            .context("spawning glab release create")?;
+        if !status.success() {
+            bail!("glab release create failed for tag {tag}");
+        }
+        Ok(())
+    }
+
+    fn create_pr(&self, tag: &str, head: &str, base: &str) -> Result<()> {
+        let status = Command::new("glab")
+            .args([
+                "mr",
+                "create",
+                "--title",
+                &format!("chore: release {tag}"),
+                "--description",
+                &format!("Automated release MR for {tag}"),
+                "--source-branch",
+                head,
+                "--target-branch",
+                base,
+            ])
+            .status()
+            .context("spawning glab mr create")?;
+        if !status.success() {
+            bail!("glab mr create failed");
+        }
+        Ok(())
+    }
+}
+
 pub trait ForgeBackend {
     fn create_release(&self, tag: &str) -> Result<()>;
     fn create_pr(&self, tag: &str, head: &str, base: &str) -> Result<()>;
@@ -76,5 +113,10 @@ mod tests {
     #[test]
     fn github_forge_uses_gh_cli() {
         let _forge: &dyn ForgeBackend = &GitHubForge;
+    }
+
+    #[test]
+    fn gitlab_forge_implements_trait() {
+        let _forge: &dyn ForgeBackend = &GitLabForge;
     }
 }
