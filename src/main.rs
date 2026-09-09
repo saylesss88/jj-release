@@ -225,16 +225,9 @@ fn release_pipeline(
         cargo_publish(root, &config.publish.cargo_flags)?;
     }
 
-    // let forge: Box<dyn ForgeBackend> = if config.release.github_release {
-    //     Box::new(GitHubForge)
-    // } else {
-    //     Box::new(NoForge)
-    // };
-    // 10. GitHub release.
-    if config.release.github_release {
-        info!("→ Creating GitHub release {tag_name}…");
-        forge.create_release(&tag_name)?;
-    }
+    // 10. Forge release.
+    info!("→ Creating forge release {tag_name}…");
+    forge.create_release(&tag_name)?;
 
     info!("✓ Released {tag_name}");
     Ok(())

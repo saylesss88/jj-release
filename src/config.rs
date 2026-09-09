@@ -23,8 +23,6 @@ pub struct ReleaseConfig {
     pub tag_prefix: String,
     /// Name of the bookmark to advance after a release.
     pub bookmark: String,
-    /// Create a GitHub release via `gh release create`.
-    pub github_release: bool,
     /// Forge to use
     pub forge: String,
     /// Forge URL
@@ -70,7 +68,6 @@ impl Default for ReleaseConfig {
             trigger: "Release: please".to_owned(),
             tag_prefix: "v".to_owned(),
             bookmark: "main".to_owned(),
-            github_release: false,
             forge: "none".to_owned(),
             forge_url: String::new(),
         }
@@ -130,7 +127,7 @@ mod tests {
         let raw = r#"
 [release]
 trigger = "Ship it"
-github_release = true
+forge = "github"
 
 [publish]
 cargo = false
@@ -138,8 +135,7 @@ cargo = false
         let cfg: Config = toml::from_str(raw).unwrap();
         assert_eq!(cfg.release.trigger, "Ship it");
         assert!(!cfg.publish.cargo);
-        assert!(cfg.release.github_release);
-        // Unspecified fields use defaults
+        assert_eq!(cfg.release.forge, "github");
         assert_eq!(cfg.release.tag_prefix, "v");
     }
 
