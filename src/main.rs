@@ -50,6 +50,8 @@ enum Subcommand {
     NextVersion,
     /// Generate changelog for commits since last tag and print to stdout.
     Changelog,
+    /// Push a PR
+    Pr,
 }
 
 fn main() {
@@ -82,6 +84,7 @@ fn run() -> Result<()> {
         }
         Subcommand::NextVersion => print_next_version(&backend, &manifest, &config, &root),
         Subcommand::Changelog => print_changelog(&backend, &manifest, &config, &root),
+        Subcommand::Pr => release_pr(&backend, &manifest, &config, &root, cli.quiet),
     }
 }
 
@@ -217,6 +220,99 @@ fn release_pipeline(
     Ok(())
 }
 
+fn release_pr(
+    backend: &dyn JjBackend,
+    manifest: &dyn ManifestBackend,
+    config: &Config,
+    root: &std::path::Path,
+    quiet: bool,
+) -> Result<()> {
+    macro_rules! info {
+        ($($t:tt)*) => { if !quiet { println!($($t)*); } }
+    }
+
+    let since = match commits::latest_version_tag(backend, &config.release.tag_prefix)? {
+        Some(tag) => tag.name,
+        None => "root()".to_owned(),
+    };
+
+    // 1. Detect trigger commit.
+    info!(
+        "→ Scanning for trigger commit {:?}…",
+        config.release.trigger
+    );
+    let Some(_trigger_id) = commits::find_trigger(backend, &config.release.trigger, &since)? else {
+        info!("No trigger commit found. Nothing to release.");
+        return Ok(());
+    };
+    info!("  Found trigger commit.");
+
+    // 2. Read current version.
+    let current_version = manifest
+        .read_version(root)
+        .context("reading current version")?;
+    info!("  Current version: {current_version}");
+
+    // 3. Compute bump.
+    let commits = backend.log_commits(&format!("{since}..@"))?;
+    let bump = if let Some(force) = &config.bump.force {
+        match force.as_str() {
+            "major" => BumpKind::Major,
+            "minor" => BumpKind::Minor,
+            "patch" => BumpKind::Patch,
+            other => bail!("unknown bump.force value {other:?} — must be major/minor/patch"),
+        }
+    } else {
+        commits::compute_bump(&commits)
+    };
+
+    if bump == BumpKind::None {
+        info!("No releasable commits found since last tag. Nothing to release.");
+        return Ok(());
+    }
+
+    let next_version = commits::apply_bump(&current_version, bump);
+    let tag_name = config.tag_name(&next_version);
+    let pr_bookmark = format!("release/{tag_name}");
+    info!("  Bump: {bump:?} → {next_version}  (tag: {tag_name})");
+
+    // 4. Write changelog.
+    if config.changelog.enabled {
+        info!("→ Writing changelog…");
+        let changelog_path = root.join(&config.changelog.file);
+        let existing = if changelog_path.exists() {
+            std::fs::read_to_string(&changelog_path)?
+        } else {
+            String::new()
+        };
+        let section = changelog::render_changelog_section(&commits, &next_version);
+        let updated = changelog::prepend_to_file(&existing, &section);
+        std::fs::write(&changelog_path, updated)?;
+    }
+
+    // 5. Bump version and create release commit.
+    info!("→ Bumping version to {next_version}…");
+    manifest.write_version(root, &next_version)?;
+    let release_message = format!("chore: release {tag_name}");
+    info!("→ Creating commit {:?}…", release_message);
+    backend.new_commit(&release_message)?;
+
+    // 6. Push to a release bookmark.
+    info!("→ Creating bookmark {pr_bookmark:?}…");
+    backend.set_bookmark(&pr_bookmark, "@")?;
+    info!("→ Exporting to git…");
+    backend.git_export()?;
+    info!("→ Pushing {pr_bookmark:?}…");
+    backend.git_push(&pr_bookmark, None)?;
+
+    // 7. Open PR.
+    info!("→ Opening PR…");
+    gh_pr_create(&tag_name, &pr_bookmark, &config.release.bookmark)?;
+
+    info!("✓ PR opened for {tag_name}");
+    Ok(())
+}
+
 fn print_next_version(
     backend: &dyn JjBackend,
     manifest: &dyn ManifestBackend,
@@ -269,4 +365,42 @@ fn gh_release_create(tag: &str) -> Result<()> {
         bail!("gh release create failed for tag {tag}");
     }
     Ok(())
+}
+
+fn gh_pr_create(tag: &str, head: &str, base: &str) -> Result<()> {
+    let status = Command::new("gh")
+        .args([
+            "pr",
+            "create",
+            "--title",
+            &format!("chore: release {tag}"),
+            "--body",
+            &format!("Automated release PR for {tag}"),
+            "--head",
+            head,
+            "--base",
+            base,
+        ])
+        .status()
+        .context("spawning gh pr create")?;
+
+    if !status.success() {
+        bail!("gh pr create failed");
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use semver::Version;
+
+    #[test]
+    fn pr_bookmark_name() {
+        let config = Config::default();
+        let version = Version::parse("0.2.0").unwrap();
+        let tag = config.tag_name(&version);
+        let bookmark = format!("release/{tag}");
+        assert_eq!(bookmark, "release/v0.2.0");
+    }
 }
