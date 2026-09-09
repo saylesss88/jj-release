@@ -245,4 +245,38 @@ edition = "2024"
         assert!(updated.contains("\"2.0.0\""));
         assert!(!updated.contains("\"1.2.3\""));
     }
+
+    #[test]
+    fn go_manifest_read_returns_zero() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = GoManifest;
+        let v = manifest.read_version(dir.path()).unwrap();
+        assert_eq!(v, Version::new(0, 0, 0));
+    }
+
+    #[test]
+    fn go_manifest_write_is_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = GoManifest;
+        manifest
+            .write_version(dir.path(), &Version::parse("1.0.0").unwrap())
+            .unwrap();
+        // no files created
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn npm_manifest_errors_on_missing_package_json() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest = NpmManifest;
+        assert!(manifest.read_version(dir.path()).is_err());
+    }
+
+    #[test]
+    fn npm_manifest_errors_on_missing_version_field() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("package.json"), r#"{"name": "no-version"}"#).unwrap();
+        let manifest = NpmManifest;
+        assert!(manifest.read_version(dir.path()).is_err());
+    }
 }

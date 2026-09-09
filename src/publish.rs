@@ -66,4 +66,13 @@ mod tests {
     fn no_publish_implements_trait() {
         let _publisher: &dyn PublishBackend = &NoPublish;
     }
+
+    #[test]
+    fn no_publish_ignores_flags() {
+        let publisher = NoPublish;
+        let flags = vec!["--dry-run".to_owned(), "--locked".to_owned()];
+        assert!(publisher
+            .publish(std::path::Path::new("/tmp"), &flags)
+            .is_ok());
+    }
 }
