@@ -3,6 +3,7 @@
 mod changelog;
 mod commits;
 mod config;
+mod forge;
 mod jj;
 mod manifest;
 
