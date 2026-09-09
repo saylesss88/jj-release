@@ -12,7 +12,7 @@ use jj_release::jj::{JjBackend, ShellBackend};
 use jj_release::manifest::{CargoManifest, GoManifest, ManifestBackend, NpmManifest};
 use jj_release::pipeline::{self, PreparedRelease};
 use jj_release::publish::{CargoPublish, NoPublish, NpmPublish, PublishBackend};
-use jj_release::{changelog, commits, jj};
+use jj_release::{changelog, commits, jj, workspace};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -203,9 +203,17 @@ fn release_pipeline(
     ctx.backend
         .git_push(&config.release.bookmark, Some(tag_name))?;
 
-    // 4. publish.
-    info!("→ Publishing…");
-    ctx.publisher.publish(root, &config.publish.cargo_flags)?;
+    // 4. Publish.
+    if let Some(workspace_config) = &config.workspace {
+        for member in workspace::ordered_members(&workspace_config.members)? {
+            info!("→ Publishing {}…", member.name);
+            ctx.publisher
+                .publish(&root.join(&member.path), &config.publish.cargo_flags)?;
+        }
+    } else {
+        info!("→ Publishing…");
+        ctx.publisher.publish(root, &config.publish.cargo_flags)?;
+    }
 
     // 5. Forge release.
     info!("→ Creating forge release {tag_name}…");

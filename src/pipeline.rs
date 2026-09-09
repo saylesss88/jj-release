@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use semver::Version;
 
 use crate::commits::{self, BumpKind, CommitInfo};

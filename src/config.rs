@@ -13,6 +13,7 @@ pub struct Config {
     pub publish: PublishConfig,
     pub changelog: ChangelogConfig,
     pub manifest_backend: String,
+    pub workspace: Option<WorkspaceConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +55,47 @@ pub struct ChangelogConfig {
     pub file: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Versioning {
+    Unified,
+    Independent,
+}
+
+impl Default for Versioning {
+    fn default() -> Self {
+        Self::Unified
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WorkspaceMember {
+    pub name: String,
+    pub path: String,
+    pub publish: bool,
+    pub depends_on: Vec<String>,
+}
+
+impl Default for WorkspaceMember {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            path: String::new(),
+            publish: true,
+            depends_on: vec![],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct WorkspaceConfig {
+    pub enabled: bool,
+    pub versioning: Versioning,
+    pub members: Vec<WorkspaceMember>,
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -62,6 +104,7 @@ impl Default for Config {
             publish: PublishConfig::default(),
             changelog: ChangelogConfig::default(),
             manifest_backend: "cargo".to_owned(),
+            workspace: None,
         }
     }
 }
