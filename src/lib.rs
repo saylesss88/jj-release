@@ -6,3 +6,4 @@ pub mod jj;
 pub mod manifest;
 pub mod pipeline;
 pub mod publish;
+pub mod workspace;
