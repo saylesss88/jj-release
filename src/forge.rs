@@ -76,6 +76,22 @@ impl ForgeBackend for GitLabForge {
     }
 }
 
+pub struct ForgejoForge {
+    pub host: String,
+    pub token: String,
+    pub owner: String,
+    pub repo: String,
+}
+
+impl ForgeBackend for ForgejoForge {
+    fn create_release(&self, _tag: &str) -> Result<()> {
+        bail!("Forgejo forge support is not yet implemented")
+    }
+    fn create_pr(&self, _tag: &str, _head: &str, _base: &str) -> Result<()> {
+        bail!("Forgejo forge support is not yet implemented")
+    }
+}
+
 pub trait ForgeBackend {
     fn create_release(&self, tag: &str) -> Result<()>;
     fn create_pr(&self, tag: &str, head: &str, base: &str) -> Result<()>;
@@ -118,5 +134,15 @@ mod tests {
     #[test]
     fn gitlab_forge_implements_trait() {
         let _forge: &dyn ForgeBackend = &GitLabForge;
+    }
+
+    #[test]
+    fn forgejo_forge_implements_trait() {
+        let _forge: &dyn ForgeBackend = &ForgejoForge {
+            host: "https://codeberg.org".into(),
+            token: "test-token".into(),
+            owner: "myuser".into(),
+            repo: "myrepo".into(),
+        };
     }
 }

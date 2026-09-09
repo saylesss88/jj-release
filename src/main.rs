@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 use jj_release::config::{self, Config};
-use jj_release::forge::{ForgeBackend, GitHubForge, GitLabForge, NoForge};
+use jj_release::forge::{ForgeBackend, ForgejoForge, GitHubForge, GitLabForge, NoForge};
 use jj_release::jj::{JjBackend, ShellBackend};
 use jj_release::manifest::{CargoManifest, GoManifest, ManifestBackend, NpmManifest};
 use jj_release::pipeline::{self, PreparedRelease};
@@ -87,6 +87,12 @@ fn run() -> Result<()> {
     let forge: Box<dyn ForgeBackend> = match config.release.forge.as_str() {
         "github" => Box::new(GitHubForge),
         "gitlab" => Box::new(GitLabForge),
+        "forgejo" => Box::new(ForgejoForge {
+            host: config.release.forge_url.clone(),
+            token: std::env::var("FORGEJO_TOKEN").unwrap_or_default(),
+            owner: String::new(), // TODO: parse from git remote
+            repo: String::new(),  // TODO: parse from git remote
+        }),
         _ => Box::new(NoForge),
     };
 
