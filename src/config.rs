@@ -25,6 +25,10 @@ pub struct ReleaseConfig {
     pub bookmark: String,
     /// Create a GitHub release via `gh release create`.
     pub github_release: bool,
+    /// Forge to use
+    pub forge: String,
+    /// Forge URL
+    pub forge_url: String,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -67,6 +71,8 @@ impl Default for ReleaseConfig {
             tag_prefix: "v".to_owned(),
             bookmark: "main".to_owned(),
             github_release: false,
+            forge: "none".to_owned(),
+            forge_url: String::new(),
         }
     }
 }
@@ -135,5 +141,21 @@ cargo = false
         assert!(cfg.release.github_release);
         // Unspecified fields use defaults
         assert_eq!(cfg.release.tag_prefix, "v");
+    }
+
+    #[test]
+    fn forge_defaults_to_none() {
+        let cfg = Config::default();
+        assert_eq!(cfg.release.forge, "none");
+    }
+
+    #[test]
+    fn parse_forge_config() {
+        let raw = r#"
+[release]
+forge = "github"
+"#;
+        let cfg: Config = toml::from_str(raw).unwrap();
+        assert_eq!(cfg.release.forge, "github");
     }
 }
