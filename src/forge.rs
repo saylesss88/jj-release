@@ -1,3 +1,22 @@
+use anyhow::Result;
+
+pub trait ForgeBackend {
+    fn create_release(&self, tag: &str) -> Result<()>;
+    fn create_pr(&self, tag: &str, head: &str, base: &str) -> Result<()>;
+}
+
+pub struct NoForge;
+
+impl ForgeBackend for NoForge {
+    fn create_release(&self, _tag: &str) -> Result<()> {
+        Ok(())
+    }
+
+    fn create_pr(&self, _tag: &str, _head: &str, _base: &str) -> Result<()> {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
