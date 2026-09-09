@@ -10,6 +10,7 @@ use jj_release::config::{self, Config};
 use jj_release::forge::{ForgeBackend, GitHubForge, GitLabForge, NoForge};
 use jj_release::jj::{JjBackend, ShellBackend};
 use jj_release::manifest::{CargoManifest, GoManifest, ManifestBackend, NpmManifest};
+use jj_release::pipeline::{self, PreparedRelease};
 use jj_release::publish::{CargoPublish, NoPublish, NpmPublish, PublishBackend};
 use jj_release::{changelog, commits, commits::BumpKind, jj};
 
@@ -89,42 +90,32 @@ fn run() -> Result<()> {
         _ => Box::new(NoForge),
     };
 
+    let ctx = ReleaseContext {
+        backend: &backend,
+        manifest: manifest.as_ref(),
+        forge: forge.as_ref(),
+        publisher: publisher.as_ref(),
+    };
+
     match cli.command.unwrap_or(Subcommand::Run) {
-        Subcommand::Run => release_pipeline(
-            &backend,
-            manifest.as_ref(),
-            forge.as_ref(),
-            publisher.as_ref(),
-            &config,
-            &root,
-            cli.dry_run,
-            cli.quiet,
-        ),
-        Subcommand::NextVersion => print_next_version(&backend, manifest.as_ref(), &config, &root),
-        Subcommand::Changelog => print_changelog(&backend, manifest.as_ref(), &config, &root),
-        Subcommand::Pr => release_pr(
-            &backend,
-            manifest.as_ref(),
-            forge.as_ref(),
-            &config,
-            &root,
-            cli.quiet,
-        ),
+        Subcommand::Run => release_pipeline(&ctx, &config, &root, cli.dry_run, cli.quiet),
+        Subcommand::NextVersion => print_next_version(&ctx, &config, &root),
+        Subcommand::Changelog => print_changelog(&ctx, &config, &root),
+        Subcommand::Pr => release_pr(&ctx, &config, &root, cli.quiet),
     }
 }
 
 fn print_changelog(
-    backend: &dyn JjBackend,
-    manifest: &dyn ManifestBackend,
+    ctx: &ReleaseContext<'_>,
     config: &Config,
     root: &std::path::Path,
 ) -> Result<()> {
-    let current = manifest.read_version(root)?;
-    let since = match commits::latest_version_tag(backend, &config.release.tag_prefix)? {
+    let current = ctx.manifest.read_version(root)?;
+    let since = match commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)? {
         Some(tag) => tag.name,
         None => "root()".to_owned(),
     };
-    let commits = backend.log_commits(&format!("{since}..@"))?;
+    let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
     let next = commits::apply_bump(&current, commits::compute_bump(&commits));
     let section = changelog::render_changelog_section(&commits, &next);
     print!("{section}");
@@ -133,11 +124,15 @@ fn print_changelog(
 
 // -- Pipeline --
 
+pub struct ReleaseContext<'a> {
+    pub backend: &'a dyn JjBackend,
+    pub manifest: &'a dyn ManifestBackend,
+    pub forge: &'a dyn ForgeBackend,
+    pub publisher: &'a dyn PublishBackend,
+}
+
 fn release_pipeline(
-    backend: &dyn JjBackend,
-    manifest: &dyn ManifestBackend,
-    forge: &dyn ForgeBackend,
-    publisher: &dyn PublishBackend,
+    ctx: &ReleaseContext<'_>,
     config: &Config,
     root: &std::path::Path,
     dry_run: bool,
@@ -147,56 +142,30 @@ fn release_pipeline(
         ($($t:tt)*) => { if !quiet { println!($($t)*); } }
     }
 
-    let since = match commits::latest_version_tag(backend, &config.release.tag_prefix)? {
-        Some(tag) => tag.name,
-        None => "root()".to_owned(),
+    let Some(prepared) = pipeline::prepare_release(ctx.backend, ctx.manifest, config, root)? else {
+        info!("No trigger commit found or no releasable commits. Nothing to release.");
+        return Ok(());
     };
 
-    // 1. Detect trigger commit.
+    let PreparedRelease {
+        next_version,
+        tag_name,
+        commits,
+        ..
+    } = &prepared;
+
+    info!("  Current version: {}", prepared.current_version);
     info!(
-        "→ Scanning for trigger commit {:?}…",
-        config.release.trigger
+        "  Bump: {:?} → {next_version}  (tag: {tag_name})",
+        prepared.bump
     );
-    let Some(_trigger_id) = commits::find_trigger(backend, &config.release.trigger, &since)? else {
-        info!("No trigger commit found. Nothing to release.");
-        return Ok(());
-    };
-    info!("  Found trigger commit.");
-
-    // 2. Read current version.
-    let current_version = manifest
-        .read_version(root)
-        .context("reading current version from Cargo.toml")?;
-    info!("  Current version: {current_version}");
-
-    // 3. Fetch commits and compute bump, reuse commits for changelog.
-    let commits = backend.log_commits(&format!("{since}..@"))?;
-    let bump = if let Some(force) = &config.bump.force {
-        match force.as_str() {
-            "major" => BumpKind::Major,
-            "minor" => BumpKind::Minor,
-            "patch" => BumpKind::Patch,
-            other => bail!("unknown bump.force value {other:?} — must be major/minor/patch"),
-        }
-    } else {
-        commits::compute_bump(&commits)
-    };
-
-    if bump == BumpKind::None {
-        info!("No releasable commits found since last tag. Nothing to release.");
-        return Ok(());
-    }
-
-    let next_version = commits::apply_bump(&current_version, bump);
-    let tag_name = config.tag_name(&next_version);
-    info!("  Bump: {bump:?} → {next_version}  (tag: {tag_name})");
 
     if dry_run {
         println!("[dry-run] Would release {next_version} as {tag_name}");
         return Ok(());
     }
 
-    // 4. Write changelog.
+    // 1. Write changelog.
     if config.changelog.enabled {
         info!("→ Writing changelog…");
         let changelog_path = root.join(&config.changelog.file);
@@ -205,48 +174,43 @@ fn release_pipeline(
         } else {
             String::new()
         };
-        let section = changelog::render_changelog_section(&commits, &next_version);
+        let section = changelog::render_changelog_section(commits, next_version);
         let updated = changelog::prepend_to_file(&existing, &section);
         std::fs::write(&changelog_path, updated)?;
     }
 
-    // 5. Bump Cargo.toml and create release commit.
+    // 2. Bump version and create release commit.
     info!("→ Bumping Cargo.toml to {next_version}…");
-    manifest.write_version(root, &next_version)?;
+    ctx.manifest.write_version(root, next_version)?;
     let release_message = format!("chore: release {tag_name}");
     info!("→ Creating commit {:?}…", release_message);
-    backend.new_commit(&release_message)?;
+    ctx.backend.new_commit(&release_message)?;
 
-    // 6. Tag the release commit.
+    // 3. Tag, bookmark, push.
     info!("→ Creating tag {tag_name}…");
-    backend.create_tag(&tag_name, "@")?;
-
-    // 7. Advance the bookmark.
+    ctx.backend.create_tag(tag_name, "@")?;
     info!("→ Moving bookmark {:?} to @…", config.release.bookmark);
-    backend.set_bookmark(&config.release.bookmark, "@")?;
-
-    // 8. Export to git and push.
+    ctx.backend.set_bookmark(&config.release.bookmark, "@")?;
     info!("→ Exporting to git…");
-    backend.git_export()?;
+    ctx.backend.git_export()?;
     info!("→ Pushing bookmark and tags…");
-    backend.git_push(&config.release.bookmark, Some(&tag_name))?;
+    ctx.backend
+        .git_push(&config.release.bookmark, Some(tag_name))?;
 
-    // 9. publish.
+    // 4. publish.
     info!("→ Publishing…");
-    publisher.publish(root, &config.publish.cargo_flags)?;
+    ctx.publisher.publish(root, &config.publish.cargo_flags)?;
 
-    // 10. Forge release.
+    // 5. Forge release.
     info!("→ Creating forge release {tag_name}…");
-    forge.create_release(&tag_name)?;
+    ctx.forge.create_release(tag_name)?;
 
     info!("✓ Released {tag_name}");
     Ok(())
 }
 
 fn release_pr(
-    backend: &dyn JjBackend,
-    manifest: &dyn ManifestBackend,
-    forge: &dyn ForgeBackend,
+    ctx: &ReleaseContext<'_>,
     config: &Config,
     root: &std::path::Path,
     quiet: bool,
@@ -255,52 +219,25 @@ fn release_pr(
         ($($t:tt)*) => { if !quiet { println!($($t)*); } }
     }
 
-    let since = match commits::latest_version_tag(backend, &config.release.tag_prefix)? {
-        Some(tag) => tag.name,
-        None => "root()".to_owned(),
-    };
-
-    // 1. Detect trigger commit.
-    info!(
-        "→ Scanning for trigger commit {:?}…",
-        config.release.trigger
-    );
-    let Some(_trigger_id) = commits::find_trigger(backend, &config.release.trigger, &since)? else {
-        info!("No trigger commit found. Nothing to release.");
+    let Some(prepared) = pipeline::prepare_release(ctx.backend, ctx.manifest, config, root)? else {
+        info!("No trigger commit found or no releasable commits. Nothing to release.");
         return Ok(());
     };
-    info!("  Found trigger commit.");
 
-    // 2. Read current version.
-    let current_version = manifest
-        .read_version(root)
-        .context("reading current version")?;
-    info!("  Current version: {current_version}");
-
-    // 3. Compute bump.
-    let commits = backend.log_commits(&format!("{since}..@"))?;
-    let bump = if let Some(force) = &config.bump.force {
-        match force.as_str() {
-            "major" => BumpKind::Major,
-            "minor" => BumpKind::Minor,
-            "patch" => BumpKind::Patch,
-            other => bail!("unknown bump.force value {other:?} — must be major/minor/patch"),
-        }
-    } else {
-        commits::compute_bump(&commits)
-    };
-
-    if bump == BumpKind::None {
-        info!("No releasable commits found since last tag. Nothing to release.");
-        return Ok(());
-    }
-
-    let next_version = commits::apply_bump(&current_version, bump);
-    let tag_name = config.tag_name(&next_version);
+    let PreparedRelease {
+        next_version,
+        tag_name,
+        commits,
+        ..
+    } = &prepared;
     let pr_bookmark = format!("release/{tag_name}");
-    info!("  Bump: {bump:?} → {next_version}  (tag: {tag_name})");
 
-    // 4. Write changelog.
+    info!(
+        "  Bump: {:?} → {next_version}  (tag: {tag_name})",
+        prepared.bump
+    );
+
+    // 1. Write changelog.
     if config.changelog.enabled {
         info!("→ Writing changelog…");
         let changelog_path = root.join(&config.changelog.file);
@@ -309,46 +246,46 @@ fn release_pr(
         } else {
             String::new()
         };
-        let section = changelog::render_changelog_section(&commits, &next_version);
+        let section = changelog::render_changelog_section(commits, next_version);
         let updated = changelog::prepend_to_file(&existing, &section);
         std::fs::write(&changelog_path, updated)?;
     }
 
-    // 5. Bump version and create release commit.
+    // 2. Bump version and create release commit.
     info!("→ Bumping version to {next_version}…");
-    manifest.write_version(root, &next_version)?;
+    ctx.manifest.write_version(root, next_version)?;
     let release_message = format!("chore: release {tag_name}");
     info!("→ Creating commit {:?}…", release_message);
-    backend.new_commit(&release_message)?;
+    ctx.backend.new_commit(&release_message)?;
 
-    // 6. Push to a release bookmark.
+    // 3. Push to a release bookmark.
     info!("→ Creating bookmark {pr_bookmark:?}…");
-    backend.set_bookmark(&pr_bookmark, "@")?;
+    ctx.backend.set_bookmark(&pr_bookmark, "@")?;
     info!("→ Exporting to git…");
-    backend.git_export()?;
+    ctx.backend.git_export()?;
     info!("→ Pushing {pr_bookmark:?}…");
-    backend.git_push(&pr_bookmark, None)?;
+    ctx.backend.git_push(&pr_bookmark, None)?;
 
-    // 7. Open PR.
+    // 4. Open PR.
     info!("→ Opening PR…");
-    forge.create_pr(&tag_name, &pr_bookmark, &config.release.bookmark)?;
+    ctx.forge
+        .create_pr(tag_name, &pr_bookmark, &config.release.bookmark)?;
 
     info!("✓ PR opened for {tag_name}");
     Ok(())
 }
 
 fn print_next_version(
-    backend: &dyn JjBackend,
-    manifest: &dyn ManifestBackend,
+    ctx: &ReleaseContext<'_>,
     config: &Config,
     root: &std::path::Path,
 ) -> Result<()> {
-    let current = manifest.read_version(root)?;
-    let since = match commits::latest_version_tag(backend, &config.release.tag_prefix)? {
+    let current = ctx.manifest.read_version(root)?;
+    let since = match commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)? {
         Some(tag) => tag.name,
         None => "root()".to_owned(),
     };
-    let commits = backend.log_commits(&format!("{since}..@"))?;
+    let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
     let bump = if let Some(force) = &config.bump.force {
         match force.as_str() {
             "major" => BumpKind::Major,
