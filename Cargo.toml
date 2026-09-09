@@ -25,6 +25,14 @@ which = "8.0.6"
 [dev-dependencies]
 tempfile = "3"
 
+[lib]
+name = "jj_release"
+path = "src/lib.rs"
+
+[[bin]]
+name = "jj-release"
+path = "src/main.rs"
+
 [profile.release]
 opt-level = 3
 lto = true

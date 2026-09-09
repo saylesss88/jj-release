@@ -1,12 +1,5 @@
 //! jj-release, semantic releases for Jujutsu repositories.
 
-mod changelog;
-mod commits;
-mod config;
-mod forge;
-mod jj;
-mod manifest;
-
 use std::env;
 use std::path::PathBuf;
 use std::process::Command;
@@ -14,10 +7,15 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 
-use commits::BumpKind;
-use config::Config;
-use jj::{JjBackend, ShellBackend};
-use manifest::{CargoManifest, ManifestBackend};
+use jj_release::config::{self, Config};
+use jj_release::jj::{JjBackend, ShellBackend};
+use jj_release::manifest::{CargoManifest, ManifestBackend};
+use jj_release::{changelog, commits, commits::BumpKind, forge, jj, manifest};
+
+// use commits::BumpKind;
+// use config::Config;
+// use jj::{JjBackend, ShellBackend};
+// use manifest::{CargoManifest, ManifestBackend};
 
 #[derive(Parser, Debug)]
 #[command(
