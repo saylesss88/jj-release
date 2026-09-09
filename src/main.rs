@@ -8,14 +8,10 @@ use anyhow::{bail, Context, Result};
 use clap::Parser;
 
 use jj_release::config::{self, Config};
+use jj_release::forge::{ForgeBackend, GitHubForge, NoForge};
 use jj_release::jj::{JjBackend, ShellBackend};
 use jj_release::manifest::{CargoManifest, ManifestBackend};
-use jj_release::{changelog, commits, commits::BumpKind, forge, jj, manifest};
-
-// use commits::BumpKind;
-// use config::Config;
-// use jj::{JjBackend, ShellBackend};
-// use manifest::{CargoManifest, ManifestBackend};
+use jj_release::{changelog, commits, commits::BumpKind, jj};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -77,13 +73,32 @@ fn run() -> Result<()> {
     // Set up the backend.
     let backend = ShellBackend::new(&root)?;
 
+    let forge: Box<dyn ForgeBackend> = if config.release.github_release {
+        Box::new(GitHubForge)
+    } else {
+        Box::new(NoForge)
+    };
+
     match cli.command.unwrap_or(Subcommand::Run) {
-        Subcommand::Run => {
-            release_pipeline(&backend, &manifest, &config, &root, cli.dry_run, cli.quiet)
-        }
+        Subcommand::Run => release_pipeline(
+            &backend,
+            &manifest,
+            forge.as_ref(),
+            &config,
+            &root,
+            cli.dry_run,
+            cli.quiet,
+        ),
         Subcommand::NextVersion => print_next_version(&backend, &manifest, &config, &root),
         Subcommand::Changelog => print_changelog(&backend, &manifest, &config, &root),
-        Subcommand::Pr => release_pr(&backend, &manifest, &config, &root, cli.quiet),
+        Subcommand::Pr => release_pr(
+            &backend,
+            &manifest,
+            forge.as_ref(),
+            &config,
+            &root,
+            cli.quiet,
+        ),
     }
 }
 
@@ -110,6 +125,7 @@ fn print_changelog(
 fn release_pipeline(
     backend: &dyn JjBackend,
     manifest: &dyn ManifestBackend,
+    forge: &dyn ForgeBackend,
     config: &Config,
     root: &std::path::Path,
     dry_run: bool,
@@ -209,10 +225,15 @@ fn release_pipeline(
         cargo_publish(root, &config.publish.cargo_flags)?;
     }
 
+    // let forge: Box<dyn ForgeBackend> = if config.release.github_release {
+    //     Box::new(GitHubForge)
+    // } else {
+    //     Box::new(NoForge)
+    // };
     // 10. GitHub release.
     if config.release.github_release {
         info!("→ Creating GitHub release {tag_name}…");
-        gh_release_create(&tag_name)?;
+        forge.create_release(&tag_name)?;
     }
 
     info!("✓ Released {tag_name}");
@@ -222,6 +243,7 @@ fn release_pipeline(
 fn release_pr(
     backend: &dyn JjBackend,
     manifest: &dyn ManifestBackend,
+    forge: &dyn ForgeBackend,
     config: &Config,
     root: &std::path::Path,
     quiet: bool,
@@ -306,7 +328,7 @@ fn release_pr(
 
     // 7. Open PR.
     info!("→ Opening PR…");
-    gh_pr_create(&tag_name, &pr_bookmark, &config.release.bookmark)?;
+    forge.create_pr(&tag_name, &pr_bookmark, &config.release.bookmark)?;
 
     info!("✓ PR opened for {tag_name}");
     Ok(())
@@ -350,41 +372,6 @@ fn cargo_publish(root: &std::path::Path, extra_flags: &[String]) -> Result<()> {
 
     if !status.success() {
         bail!("cargo publish failed");
-    }
-    Ok(())
-}
-
-fn gh_release_create(tag: &str) -> Result<()> {
-    let status = Command::new("gh")
-        .args(["release", "create", tag, "--generate-notes"])
-        .status()
-        .context("spawning gh release create")?;
-
-    if !status.success() {
-        bail!("gh release create failed for tag {tag}");
-    }
-    Ok(())
-}
-
-fn gh_pr_create(tag: &str, head: &str, base: &str) -> Result<()> {
-    let status = Command::new("gh")
-        .args([
-            "pr",
-            "create",
-            "--title",
-            &format!("chore: release {tag}"),
-            "--body",
-            &format!("Automated release PR for {tag}"),
-            "--head",
-            head,
-            "--base",
-            base,
-        ])
-        .status()
-        .context("spawning gh pr create")?;
-
-    if !status.success() {
-        bail!("gh pr create failed");
     }
     Ok(())
 }
