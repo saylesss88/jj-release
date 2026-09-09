@@ -12,6 +12,7 @@ use jj_release::jj::{JjBackend, ShellBackend};
 use jj_release::manifest::{CargoManifest, GoManifest, ManifestBackend, NpmManifest};
 use jj_release::pipeline::{self, PreparedRelease};
 use jj_release::publish::{CargoPublish, NoPublish, NpmPublish, PublishBackend};
+use jj_release::workspace::WorkspaceManifest;
 use jj_release::{changelog, commits, jj, workspace};
 
 #[derive(Parser, Debug)]
@@ -76,11 +77,16 @@ fn run() -> Result<()> {
         _ => Box::new(NoPublish),
     };
 
-    let manifest: Box<dyn ManifestBackend> = match config.manifest_backend.as_str() {
-        "go" => Box::new(GoManifest),
-        "npm" => Box::new(NpmManifest),
-        _ => Box::new(CargoManifest), // default to cargo
-    };
+    let manifest: Box<dyn ManifestBackend> =
+        if config.workspace.as_ref().map_or(false, |w| w.enabled) {
+            Box::new(WorkspaceManifest)
+        } else {
+            match config.manifest_backend.as_str() {
+                "go" => Box::new(GoManifest),
+                "npm" => Box::new(NpmManifest),
+                _ => Box::new(CargoManifest),
+            }
+        };
     // Set up the backend.
     let backend = ShellBackend::new(&root)?;
 
@@ -204,11 +210,14 @@ fn release_pipeline(
         .git_push(&config.release.bookmark, Some(tag_name))?;
 
     // 4. Publish.
-    if let Some(workspace_config) = &config.workspace {
-        for member in workspace::ordered_members(&workspace_config.members)? {
-            info!("→ Publishing {}…", member.name);
-            ctx.publisher
-                .publish(&root.join(&member.path), &config.publish.cargo_flags)?;
+    if let Some(ws) = &config.workspace {
+        if ws.enabled {
+            let ordered = workspace::ordered_members(&ws.members)?;
+            for member in ordered {
+                info!("→ Publishing {}…", member.name);
+                ctx.publisher
+                    .publish(&root.join(&member.path), &config.publish.cargo_flags)?;
+            }
         }
     } else {
         info!("→ Publishing…");
