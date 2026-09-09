@@ -3,7 +3,7 @@
 use std::env;
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use clap::Parser;
 
 use jj_release::config::{self, Config};
@@ -12,7 +12,7 @@ use jj_release::jj::{JjBackend, ShellBackend};
 use jj_release::manifest::{CargoManifest, GoManifest, ManifestBackend, NpmManifest};
 use jj_release::pipeline::{self, PreparedRelease};
 use jj_release::publish::{CargoPublish, NoPublish, NpmPublish, PublishBackend};
-use jj_release::{changelog, commits, commits::BumpKind, jj};
+use jj_release::{changelog, commits, jj};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -286,16 +286,7 @@ fn print_next_version(
         None => "root()".to_owned(),
     };
     let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
-    let bump = if let Some(force) = &config.bump.force {
-        match force.as_str() {
-            "major" => BumpKind::Major,
-            "minor" => BumpKind::Minor,
-            "patch" => BumpKind::Patch,
-            other => bail!("unknown bump.force value {other:?} — must be major/minor/patch"),
-        }
-    } else {
-        commits::compute_bump(&commits)
-    };
+    let bump = commits::resolve_bump(config.bump.force.as_ref(), &commits)?;
     let next = commits::apply_bump(&current, bump);
     println!("{next}");
     Ok(())

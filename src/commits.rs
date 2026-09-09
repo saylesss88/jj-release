@@ -1,6 +1,6 @@
 //! Commit walking and conventional commit parsing.
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use git_conventional::Commit;
 use semver::Version;
 
@@ -79,6 +79,18 @@ pub fn compute_bump(commits: &[CommitInfo]) -> BumpKind {
         }
     }
     bump
+}
+
+pub fn resolve_bump(force: Option<&String>, commits: &[CommitInfo]) -> Result<BumpKind> {
+    if let Some(force) = force {
+        return match force.as_str() {
+            "major" => Ok(BumpKind::Major),
+            "minor" => Ok(BumpKind::Minor),
+            "patch" => Ok(BumpKind::Patch),
+            other => bail!("unknown bump.force value {other:?}: must be major/minor/patch"),
+        };
+    }
+    Ok(compute_bump(commits))
 }
 
 /// Classify a single commit description into a bump kind.
@@ -314,5 +326,43 @@ mod tests {
         find_trigger(&backend, "Release: please", "v0.1.0").unwrap();
         // should have called log_commits with "v0.1.0..@" not "root()..@"
         assert_eq!(backend.calls.borrow()[0], "v0.1.0..@");
+    }
+
+    #[test]
+    fn resolve_bump_force_major() {
+        let commits = vec![CommitInfo {
+            change_id: "abc".into(),
+            description: "fix: small thing".into(),
+        }];
+        assert_eq!(
+            resolve_bump(Some(&"major".to_owned()), &commits).unwrap(),
+            BumpKind::Major
+        );
+    }
+
+    #[test]
+    fn resolve_bump_force_overrides_commits() {
+        let commits = vec![CommitInfo {
+            change_id: "abc".into(),
+            description: "fix: small thing".into(),
+        }];
+        assert_eq!(
+            resolve_bump(Some(&"minor".to_owned()), &commits).unwrap(),
+            BumpKind::Minor
+        );
+    }
+
+    #[test]
+    fn resolve_bump_auto_from_commits() {
+        let commits = vec![CommitInfo {
+            change_id: "abc".into(),
+            description: "feat: new thing".into(),
+        }];
+        assert_eq!(resolve_bump(None, &commits).unwrap(), BumpKind::Minor);
+    }
+
+    #[test]
+    fn resolve_bump_unknown_force_errors() {
+        assert!(resolve_bump(Some(&"banana".to_owned()), &[]).is_err());
     }
 }

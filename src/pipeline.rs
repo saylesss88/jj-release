@@ -38,16 +38,8 @@ pub fn prepare_release(
         .context("reading current version")?;
 
     let commits = backend.log_commits(&format!("{since}..@"))?;
-    let bump = if let Some(force) = &config.bump.force {
-        match force.as_str() {
-            "major" => BumpKind::Major,
-            "minor" => BumpKind::Minor,
-            "patch" => BumpKind::Patch,
-            other => bail!("unknown bump.force value {other:?} — must be major/minor/patch"),
-        }
-    } else {
-        commits::compute_bump(&commits)
-    };
+
+    let bump = commits::resolve_bump(config.bump.force.as_ref(), &commits)?;
 
     if bump == BumpKind::None {
         return Ok(None);
