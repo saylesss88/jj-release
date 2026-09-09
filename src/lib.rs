@@ -4,4 +4,4 @@ pub mod config;
 pub mod forge;
 pub mod jj;
 pub mod manifest;
-mod publish;
+pub mod publish;

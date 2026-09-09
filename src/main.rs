@@ -2,7 +2,6 @@
 
 use std::env;
 use std::path::PathBuf;
-use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 use clap::Parser;
@@ -11,6 +10,7 @@ use jj_release::config::{self, Config};
 use jj_release::forge::{ForgeBackend, GitHubForge, GitLabForge, NoForge};
 use jj_release::jj::{JjBackend, ShellBackend};
 use jj_release::manifest::{CargoManifest, GoManifest, ManifestBackend, NpmManifest};
+use jj_release::publish::{CargoPublish, NoPublish, NpmPublish, PublishBackend};
 use jj_release::{changelog, commits, commits::BumpKind, jj};
 
 #[derive(Parser, Debug)]
@@ -69,6 +69,12 @@ fn run() -> Result<()> {
     // Load config (falls back to defaults if release.toml absent).
     let config = config::load(&root)?;
 
+    let publisher: Box<dyn PublishBackend> = match config.manifest_backend.as_str() {
+        "npm" => Box::new(NpmPublish),
+        _ if config.publish.cargo => Box::new(CargoPublish),
+        _ => Box::new(NoPublish),
+    };
+
     let manifest: Box<dyn ManifestBackend> = match config.manifest_backend.as_str() {
         "go" => Box::new(GoManifest),
         "npm" => Box::new(NpmManifest),
@@ -88,6 +94,7 @@ fn run() -> Result<()> {
             &backend,
             manifest.as_ref(),
             forge.as_ref(),
+            publisher.as_ref(),
             &config,
             &root,
             cli.dry_run,
@@ -130,6 +137,7 @@ fn release_pipeline(
     backend: &dyn JjBackend,
     manifest: &dyn ManifestBackend,
     forge: &dyn ForgeBackend,
+    publisher: &dyn PublishBackend,
     config: &Config,
     root: &std::path::Path,
     dry_run: bool,
@@ -223,11 +231,9 @@ fn release_pipeline(
     info!("→ Pushing bookmark and tags…");
     backend.git_push(&config.release.bookmark, Some(&tag_name))?;
 
-    // 9. Cargo publish.
-    if config.publish.cargo {
-        info!("→ Running cargo publish…");
-        cargo_publish(root, &config.publish.cargo_flags)?;
-    }
+    // 9. publish.
+    info!("→ Publishing…");
+    publisher.publish(root, &config.publish.cargo_flags)?;
 
     // 10. Forge release.
     info!("→ Creating forge release {tag_name}…");
@@ -355,21 +361,6 @@ fn print_next_version(
     };
     let next = commits::apply_bump(&current, bump);
     println!("{next}");
-    Ok(())
-}
-
-fn cargo_publish(root: &std::path::Path, extra_flags: &[String]) -> Result<()> {
-    let status = Command::new("cargo")
-        .arg("publish")
-        .arg("--allow-dirty")
-        .args(extra_flags)
-        .current_dir(root)
-        .status()
-        .context("spawning cargo publish")?;
-
-    if !status.success() {
-        bail!("cargo publish failed");
-    }
     Ok(())
 }
 
