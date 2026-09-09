@@ -6,6 +6,23 @@ use anyhow::{bail, Context, Result};
 use semver::Version;
 use toml_edit::DocumentMut;
 
+pub trait ManifestBackend {
+    fn read_version(&self, root: &Path) -> Result<Version>;
+    fn write_version(&self, root: &Path, version: &Version) -> Result<()>;
+}
+
+pub struct CargoManifest;
+
+impl ManifestBackend for CargoManifest {
+    fn read_version(&self, root: &Path) -> Result<Version> {
+        read_version(&root.join("Cargo.toml"))
+    }
+
+    fn write_version(&self, root: &Path, version: &Version) -> Result<()> {
+        write_version(&root.join("Cargo.toml"), version)
+    }
+}
+
 /// Read the current `[package].version` from `Cargo.toml`.
 pub fn read_version(cargo_toml: &Path) -> Result<Version> {
     let raw = std::fs::read_to_string(cargo_toml)
@@ -66,7 +83,7 @@ mod tests {
             r#"[package]
 name = "my-crate"
 version = "1.2.3"
-edition = "2021"
+edition = "2024"
 "#,
         );
         let v = read_version(f.path()).unwrap();
@@ -79,7 +96,7 @@ edition = "2021"
 # Important crate
 name = "my-crate"
 version = "1.2.3"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 anyhow = "1"
@@ -100,5 +117,45 @@ anyhow = "1"
     fn missing_version_errors() {
         let f = make_cargo_toml("[package]\nname = \"no-version\"\n");
         assert!(read_version(f.path()).is_err());
+    }
+
+    #[test]
+    fn cargo_manifest_reads_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let cargo_toml = dir.path().join("Cargo.toml");
+        std::fs::write(
+            &cargo_toml,
+            r#"[package]
+name = "my-crate"
+version = "1.2.3"
+edition = "2024"
+"#,
+        )
+        .unwrap();
+        let manifest = CargoManifest;
+        let v = manifest.read_version(dir.path()).unwrap();
+        assert_eq!(v, Version::parse("1.2.3").unwrap());
+    }
+
+    #[test]
+    fn cargo_manifest_writes_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let cargo_toml = dir.path().join("Cargo.toml");
+        std::fs::write(
+            &cargo_toml,
+            r#"[package]
+name = "my-crate"
+version = "1.2.3"
+edition = "2024"
+"#,
+        )
+        .unwrap();
+        let manifest = CargoManifest;
+        manifest
+            .write_version(dir.path(), &Version::parse("1.4.0").unwrap())
+            .unwrap();
+        let updated = std::fs::read_to_string(&cargo_toml).unwrap();
+        assert!(updated.contains("\"1.4.0\""));
+        assert!(!updated.contains("\"1.2.3\""));
     }
 }
