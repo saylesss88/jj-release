@@ -8,7 +8,7 @@ use anyhow::{bail, Context, Result};
 use clap::Parser;
 
 use jj_release::config::{self, Config};
-use jj_release::forge::{ForgeBackend, GitHubForge, NoForge};
+use jj_release::forge::{ForgeBackend, GitHubForge, GitLabForge, NoForge};
 use jj_release::jj::{JjBackend, ShellBackend};
 use jj_release::manifest::{CargoManifest, ManifestBackend};
 use jj_release::{changelog, commits, commits::BumpKind, jj};
@@ -73,10 +73,10 @@ fn run() -> Result<()> {
     // Set up the backend.
     let backend = ShellBackend::new(&root)?;
 
-    let forge: Box<dyn ForgeBackend> = if config.release.github_release {
-        Box::new(GitHubForge)
-    } else {
-        Box::new(NoForge)
+    let forge: Box<dyn ForgeBackend> = match config.release.forge.as_str() {
+        "github" => Box::new(GitHubForge),
+        "gitlab" => Box::new(GitLabForge),
+        _ => Box::new(NoForge),
     };
 
     match cli.command.unwrap_or(Subcommand::Run) {
