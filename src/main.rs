@@ -13,10 +13,10 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 
-use commits::{apply_bump, compute_bump, find_trigger, latest_version_tag, BumpKind};
+use commits::BumpKind;
 use config::Config;
-use jj::{find_repo_root, JjBackend, ShellBackend};
-use manifest::{read_version, write_version};
+use jj::{JjBackend, ShellBackend};
+use manifest::{CargoManifest, ManifestBackend};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -66,39 +66,48 @@ fn run() -> Result<()> {
     let cwd = env::current_dir().context("getting current directory")?;
     let root = match &cli.repo {
         Some(p) => p.clone(),
-        None => find_repo_root(&cwd)?,
+        None => jj::find_repo_root(&cwd)?,
     };
 
     // Load config (falls back to defaults if release.toml absent).
     let config = config::load(&root)?;
+    let manifest = CargoManifest;
 
     // Set up the backend.
     let backend = ShellBackend::new(&root)?;
 
     match cli.command.unwrap_or(Subcommand::Run) {
-        Subcommand::Run => release_pipeline(&backend, &config, &root, cli.dry_run, cli.quiet),
-        Subcommand::NextVersion => print_next_version(&backend, &config, &root),
-        Subcommand::Changelog => print_changelog(&backend, &config, &root),
+        Subcommand::Run => {
+            release_pipeline(&backend, &manifest, &config, &root, cli.dry_run, cli.quiet)
+        }
+        Subcommand::NextVersion => print_next_version(&backend, &manifest, &config, &root),
+        Subcommand::Changelog => print_changelog(&backend, &manifest, &config, &root),
     }
 }
 
-fn print_changelog(backend: &dyn JjBackend, config: &Config, root: &std::path::Path) -> Result<()> {
-    let cargo_toml = root.join("Cargo.toml");
-    let current = read_version(&cargo_toml)?;
-    let since = match latest_version_tag(backend, &config.release.tag_prefix)? {
+fn print_changelog(
+    backend: &dyn JjBackend,
+    manifest: &dyn ManifestBackend,
+    config: &Config,
+    root: &std::path::Path,
+) -> Result<()> {
+    let current = manifest.read_version(root)?;
+    let since = match commits::latest_version_tag(backend, &config.release.tag_prefix)? {
         Some(tag) => tag.name,
         None => "root()".to_owned(),
     };
     let commits = backend.log_commits(&format!("{since}..@"))?;
-    let next = apply_bump(&current, compute_bump(&commits));
+    let next = commits::apply_bump(&current, commits::compute_bump(&commits));
     let section = changelog::render_changelog_section(&commits, &next);
     print!("{section}");
     Ok(())
 }
+
 // -- Pipeline --
 
 fn release_pipeline(
     backend: &dyn JjBackend,
+    manifest: &dyn ManifestBackend,
     config: &Config,
     root: &std::path::Path,
     dry_run: bool,
@@ -108,7 +117,7 @@ fn release_pipeline(
         ($($t:tt)*) => { if !quiet { println!($($t)*); } }
     }
 
-    let since = match latest_version_tag(backend, &config.release.tag_prefix)? {
+    let since = match commits::latest_version_tag(backend, &config.release.tag_prefix)? {
         Some(tag) => tag.name,
         None => "root()".to_owned(),
     };
@@ -118,19 +127,19 @@ fn release_pipeline(
         "→ Scanning for trigger commit {:?}…",
         config.release.trigger
     );
-    let Some(_trigger_id) = find_trigger(backend, &config.release.trigger, &since)? else {
+    let Some(_trigger_id) = commits::find_trigger(backend, &config.release.trigger, &since)? else {
         info!("No trigger commit found. Nothing to release.");
         return Ok(());
     };
     info!("  Found trigger commit.");
 
     // 2. Read current version.
-    let cargo_toml = root.join("Cargo.toml");
-    let current_version =
-        read_version(&cargo_toml).context("reading current version from Cargo.toml")?;
+    let current_version = manifest
+        .read_version(root)
+        .context("reading current version from Cargo.toml")?;
     info!("  Current version: {current_version}");
 
-    // 3. Fetch commits and compute bump — reuse commits for changelog.
+    // 3. Fetch commits and compute bump, reuse commits for changelog.
     let commits = backend.log_commits(&format!("{since}..@"))?;
     let bump = if let Some(force) = &config.bump.force {
         match force.as_str() {
@@ -140,7 +149,7 @@ fn release_pipeline(
             other => bail!("unknown bump.force value {other:?} — must be major/minor/patch"),
         }
     } else {
-        compute_bump(&commits)
+        commits::compute_bump(&commits)
     };
 
     if bump == BumpKind::None {
@@ -148,7 +157,7 @@ fn release_pipeline(
         return Ok(());
     }
 
-    let next_version = apply_bump(&current_version, bump);
+    let next_version = commits::apply_bump(&current_version, bump);
     let tag_name = config.tag_name(&next_version);
     info!("  Bump: {bump:?} → {next_version}  (tag: {tag_name})");
 
@@ -173,7 +182,7 @@ fn release_pipeline(
 
     // 5. Bump Cargo.toml and create release commit.
     info!("→ Bumping Cargo.toml to {next_version}…");
-    write_version(&cargo_toml, &next_version)?;
+    manifest.write_version(root, &next_version)?;
     let release_message = format!("chore: release {tag_name}");
     info!("→ Creating commit {:?}…", release_message);
     backend.new_commit(&release_message)?;
@@ -210,12 +219,12 @@ fn release_pipeline(
 
 fn print_next_version(
     backend: &dyn JjBackend,
+    manifest: &dyn ManifestBackend,
     config: &Config,
     root: &std::path::Path,
 ) -> Result<()> {
-    let cargo_toml = root.join("Cargo.toml");
-    let current = read_version(&cargo_toml)?;
-    let since = match latest_version_tag(backend, &config.release.tag_prefix)? {
+    let current = manifest.read_version(root)?;
+    let since = match commits::latest_version_tag(backend, &config.release.tag_prefix)? {
         Some(tag) => tag.name,
         None => "root()".to_owned(),
     };
@@ -228,9 +237,9 @@ fn print_next_version(
             other => bail!("unknown bump.force value {other:?} — must be major/minor/patch"),
         }
     } else {
-        compute_bump(&commits)
+        commits::compute_bump(&commits)
     };
-    let next = apply_bump(&current, bump);
+    let next = commits::apply_bump(&current, bump);
     println!("{next}");
     Ok(())
 }
