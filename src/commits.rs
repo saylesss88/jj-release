@@ -136,17 +136,22 @@ pub fn highest_semver_tag(tags: &[Tag]) -> Option<&Tag> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
 
+    #[derive(Default)]
     struct MockBackend {
         tags: Vec<String>,
+        commits: Vec<CommitInfo>,
+        calls: RefCell<Vec<String>>,
     }
 
     impl JjBackend for MockBackend {
         fn list_tags(&self) -> Result<Vec<String>> {
             Ok(self.tags.clone())
         }
-        fn log_commits(&self, _: &str) -> Result<Vec<CommitInfo>> {
-            Ok(vec![])
+        fn log_commits(&self, revset: &str) -> Result<Vec<CommitInfo>> {
+            self.calls.borrow_mut().push(revset.to_owned());
+            Ok(self.commits.clone())
         }
         fn new_commit(&self, _: &str) -> Result<String> {
             Ok(String::new())
@@ -169,6 +174,7 @@ mod tests {
     fn latest_version_tag_finds_highest() {
         let backend = MockBackend {
             tags: vec!["v0.1.0".into(), "v0.3.0".into(), "v0.2.0".into()],
+            ..MockBackend::default()
         };
         let result = latest_version_tag(&backend, "v").unwrap();
         assert_eq!(result.unwrap().name, "v0.3.0");
@@ -183,6 +189,7 @@ mod tests {
                 "v0.2.0".into(),
                 "def456".into(),
             ],
+            ..MockBackend::default()
         };
         let result = latest_version_tag(&backend, "v").unwrap();
         assert_eq!(result.unwrap().name, "v0.2.0");
@@ -190,7 +197,10 @@ mod tests {
 
     #[test]
     fn latest_version_tag_empty_returns_none() {
-        let backend = MockBackend { tags: vec![] };
+        let backend = MockBackend {
+            tags: vec![],
+            ..MockBackend::default()
+        };
         let result = latest_version_tag(&backend, "v").unwrap();
         assert!(result.is_none());
     }
@@ -287,5 +297,19 @@ mod tests {
     #[test]
     fn highest_semver_tag_empty_returns_none() {
         assert!(highest_semver_tag(&[]).is_none());
+    }
+
+    #[test]
+    fn find_trigger_only_scans_since_last_tag() {
+        let backend = MockBackend {
+            commits: vec![CommitInfo {
+                change_id: "abc".into(),
+                description: "Release: please".into(),
+            }],
+            ..MockBackend::default()
+        };
+        find_trigger(&backend, "Release: please", "v0.1.0").unwrap();
+        // should have called log_commits with "v0.1.0..@" not "root()..@"
+        assert_eq!(backend.calls.borrow()[0], "v0.1.0..@");
     }
 }
