@@ -13,6 +13,7 @@ pub trait ManifestBackend {
 
 pub struct CargoManifest;
 pub struct GoManifest;
+pub struct NpmManifest;
 
 impl ManifestBackend for CargoManifest {
     fn read_version(&self, root: &Path) -> Result<Version> {
@@ -32,6 +33,33 @@ impl ManifestBackend for GoManifest {
     }
 
     fn write_version(&self, _root: &Path, _version: &Version) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl ManifestBackend for NpmManifest {
+    fn read_version(&self, root: &Path) -> Result<Version> {
+        let path = root.join("package.json");
+        let raw = std::fs::read_to_string(&path)
+            .with_context(|| format!("reading {}", path.display()))?;
+        let json: serde_json::Value =
+            serde_json::from_str(&raw).with_context(|| format!("parsing {}", path.display()))?;
+        let version_str = json["version"]
+            .as_str()
+            .with_context(|| "missing version field in package.json")?;
+        Version::parse(version_str)
+            .with_context(|| format!("invalid semver {version_str:?} in package.json"))
+    }
+
+    fn write_version(&self, root: &Path, version: &Version) -> Result<()> {
+        let path = root.join("package.json");
+        let raw = std::fs::read_to_string(&path)
+            .with_context(|| format!("reading {}", path.display()))?;
+        let mut json: serde_json::Value =
+            serde_json::from_str(&raw).with_context(|| format!("parsing {}", path.display()))?;
+        json["version"] = serde_json::Value::String(version.to_string());
+        std::fs::write(&path, serde_json::to_string_pretty(&json)?)
+            .with_context(|| format!("writing {}", path.display()))?;
         Ok(())
     }
 }
@@ -186,5 +214,35 @@ edition = "2024"
     #[test]
     fn go_manifest_implements_trait() {
         let _manifest: &dyn ManifestBackend = &GoManifest;
+    }
+
+    #[test]
+    fn npm_manifest_reads_version() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("package.json"),
+            r#"{"name": "my-pkg", "version": "1.2.3"}"#,
+        )
+        .unwrap();
+        let manifest = NpmManifest;
+        let v = manifest.read_version(dir.path()).unwrap();
+        assert_eq!(v, Version::parse("1.2.3").unwrap());
+    }
+
+    #[test]
+    fn npm_manifest_writes_version() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("package.json"),
+            r#"{"name": "my-pkg", "version": "1.2.3"}"#,
+        )
+        .unwrap();
+        let manifest = NpmManifest;
+        manifest
+            .write_version(dir.path(), &Version::parse("2.0.0").unwrap())
+            .unwrap();
+        let updated = std::fs::read_to_string(dir.path().join("package.json")).unwrap();
+        assert!(updated.contains("\"2.0.0\""));
+        assert!(!updated.contains("\"1.2.3\""));
     }
 }
