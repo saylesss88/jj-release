@@ -110,6 +110,7 @@ pub fn load(root: &Path) -> Result<Config> {
 
 impl Config {
     /// Format a version as a tag name, e.g. `"v1.2.3"`.
+    #[must_use]
     pub fn tag_name(&self, version: &semver::Version) -> String {
         format!("{}{version}", self.release.tag_prefix)
     }

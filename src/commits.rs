@@ -64,6 +64,7 @@ pub fn latest_version_tag(backend: &dyn JjBackend, prefix: &str) -> Result<Optio
 
 /// Walk commits between `since_revision` (exclusive) and `@` (inclusive),
 /// parse conventional commit messages, and return the required bump kind.
+#[must_use]
 pub fn compute_bump(commits: &[CommitInfo]) -> BumpKind {
     let mut bump = BumpKind::None;
 
@@ -100,6 +101,7 @@ fn classify(description: &str) -> BumpKind {
 }
 
 /// Apply a bump to a version, returning the new version.
+#[must_use]
 pub fn apply_bump(current: &Version, bump: BumpKind) -> Version {
     let mut next = current.clone();
     match bump {
@@ -129,6 +131,7 @@ pub struct Tag {
     pub version: Version,
 }
 
+#[must_use]
 pub fn highest_semver_tag(tags: &[Tag]) -> Option<&Tag> {
     tags.iter().max_by(|a, b| a.version.cmp(&b.version))
 }

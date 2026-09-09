@@ -6,6 +6,7 @@ use semver::Version;
 
 use crate::commits::CommitInfo;
 
+#[must_use]
 pub fn render_changelog_section(commits: &[CommitInfo], version: &Version) -> String {
     let mut added = Vec::new();
     let mut changed = Vec::new();
@@ -48,6 +49,7 @@ pub fn render_changelog_section(commits: &[CommitInfo], version: &Version) -> St
     out
 }
 
+#[must_use]
 pub fn prepend_to_file(existing: &str, new_section: &str) -> String {
     let header = "# Changelog\n\n";
     if existing.is_empty() {
