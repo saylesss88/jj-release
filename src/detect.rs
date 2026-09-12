@@ -1,8 +1,10 @@
+use std::fs;
 use std::path::Path;
 use std::process::Command;
 use std::result::Result;
 
 /// Detect the forge from a git remote URL.
+#[must_use]
 pub fn forge_from_url(url: &str) -> Option<&'static str> {
     if url.contains("github.com") {
         Some("github")
@@ -16,6 +18,7 @@ pub fn forge_from_url(url: &str) -> Option<&'static str> {
 }
 
 /// Detect the manifest backend from a list of filenames present in the root.
+#[must_use]
 pub fn language_from_files(files: &[&str]) -> Option<&'static str> {
     // Priority order: cargo > npm > go
     if files.contains(&"Cargo.toml") {
@@ -30,6 +33,7 @@ pub fn language_from_files(files: &[&str]) -> Option<&'static str> {
 }
 
 /// Get the origin remote URL via git.
+#[must_use]
 pub fn remote_url(root: &Path) -> Option<String> {
     Command::new("git")
         .args(["remote", "get-url", "origin"])
@@ -42,7 +46,7 @@ pub fn remote_url(root: &Path) -> Option<String> {
 
 /// List filenames present in root (non-recursive, just the top level).
 pub fn root_files(root: &Path) -> Vec<String> {
-    std::fs::read_dir(root)
+    fs::read_dir(root)
         .into_iter()
         .flatten()
         .filter_map(Result::ok)
@@ -51,6 +55,7 @@ pub fn root_files(root: &Path) -> Vec<String> {
 }
 
 /// Check if a CLI tool is available on PATH.
+#[must_use]
 pub fn tool_available(name: &str) -> bool {
     which::which(name).is_ok()
 }
