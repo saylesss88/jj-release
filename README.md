@@ -163,12 +163,12 @@ manifest_backend = "cargo"   # manifest format: cargo, npm, go
 
 `jj-release` supports multiple forges for release creation and PR/MR opening:
 
-| Forge            | `forge =`   | CLI required | Release        | PR/MR        |
-| ---------------- | ----------- | ------------ | -------------- | ------------ |
-| GitHub (default) | `"github"`  | `gh`         | ✓              | ✓            |
-| GitLab           | `"gitlab"`  | `glab`       | ✓              | ✓ (MR)       |
-| Forgejo/Codeberg | `"forgejo"` | none (REST)  | \ coming soon | coming soon |
-| None             | `"none"`    | –           | –             | –           |
+| Forge            | `forge =`   | CLI required | Release       | PR/MR       | Status                |
+| ---------------- | ----------- | ------------ | ------------- | ----------- | --------------------- |
+| GitHub (default) | `"github"`  | `gh`         | ✓             | ✓           | ✓ tested              |
+| GitLab           | `"gitlab"`  | `glab`       | ✓             | ✓ (MR)      | implemented, untested |
+| Forgejo/Codeberg | `"forgejo"` | none (REST)  | \ coming soon | coming soon | –                     |
+| None             | `"none"`    | –            | –             | –           | –                     |
 
 For GitLab, set `forge_url` if using a self-hosted instance:
 
@@ -181,6 +181,10 @@ forge_url = "https://gitlab.example.com"
 ---
 
 ## Multi-Language Support
+
+> [!NOTE]
+> npm and Go support is implemented but not yet battle-tested in production.
+> Feedback welcome if you use `jj-release` with these languages.
 
 `jj-release` supports multiple manifest formats via `manifest_backend`:
 
@@ -221,6 +225,16 @@ depends_on = ["mylib"]   # publish lib before cli
 
 Members are published in dependency order: `mylib` before `mycli`. So
 `crates.io` has time to index the library before the CLI tries to depend on it.
+
+```sh
+ jj-release --dry-run
+  Current version: 0.5.32
+  Bump: Minor → 0.6.0  (tag: v0.6.0)
+[dry-run] Would release 0.6.0 as v0.6.0
+[dry-run] Would publish in order:
+  - mylib (lib)
+  - mycli (cli)
+```
 
 ---
 
@@ -268,7 +282,6 @@ Each release prepends a new section to `CHANGELOG.md`:
 > [!NOTE]
 > This action takes a while to finish since it compiles `jj` and `jj-release`
 > from source. Use `jj-release` locally if you're in a hurry.
-
 
 Add this workflow to your consumer repo at `.github/workflows/release.yml`:
 
