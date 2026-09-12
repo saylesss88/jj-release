@@ -68,6 +68,15 @@ pub trait JjBackend {
     ///
     /// Returns an error if the underlying command fails to retrieve tags.
     fn list_tags(&self) -> Result<Vec<String>>;
+
+    /// Verify that `user.name` and `user.email` are configured in jj.
+    /// Called before any mutations to fail fast with a clear message.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if either `user.name` or `user.email` is not set,
+    /// with a hint on how to fix it.
+    fn check_identity(&self) -> Result<()>;
 }
 
 // Shell implementation
@@ -190,6 +199,14 @@ impl JjBackend for ShellBackend {
             .map(|l| l.trim().to_owned())
             .filter(|l| !l.is_empty())
             .collect())
+    }
+    fn check_identity(&self) -> Result<()> {
+        self.run(&["config", "get", "user.email"]).context(
+            "jj user.email not set — run: jj config set --user user.email 'you@example.com'",
+        )?;
+        self.run(&["config", "get", "user.name"])
+            .context("jj user.name not set — run: jj config set --user user.name 'Your Name'")?;
+        Ok(())
     }
 }
 

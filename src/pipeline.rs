@@ -56,6 +56,7 @@ pub fn prepare_release(
     config: &Config,
     root: &Path,
 ) -> Result<Option<PreparedRelease>> {
+    backend.check_identity()?;
     let since = match commits::latest_version_tag(backend, &config.release.tag_prefix)? {
         Some(tag) => tag.name,
         None => "root()".to_owned(),
@@ -174,6 +175,9 @@ mod tests {
             Ok(())
         }
         fn git_export(&self) -> Result<()> {
+            Ok(())
+        }
+        fn check_identity(&self) -> Result<()> {
             Ok(())
         }
     }

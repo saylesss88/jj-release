@@ -187,6 +187,9 @@ mod tests {
         fn git_export(&self) -> Result<()> {
             Ok(())
         }
+        fn check_identity(&self) -> Result<()> {
+            Ok(())
+        }
     }
 
     #[test]
