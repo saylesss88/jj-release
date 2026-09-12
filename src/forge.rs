@@ -19,7 +19,7 @@ impl ForgeBackend for GitHubForge {
     }
 
     fn create_pr(&self, tag: &str, head: &str, base: &str, body: &str) -> Result<()> {
-        let status = Command::new("gh")
+        let output = Command::new("gh")
             .args([
                 "pr",
                 "create",
@@ -32,9 +32,10 @@ impl ForgeBackend for GitHubForge {
                 "--base",
                 base,
             ])
-            .status()
+            .output()
             .context("spawning gh pr create")?;
-        if !status.success() {
+
+        if !output.status.success() {
             bail!("gh pr create failed");
         }
         Ok(())

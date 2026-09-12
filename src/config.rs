@@ -29,6 +29,8 @@ pub struct ReleaseConfig {
     pub forge: String,
     /// Forge URL
     pub forge_url: String,
+    /// Whether to create a GH release when pushing a PR
+    pub create_release: bool,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -119,8 +121,9 @@ impl Default for ReleaseConfig {
             trigger: "Release: please".to_owned(),
             tag_prefix: "v".to_owned(),
             bookmark: "main".to_owned(),
-            forge: "none".to_owned(),
+            forge: "github".to_owned(),
             forge_url: String::new(),
+            create_release: false,
         }
     }
 }
@@ -210,5 +213,12 @@ forge = "github"
 "#;
         let cfg: Config = toml::from_str(raw).unwrap();
         assert_eq!(cfg.release.forge, "github");
+    }
+
+    #[test]
+    fn defaults_to_github_forge_no_release() {
+        let cfg = Config::default();
+        assert_eq!(cfg.release.forge, "github");
+        assert!(!cfg.release.create_release);
     }
 }

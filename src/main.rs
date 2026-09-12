@@ -168,7 +168,7 @@ fn release_pipeline(
     }
 
     // 2. Bump version and create release commit.
-    info!("→ Bumping Cargo.toml to {next_version}…");
+    info!("→ Bumping version to {next_version}…");
     ctx.manifest.write_version(root, next_version)?;
     let release_message = format!("chore: release {tag_name}");
     info!("→ Creating commit {:?}…", release_message);
@@ -201,8 +201,10 @@ fn release_pipeline(
     }
 
     // 5. Forge release.
-    info!("→ Creating forge release {tag_name}…");
-    ctx.forge.create_release(tag_name)?;
+    if config.release.create_release {
+        info!("→ Creating forge release {tag_name}…");
+        ctx.forge.create_release(tag_name)?;
+    }
 
     info!("✓ Released {tag_name}");
     Ok(())
@@ -233,15 +235,18 @@ fn release_pr(
     // Generate changelog preview for PR body — no file write.
     let body = changelog::render_changelog_section(&prepared.commits, &prepared.next_version);
 
-    // Push current state and open PR — no version bump, no release commit.
+    // Push to a release bookmark so PR has something to merge into main.
+    let pr_bookmark = format!("release/{}", prepared.tag_name);
+    info!("→ Creating bookmark {pr_bookmark}…");
+    ctx.backend.set_bookmark(&pr_bookmark, "@")?;
     info!("→ Exporting to git…");
     ctx.backend.git_export()?;
-    info!("→ Pushing {}…", config.release.bookmark);
-    ctx.backend.git_push(&config.release.bookmark, None)?;
+    info!("→ Pushing {pr_bookmark}…");
+    ctx.backend.git_push(&pr_bookmark, None)?;
     info!("→ Opening PR…");
     ctx.forge.create_pr(
         &prepared.tag_name,
-        &config.release.bookmark,
+        &pr_bookmark,
         &config.release.bookmark,
         &body,
     )?;
