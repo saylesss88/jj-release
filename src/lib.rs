@@ -15,6 +15,7 @@ pub mod changelog;
 pub mod commits;
 pub mod config;
 pub mod detect;
+pub mod errors;
 pub mod forge;
 pub mod jj;
 pub mod manifest;
