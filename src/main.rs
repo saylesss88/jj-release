@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 use jj_release::config::{self, Config};
+use jj_release::errors::CliError;
 use jj_release::forge::{ForgeBackend, ForgejoForge, GitHubForge, GitLabForge, NoForge};
 use jj_release::jj::ShellBackend;
 use jj_release::manifest::{CargoManifest, GoManifest, ManifestBackend, NpmManifest};
@@ -71,6 +72,12 @@ fn run() -> Result<(), jj_release::errors::CliError> {
 
     // Load config (falls back to defaults if release.toml absent).
     let config = config::load(&root)?;
+    if !root.join("release.toml").exists() {
+        // Using defaults, mention init for first-time users.
+        eprintln!(
+            "hint: no release.toml found, using defaults. Run `jj-release init` to customize"
+        );
+    }
 
     let publisher: Box<dyn PublishBackend> = match config.manifest_backend.as_str() {
         "npm" => Box::new(NpmPublish),
@@ -92,8 +99,19 @@ fn run() -> Result<(), jj_release::errors::CliError> {
     let backend = ShellBackend::new(&root)?;
 
     let forge: Box<dyn ForgeBackend> = match config.release.forge.as_str() {
-        "github" => Box::new(GitHubForge),
-        "gitlab" => Box::new(GitLabForge),
+        "github" => {
+            if !jj_release::detect::tool_available("gh") {
+                return Err(CliError::missing_tool("gh"));
+            }
+            Box::new(GitHubForge)
+        }
+        "gitlab" => {
+            if !jj_release::detect::tool_available("glab") {
+                return Err(CliError::missing_tool("glab"));
+            }
+
+            Box::new(GitLabForge)
+        }
         "forgejo" => Box::new(ForgejoForge {
             host: config.release.forge_url.clone(),
             token: std::env::var("FORGEJO_TOKEN").unwrap_or_default(),
