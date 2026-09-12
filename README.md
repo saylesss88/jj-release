@@ -71,9 +71,9 @@ jj-release pr
 
 ## First release
 
-For a first release, set your `Cargo.toml` version to `0.0.0` and let `jj-release`
-compute the initial version from your commit history. If you want to guarantee
-`0.1.0`, add a force override in `release.toml`:
+For a first release, set your `Cargo.toml` version to `0.0.0` and let
+`jj-release` compute the initial version from your commit history. If you want
+to guarantee `0.1.0`, add a force override in `release.toml`:
 
 ```toml
 [bump]
@@ -131,15 +131,16 @@ a PR via `gh pr create` or `glab mr create`. Merge the PR and CI runs
 
 ## Configuration
 
-Drop a `release.toml` in your repo root. All fields are optional, defaults are
-shown below:
+Drop a `release.toml` in your repo root for any overrides you need. All fields
+are optional, defaults are shown below:
 
 ```toml
 [release]
 trigger = "Release: please"  # commit message substring that kicks off a release
 tag_prefix = "v"             # prefix for version tags, e.g. v1.2.3
 bookmark = "main"            # bookmark to advance after release
-forge = "none"               # forge for releases and PRs: github, gitlab, none
+forge = "github"             # forge for releases and PRs: github, gitlab, none
+create_release = false       # create a release on the forge after tagging
 forge_url = ""               # base URL for self-hosted forges
 
 [bump]
@@ -164,7 +165,7 @@ manifest_backend = "cargo"   # manifest format: cargo, npm, go
 
 | Forge            | `forge =`   | CLI required | Release        | PR/MR        |
 | ---------------- | ----------- | ------------ | -------------- | ------------ |
-| GitHub           | `"github"`  | `gh`         | ✓              | ✓            |
+| GitHub (default) | `"github"`  | `gh`         | ✓              | ✓            |
 | GitLab           | `"gitlab"`  | `glab`       | ✓              | ✓ (MR)       |
 | Forgejo/Codeberg | `"forgejo"` | none (REST)  | \ comming soon | comming soon |
 | None             | `"none"`    | --           | --             | --           |
@@ -193,8 +194,8 @@ forge_url = "https://gitlab.example.com"
 
 ## Workspace Support
 
-For Rust workspaces with multiple crates, `jj-release` supports unified versioning
-where all members share a single version from [workspace.package]:
+For Rust workspaces with multiple crates, `jj-release` supports unified
+versioning where all members share a single version from [workspace.package]:
 
 ```toml
 [workspace]
