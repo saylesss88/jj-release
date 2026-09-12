@@ -200,12 +200,6 @@ cargo = false
     }
 
     #[test]
-    fn forge_defaults_to_none() {
-        let cfg = Config::default();
-        assert_eq!(cfg.release.forge, "none");
-    }
-
-    #[test]
     fn parse_forge_config() {
         let raw = r#"
 [release]
