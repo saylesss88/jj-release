@@ -1,3 +1,7 @@
+use std::path::Path;
+use std::process::Command;
+use std::result::Result;
+
 /// Detect the forge from a git remote URL.
 pub fn forge_from_url(url: &str) -> Option<&'static str> {
     if url.contains("github.com") {
@@ -23,6 +27,44 @@ pub fn language_from_files(files: &[&str]) -> Option<&'static str> {
     } else {
         None
     }
+}
+
+/// Get the origin remote URL via git.
+pub fn remote_url(root: &Path) -> Option<String> {
+    Command::new("git")
+        .args(["remote", "get-url", "origin"])
+        .current_dir(root)
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned())
+}
+
+/// List filenames present in root (non-recursive, just the top level).
+pub fn root_files(root: &Path) -> Vec<String> {
+    std::fs::read_dir(root)
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .filter_map(|e| e.file_name().into_string().ok())
+        .collect()
+}
+
+/// Check if a CLI tool is available on PATH.
+pub fn tool_available(name: &str) -> bool {
+    which::which(name).is_ok()
+}
+
+/// Detect forge from the git remote, falling back to None.
+pub fn detect_forge(root: &Path) -> Option<&'static str> {
+    remote_url(root).as_deref().and_then(forge_from_url)
+}
+
+/// Detect manifest backend from files present in root.
+pub fn detect_language(root: &Path) -> Option<&'static str> {
+    let files = root_files(root);
+    let file_refs: Vec<&str> = files.iter().map(String::as_str).collect();
+    language_from_files(&file_refs)
 }
 
 #[cfg(test)]
