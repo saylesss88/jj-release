@@ -22,9 +22,9 @@ semver = "1.0.28"
 serde = {version = "1.0.229", default-features = false, features = ["derive"]}
 serde_json = {version = "1.0.151", default-features = false, features = ["std"]}
 thiserror = "2.0.20"
-toml = "1.1.5"
-toml_edit = "0.25.13"
-ureq = { version = "3.4.1", features = ["json"] }
+toml = "1.1.6"
+toml_edit = "0.25.15"
+ureq = {version = "3.4.1", features = ["json"]}
 which = "8.0.6"
 
 [dev-dependencies]
