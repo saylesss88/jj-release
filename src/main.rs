@@ -230,49 +230,23 @@ fn release_pr(
         prepared.bump, prepared.next_version, prepared.tag_name
     );
 
-    let PreparedRelease {
-        next_version,
-        tag_name,
-        commits,
-        ..
-    } = &prepared;
-    let pr_bookmark = format!("release/{tag_name}");
+    // Generate changelog preview for PR body — no file write.
+    let body = changelog::render_changelog_section(&prepared.commits, &prepared.next_version);
 
-    // 1. Write changelog.
-    if config.changelog.enabled {
-        info!("→ Writing changelog…");
-        let changelog_path = root.join(&config.changelog.file);
-        let existing = if changelog_path.exists() {
-            std::fs::read_to_string(&changelog_path)?
-        } else {
-            String::new()
-        };
-        let section = changelog::render_changelog_section(commits, next_version);
-        let updated = changelog::prepend_to_file(&existing, &section);
-        std::fs::write(&changelog_path, updated)?;
-    }
-
-    // 2. Bump version and create release commit.
-    info!("→ Bumping version to {next_version}…");
-    ctx.manifest.write_version(root, next_version)?;
-    let release_message = format!("chore: release {tag_name}");
-    info!("→ Creating commit {:?}…", release_message);
-    ctx.backend.new_commit(&release_message)?;
-
-    // 3. Push to a release bookmark.
-    info!("→ Creating bookmark {pr_bookmark:?}…");
-    ctx.backend.set_bookmark(&pr_bookmark, "@")?;
+    // Push current state and open PR — no version bump, no release commit.
     info!("→ Exporting to git…");
     ctx.backend.git_export()?;
-    info!("→ Pushing {pr_bookmark:?}…");
-    ctx.backend.git_push(&pr_bookmark, None)?;
-
-    // 4. Open PR.
+    info!("→ Pushing {}…", config.release.bookmark);
+    ctx.backend.git_push(&config.release.bookmark, None)?;
     info!("→ Opening PR…");
-    ctx.forge
-        .create_pr(tag_name, &pr_bookmark, &config.release.bookmark)?;
+    ctx.forge.create_pr(
+        &prepared.tag_name,
+        &config.release.bookmark,
+        &config.release.bookmark,
+        &body,
+    )?;
 
-    info!("✓ PR opened for {tag_name}");
+    info!("✓ PR opened for {}", prepared.tag_name);
     Ok(())
 }
 

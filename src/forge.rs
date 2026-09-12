@@ -18,7 +18,7 @@ impl ForgeBackend for GitHubForge {
         Ok(())
     }
 
-    fn create_pr(&self, tag: &str, head: &str, base: &str) -> Result<()> {
+    fn create_pr(&self, tag: &str, head: &str, base: &str, body: &str) -> Result<()> {
         let status = Command::new("gh")
             .args([
                 "pr",
@@ -26,7 +26,7 @@ impl ForgeBackend for GitHubForge {
                 "--title",
                 &format!("chore: release {tag}"),
                 "--body",
-                &format!("Automated release PR for {tag}"),
+                body,
                 "--head",
                 head,
                 "--base",
@@ -55,7 +55,7 @@ impl ForgeBackend for GitLabForge {
         Ok(())
     }
 
-    fn create_pr(&self, tag: &str, head: &str, base: &str) -> Result<()> {
+    fn create_pr(&self, tag: &str, head: &str, base: &str, body: &str) -> Result<()> {
         let status = Command::new("glab")
             .args([
                 "mr",
@@ -63,7 +63,7 @@ impl ForgeBackend for GitLabForge {
                 "--title",
                 &format!("chore: release {tag}"),
                 "--description",
-                &format!("Automated release MR for {tag}"),
+                body,
                 "--source-branch",
                 head,
                 "--target-branch",
@@ -89,7 +89,7 @@ impl ForgeBackend for ForgejoForge {
     fn create_release(&self, _tag: &str) -> Result<()> {
         bail!("Forgejo forge support is not yet implemented")
     }
-    fn create_pr(&self, _tag: &str, _head: &str, _base: &str) -> Result<()> {
+    fn create_pr(&self, _tag: &str, _head: &str, _base: &str, _body: &str) -> Result<()> {
         bail!("Forgejo forge support is not yet implemented")
     }
 }
@@ -109,7 +109,7 @@ pub trait ForgeBackend {
     ///
     /// Returns an error if the request fails due to network issues, invalid
     /// authentication, or if the target branches are invalid or already have a conflicting PR.
-    fn create_pr(&self, tag: &str, head: &str, base: &str) -> Result<()>;
+    fn create_pr(&self, tag: &str, head: &str, base: &str, body: &str) -> Result<()>;
 }
 
 pub struct NoForge;
@@ -119,7 +119,7 @@ impl ForgeBackend for NoForge {
         Ok(())
     }
 
-    fn create_pr(&self, _tag: &str, _head: &str, _base: &str) -> Result<()> {
+    fn create_pr(&self, _tag: &str, _head: &str, _base: &str, _body: &str) -> Result<()> {
         Ok(())
     }
 }
@@ -138,7 +138,9 @@ mod tests {
     #[test]
     fn no_forge_create_pr_is_noop() {
         let forge = NoForge;
-        assert!(forge.create_pr("v0.2.0", "release/v0.2.0", "main").is_ok());
+        assert!(forge
+            .create_pr("v0.2.0", "release/v0.2.0", "main", "")
+            .is_ok());
     }
 
     #[test]
