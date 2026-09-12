@@ -223,6 +223,13 @@ fn release_pr(
         return Ok(());
     };
 
+    info!("  Found trigger commit.");
+    info!("  Current version: {}", prepared.current_version);
+    info!(
+        "  Bump: {:?} → {}  (tag: {})",
+        prepared.bump, prepared.next_version, prepared.tag_name
+    );
+
     let PreparedRelease {
         next_version,
         tag_name,
@@ -230,11 +237,6 @@ fn release_pr(
         ..
     } = &prepared;
     let pr_bookmark = format!("release/{tag_name}");
-
-    info!(
-        "  Bump: {:?} → {next_version}  (tag: {tag_name})",
-        prepared.bump
-    );
 
     // 1. Write changelog.
     if config.changelog.enabled {
