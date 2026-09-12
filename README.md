@@ -13,14 +13,13 @@ branch-based triggers, and tags anchored to branch tips. Jujutsu's branchless,
 immutable-commit workflow breaks all of these assumptions in ways that are
 annoying to work around.
 
-Trying to use semantic-release with `jj` means fighting the tool constantly: the
-colocated git repo gets out of sync, branch detection fails, and the trigger
-model doesn't map cleanly onto how `jj` users actually work. `jj-release` is built
-from scratch for `jj`: it uses `jj`'s revset language to walk commit history,
-works with bookmarks instead of branches, and uses a simple commit-message
-trigger that fits naturally into the `jj` workflow.
+`jj-release` is built specifically for `jj`: it uses `jj`'s revset language to
+walk commit history, works with bookmarks instead of branches, and uses a simple
+commit-message trigger that fits naturally into the `jj` workflow.
 
 Inspired by semantic-release, release-please, and cargo-release.
+
+---
 
 ## How it works
 
@@ -36,6 +35,8 @@ them as patch/minor/major using
 [Conventional Commits](https://www.conventionalcommits.org), bumps `Cargo.toml`,
 writes a `CHANGELOG.md` entry, creates a tag, and pushes — all in one step.
 
+---
+
 ## Installation
 
 ```sh
@@ -44,6 +45,8 @@ cargo install jj-release
 
 Requires `jj` on your PATH. For GitHub releases, `gh` must also be available in
 CI.
+
+---
 
 ## Usage
 
@@ -59,13 +62,18 @@ jj-release next-version
 
 # Generate and print the changelog section without releasing
 jj-release changelog
+
+# Open a PR for review before publishing
+jj-release pr
 ```
+
+---
 
 ## First release
 
-For a first release, set your `Cargo.toml` version to `0.0.0` and let
-jj-release compute the initial version from your commit history. If you want
-to guarantee `0.1.0`, add a force override in `release.toml`:
+For a first release, set your `Cargo.toml` version to `0.0.0` and let `jj-release`
+compute the initial version from your commit history. If you want to guarantee
+`0.1.0`, add a force override in `release.toml`:
 
 ```toml
 [bump]
@@ -74,6 +82,8 @@ force = "minor"
 
 Remove `force` after the first release so subsequent versions are computed
 automatically from conventional commits.
+
+---
 
 ## Local usage
 
@@ -100,6 +110,25 @@ Running `jj-release` locally does the full pipeline:
 The `CARGO_REGISTRY_TOKEN` environment variable is only needed in CI where
 there's no credentials file.
 
+---
+
+## PR Workflow
+
+If you want to review the release commit before it publishes, use the pr
+subcommand instead:
+
+```sh
+jj new -m "Release: please"
+jj-release pr
+```
+
+This does everything up to publishing: bumps the version, writes the changelog,
+creates the release commit. Then pushes to a `release/vX.Y.Z` bookmark and opens
+a PR via `gh pr create` or `glab mr create`. Merge the PR and CI runs
+`jj-release` to publish.
+
+---
+
 ## Configuration
 
 Drop a `release.toml` in your repo root. All fields are optional, defaults are
@@ -110,7 +139,8 @@ shown below:
 trigger = "Release: please"  # commit message substring that kicks off a release
 tag_prefix = "v"             # prefix for version tags, e.g. v1.2.3
 bookmark = "main"            # bookmark to advance after release
-github_release = false       # create a GitHub release via `gh release create`
+forge = "none"               # forge for releases and PRs: github, gitlab, none
+forge_url = ""               # base URL for self-hosted forges
 
 [bump]
 # force = "minor"            # override commit analysis: "major", "minor", or "patch"
@@ -122,11 +152,75 @@ cargo_flags = []             # extra flags forwarded to `cargo publish`
 [changelog]
 enabled = true               # write a CHANGELOG.md entry on each release
 file = "CHANGELOG.md"        # path to the changelog file
+
+manifest_backend = "cargo"   # manifest format: cargo, npm, go
 ```
+
+---
+
+## Forge Support
+
+`jj-release` supports multiple forges for release creation and PR/MR opening:
+
+| Forge            | `forge =`   | CLI required | Release        | PR/MR        |
+| ---------------- | ----------- | ------------ | -------------- | ------------ |
+| GitHub           | `"github"`  | `gh`         | ✓              | ✓            |
+| GitLab           | `"gitlab"`  | `glab`       | ✓              | ✓ (MR)       |
+| Forgejo/Codeberg | `"forgejo"` | none (REST)  | \ comming soon | comming soon |
+| None             | `"none"`    | --           | --             | --           |
+
+For GitLab, set `forge_url` if using a self-hosted instance:
+
+```toml
+[release]
+forge = "gitlab"
+forge_url = "https://gitlab.example.com"
+```
+
+---
+
+## Multi-Language Support
+
+`jj-release` supports multiple manifest formats via `manifest_backend`:
+
+| Language   | `manifest_backend =` | Version file   | Publish command |
+| ---------- | -------------------- | -------------- | --------------- |
+| Rust       | `"cargo"` (default)  | `Cargo.toml`   | `cargo publish` |
+| JavaScript | `"npm"`              | `package.json` | `npm publish`   |
+| Go         | `"go"`               | tag-only       | --              |
+
+---
+
+## Workspace Support
+
+For Rust workspaces with multiple crates, `jj-release` supports unified versioning
+where all members share a single version from [workspace.package]:
+
+```toml
+[workspace]
+enabled = true
+versioning = "unified"
+
+[[workspace.members]]
+name = "mylib"
+path = "lib"
+publish = true
+
+[[workspace.members]]
+name = "mycli"
+path = "cli"
+publish = true
+depends_on = ["mylib"]   # publish lib before cli
+```
+
+Members are published in dependency order: `mylib` before `mycli`. So
+`crates.io` has time to index the library before the CLI tries to depend on it.
+
+---
 
 ## Conventional Commits
 
-jj-release follows the
+`jj-release` follows the
 [Conventional Commits](https://www.conventionalcommits.org) spec to determine
 the version bump:
 
@@ -139,9 +233,11 @@ the version bump:
 
 The highest bump across all commits since the last tag wins.
 
+---
+
 ## Changelog format
 
-jj-release follows the [Keep a Changelog](https://keepachangelog.com) format.
+`jj-release` follows the [Keep a Changelog](https://keepachangelog.com) format.
 Each release prepends a new section to `CHANGELOG.md`:
 
 ```markdown
@@ -158,6 +254,8 @@ Each release prepends a new section to `CHANGELOG.md`:
 
 - prevent daemon crash on empty directory
 ```
+
+---
 
 ## GitHub Actions
 
@@ -202,6 +300,8 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 ```
 
+---
+
 ## Requirements
 
 - Rust 1.80+
@@ -209,20 +309,7 @@ jobs:
   syntax differs: see [jj compatibility](#jj-compatibility) below)
 - A colocated jj/git repository (`jj git init --colocate`)
 
-## jj compatibility
-
-`jj-release` shells out to the `jj` binary and relies on specific flag syntax
-that has changed across versions. Known working on **jj 0.43.0**. If you hit
-errors, check these:
-
-| Operation     | Flag used                       | Added in |
-| ------------- | ------------------------------- | -------- |
-| Move a tag    | `jj tag set --allow-move`       | recent   |
-| Push tags     | `jj git push --tag <name>`      | recent   |
-| Push bookmark | `jj git push --bookmark <name>` | older    |
-
-If your version of jj doesn't support these flags, update jj first:
-`cargo install jj-cli --locked`
+---
 
 ## License
 
