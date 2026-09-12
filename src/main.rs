@@ -150,6 +150,17 @@ fn release_pipeline(
 
     if dry_run {
         println!("[dry-run] Would release {next_version} as {tag_name}");
+        if let Some(ws) = &config.workspace {
+            if ws.enabled {
+                let ordered = workspace::ordered_members(&ws.members)?;
+                println!("[dry-run] Would publish in order:");
+                for member in ordered {
+                    println!("  - {} ({})", member.name, member.path);
+                }
+            }
+        } else {
+            println!("[dry-run] Would publish from root");
+        }
         return Ok(());
     }
 
