@@ -8,7 +8,8 @@ pub struct CliError {
 
 impl CliError {
     /// Exit silently with a specific code, error was already handled upstream.
-    pub fn silent(code: i32) -> Self {
+    #[must_use]
+    pub const fn silent(code: i32) -> Self {
         Self { error: None, code }
     }
 
@@ -21,7 +22,8 @@ impl CliError {
     }
 
     /// Nothing to release: not an error, exit 0.
-    pub fn no_trigger() -> Self {
+    #[must_use]
+    pub const fn no_trigger() -> Self {
         Self {
             error: None,
             code: 0,
@@ -29,6 +31,7 @@ impl CliError {
     }
 
     /// Missing or invalid release.toml: suggest jj-release init.
+    #[must_use]
     pub fn missing_config() -> Self {
         Self {
             error: Some(anyhow!(
@@ -39,6 +42,7 @@ impl CliError {
     }
 
     /// Missing CLI tool: suggest installing it.
+    #[must_use]
     pub fn missing_tool(name: &str) -> Self {
         Self {
             error: Some(anyhow!(
@@ -51,11 +55,7 @@ impl CliError {
 
 impl std::fmt::Display for CliError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(error) = self.error.as_ref() {
-            error.fmt(f)
-        } else {
-            Ok(())
-        }
+        self.error.as_ref().map_or(Ok(()), |error| error.fmt(f))
     }
 }
 
@@ -66,6 +66,7 @@ impl From<anyhow::Error> for CliError {
 }
 
 /// Report the result and return the exit code.
+#[must_use]
 pub fn report(result: Result<(), CliError>) -> i32 {
     match result {
         Ok(()) => 0,

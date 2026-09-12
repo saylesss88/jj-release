@@ -55,13 +55,11 @@ enum Subcommand {
 }
 
 fn main() {
-    if let Err(e) = run() {
-        eprintln!("error: {e:#}");
-        std::process::exit(1);
-    }
+    let code = jj_release::errors::report(run());
+    std::process::exit(code);
 }
 
-fn run() -> Result<()> {
+fn run() -> Result<(), jj_release::errors::CliError> {
     let cli = Cli::parse();
 
     // Resolve repo root.
@@ -113,11 +111,17 @@ fn run() -> Result<()> {
     };
 
     match cli.command.unwrap_or(Subcommand::Run) {
-        Subcommand::Run => release_pipeline(&ctx, &config, &root, cli.dry_run, cli.quiet),
-        Subcommand::NextVersion => pipeline::print_next_version(&ctx, &config, &root),
-        Subcommand::Changelog => pipeline::print_changelog(&ctx, &config, &root),
-        Subcommand::Pr => release_pr(&ctx, &config, &root, cli.quiet),
-        Subcommand::Init => init(&root),
+        Subcommand::Run => Ok(release_pipeline(
+            &ctx,
+            &config,
+            &root,
+            cli.dry_run,
+            cli.quiet,
+        )?),
+        Subcommand::NextVersion => Ok(pipeline::print_next_version(&ctx, &config, &root)?),
+        Subcommand::Changelog => Ok(pipeline::print_changelog(&ctx, &config, &root)?),
+        Subcommand::Pr => Ok(release_pr(&ctx, &config, &root, cli.quiet)?),
+        Subcommand::Init => Ok(init(&root)?),
     }
 }
 
