@@ -1,3 +1,5 @@
+//! Changelog generation following Keep a Changelog format.
+
 use std::fmt::Write;
 
 use git_conventional::Commit;

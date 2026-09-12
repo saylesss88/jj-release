@@ -1,3 +1,5 @@
+//! Publish backends for Cargo, npm, and no-op.
+
 use std::path::Path;
 use std::process::Command;
 

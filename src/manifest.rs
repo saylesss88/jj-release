@@ -8,6 +8,23 @@ use semver::Version;
 use toml_edit::DocumentMut;
 
 /// Manages reading and writing version information in project manifests.
+///
+/// # Example
+///
+/// ```no_run
+/// use jj_release::manifest::{ManifestBackend, CargoManifest};
+/// use semver::Version;
+/// use std::path::Path;
+///
+/// let manifest = CargoManifest;
+/// let root = Path::new(".");
+///
+/// let current = manifest.read_version(root).unwrap();
+/// println!("Current version: {current}");
+///
+/// let next = Version::new(current.major, current.minor + 1, 0);
+/// manifest.write_version(root, &next).unwrap();
+/// ```
 pub trait ManifestBackend {
     /// Reads the current version from the project manifest at the given root path.
     ///

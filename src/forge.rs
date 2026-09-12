@@ -1,3 +1,5 @@
+//! Forge backends for GitHub, GitLab, and Forgejo
+
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};

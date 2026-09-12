@@ -1,3 +1,5 @@
+//! Workspace support for multi-crate projects.
+
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};

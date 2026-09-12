@@ -134,7 +134,7 @@ impl Default for PublishConfig {
     }
 }
 
-/// Loads release configuration from <root>/release.toml, falling back to
+/// Loads release configuration from `<root>/release.toml`, falling back to
 /// default values if the configuration file does not exist.
 ///
 /// # Errors

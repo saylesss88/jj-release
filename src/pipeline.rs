@@ -1,3 +1,5 @@
+//! Release pipeline orchestration.
+
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -34,6 +36,20 @@ pub struct ReleaseContext<'a> {
 ///
 /// Returns an error if querying repository tags, fetching commit logs, or reading
 /// the project version manifest fails.
+///
+/// # Example
+/// ```no_run
+/// use jj_release::pipeline::prepare_release;
+/// use jj_release::manifest::CargoManifest;
+/// use jj_release::config::Config;
+/// use jj_release::jj::ShellBackend;
+/// use std::path::Path;
+///
+/// let backend = ShellBackend::new(Path::new(".")).unwrap();
+/// let manifest = CargoManifest;
+/// let config = Config::default();
+/// let release = prepare_release(&backend, &manifest, &config, Path::new(".")).unwrap();
+/// ```
 pub fn prepare_release(
     backend: &dyn JjBackend,
     manifest: &dyn ManifestBackend,

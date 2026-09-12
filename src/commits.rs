@@ -148,7 +148,7 @@ pub struct Tag {
 }
 
 #[must_use]
-pub fn highest_semver_tag(tags: &[Tag]) -> Option<&Tag> {
+pub(crate) fn highest_semver_tag(tags: &[Tag]) -> Option<&Tag> {
     tags.iter().max_by(|a, b| a.version.cmp(&b.version))
 }
 
