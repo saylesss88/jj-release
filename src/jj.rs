@@ -101,8 +101,6 @@ impl ShellBackend {
     fn run(&self, args: &[&str]) -> Result<String> {
         let out = Command::new(&self.jj_bin)
             .args(args)
-            // Disable the interactive pager and colour so output is parseable.
-            .env("JJ_CONFIG", "") // don't let user config interfere
             .arg("--no-pager")
             .current_dir(&self.root)
             .output()
