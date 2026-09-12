@@ -167,8 +167,8 @@ manifest_backend = "cargo"   # manifest format: cargo, npm, go
 | ---------------- | ----------- | ------------ | -------------- | ------------ |
 | GitHub (default) | `"github"`  | `gh`         | ✓              | ✓            |
 | GitLab           | `"gitlab"`  | `glab`       | ✓              | ✓ (MR)       |
-| Forgejo/Codeberg | `"forgejo"` | none (REST)  | \ comming soon | comming soon |
-| None             | `"none"`    | --           | --             | --           |
+| Forgejo/Codeberg | `"forgejo"` | none (REST)  | \ coming soon | coming soon |
+| None             | `"none"`    | –           | –             | –           |
 
 For GitLab, set `forge_url` if using a self-hosted instance:
 
@@ -188,11 +188,16 @@ forge_url = "https://gitlab.example.com"
 | ---------- | -------------------- | -------------- | --------------- |
 | Rust       | `"cargo"` (default)  | `Cargo.toml`   | `cargo publish` |
 | JavaScript | `"npm"`              | `package.json` | `npm publish`   |
-| Go         | `"go"`               | tag-only       | --              |
+| Go         | `"go"`               | tag-only       | –               |
 
 ---
 
 ## Workspace Support
+
+> [!NOTE]
+> Workspace support currently requires unified versioning
+> (`[workspace.package].version`). Independent per-crate versioning is planned
+> for a future release.
 
 For Rust workspaces with multiple crates, `jj-release` supports unified
 versioning where all members share a single version from [workspace.package]:
@@ -259,6 +264,11 @@ Each release prepends a new section to `CHANGELOG.md`:
 ---
 
 ## GitHub Actions
+
+> [!NOTE]
+> This action takes a while to finish since it compiles `jj` and `jj-release`
+> from source. Use `jj-release` locally if you're in a hurry.
+
 
 Add this workflow to your consumer repo at `.github/workflows/release.yml`:
 
