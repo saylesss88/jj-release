@@ -1,7 +1,8 @@
 //! jj-release, semantic releases for Jujutsu repositories.
 
-use std::env;
-use std::path::PathBuf;
+use std::fmt::Write;
+use std::path::{Path, PathBuf};
+use std::{borrow, env, fs};
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -224,12 +225,7 @@ fn release_pipeline(
     Ok(())
 }
 
-fn release_pr(
-    ctx: &ReleaseContext<'_>,
-    config: &Config,
-    root: &std::path::Path,
-    quiet: bool,
-) -> Result<()> {
+fn release_pr(ctx: &ReleaseContext<'_>, config: &Config, root: &Path, quiet: bool) -> Result<()> {
     macro_rules! info {
         ($($t:tt)*) => { if !quiet { println!($($t)*); } }
     }
@@ -269,7 +265,7 @@ fn release_pr(
     Ok(())
 }
 
-fn init(root: &std::path::Path) -> Result<()> {
+fn init(root: &Path) -> Result<()> {
     use jj_release::detect;
 
     let release_toml = root.join("release.toml");
@@ -299,7 +295,7 @@ fn init(root: &std::path::Path) -> Result<()> {
     // Detect workspace.
     let workspace_toml = root.join("Cargo.toml");
     let is_workspace = workspace_toml.exists() && {
-        let content = std::fs::read_to_string(&workspace_toml).unwrap_or_default();
+        let content = fs::read_to_string(&workspace_toml).unwrap_or_default();
         content.contains("[workspace]")
     };
 
@@ -322,34 +318,85 @@ manifest_backend = "{language}"
         language == "cargo"
     );
 
-    // Add workspace config if detected.
+    // Detect workspace members from Cargo.toml.
     if is_workspace {
         println!("→ Detected workspace");
-        content.push_str(
-            r#"
-[workspace]
-enabled = true
-versioning = "unified"
 
+        // Try to parse members from [workspace] table.
+        let members = parse_workspace_members(&workspace_toml);
+
+        let member_config = if members.is_empty() {
+            r#"
 # Add your workspace members below:
 # [[workspace.members]]
 # name = "mylib"
 # path = "lib"
 # publish = true
-#
-# [[workspace.members]]
-# name = "mycli"
-# path = "cli"
-# publish = true
-# depends_on = ["mylib"]
-"#,
+"#
+            .to_owned()
+        } else {
+            let mut s = String::new();
+            for (name, path) in &members {
+                println!("  → Found member: {name} ({path})");
+                let _ = write!(
+    s,
+                    "\n[[workspace.members]]\nname = \"{name}\"\npath = \"{path}\"\npublish = true\n# depends_on = [] # add names of members this depends on\n"
+
+);
+            }
+            s
+        };
+
+        let _ = write!(
+            content,
+            "\n[workspace]\nenabled = true\nversioning = \"unified\"\n{member_config}"
         );
     }
 
-    std::fs::write(&release_toml, content)?;
+    fs::write(&release_toml, content)?;
     println!("✓ Written release.toml");
 
     Ok(())
+}
+
+fn parse_workspace_members(cargo_toml: &Path) -> Vec<(String, String)> {
+    let Ok(raw) = fs::read_to_string(cargo_toml) else {
+        return vec![];
+    };
+    let Ok(doc) = raw.parse::<toml_edit::DocumentMut>() else {
+        return vec![];
+    };
+    let Some(members) = doc
+        .get("workspace")
+        .and_then(|w| w.get("members"))
+        .and_then(|m| m.as_array())
+    else {
+        return vec![];
+    };
+
+    members
+        .iter()
+        .filter_map(|m| m.as_str())
+        .map(|path| {
+            let member_toml = cargo_toml.parent().unwrap().join(path).join("Cargo.toml");
+            let raw = fs::read_to_string(&member_toml).ok();
+            let doc = raw
+                .as_deref()
+                .and_then(|r| r.parse::<toml_edit::DocumentMut>().ok());
+
+            let name = doc
+                .as_ref()
+                .and_then(|d: &toml_edit::DocumentMut| {
+                    d.get("package")
+                        .and_then(|p| p.get("name"))
+                        .and_then(|n| n.as_str())
+                        .map(borrow::ToOwned::to_owned)
+                })
+                .unwrap_or_else(|| path.split('/').next_back().unwrap_or(path).to_owned());
+
+            (name, path.to_owned())
+        })
+        .collect::<Vec<_>>()
 }
 
 #[cfg(test)]
