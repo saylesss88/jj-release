@@ -3,10 +3,13 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use semver::Version;
 
+use crate::changelog;
 use crate::commits::{self, BumpKind, CommitInfo};
 use crate::config::Config;
+use crate::forge::ForgeBackend;
 use crate::jj::JjBackend;
 use crate::manifest::ManifestBackend;
+use crate::publish::PublishBackend;
 
 pub struct PreparedRelease {
     pub since: String,
@@ -17,6 +20,20 @@ pub struct PreparedRelease {
     pub bump: BumpKind,
 }
 
+pub struct ReleaseContext<'a> {
+    pub backend: &'a dyn JjBackend,
+    pub manifest: &'a dyn ManifestBackend,
+    pub forge: &'a dyn ForgeBackend,
+    pub publisher: &'a dyn PublishBackend,
+}
+
+/// Prepares a new release by evaluating recent commits, checking for release triggers,
+/// and calculating the next version bump based on configuration and the project manifest.
+///
+/// # Errors
+///
+/// Returns an error if querying repository tags, fetching commit logs, or reading
+/// the project version manifest fails.
 pub fn prepare_release(
     backend: &dyn JjBackend,
     manifest: &dyn ManifestBackend,
@@ -56,6 +73,52 @@ pub fn prepare_release(
         commits,
         bump,
     }))
+}
+
+/// Calculates and prints the upcoming version number to standard output.
+///
+/// # Errors
+///
+/// Returns an error if reading the version manifest, finding the latest tag,
+/// or fetching commit logs fails.
+pub fn print_next_version(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    root: &std::path::Path,
+) -> Result<()> {
+    let current = ctx.manifest.read_version(root)?;
+    let since = match commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)? {
+        Some(tag) => tag.name,
+        None => "root()".to_owned(),
+    };
+    let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
+    let bump = commits::resolve_bump(config.bump.force.as_ref(), &commits)?;
+    let next = commits::apply_bump(&current, bump);
+    println!("{next}");
+    Ok(())
+}
+
+/// Renders and prints the changelog section for the pending release to standard output.
+///
+/// # Errors
+///
+/// Returns an error if reading the version manifest, locating the latest release tag,
+/// or fetching the commit history fails.
+pub fn print_changelog(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    root: &std::path::Path,
+) -> Result<()> {
+    let current = ctx.manifest.read_version(root)?;
+    let since = match commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)? {
+        Some(tag) => tag.name,
+        None => "root()".to_owned(),
+    };
+    let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
+    let next = commits::apply_bump(&current, commits::compute_bump(&commits));
+    let section = changelog::render_changelog_section(&commits, &next);
+    print!("{section}");
+    Ok(())
 }
 
 #[cfg(test)]

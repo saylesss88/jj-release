@@ -40,6 +40,12 @@ impl ManifestBackend for WorkspaceManifest {
     }
 }
 
+/// Orders publishable workspace members topologically based on their dependencies
+/// so they can be published in the correct sequence.
+///
+/// # Errors
+///
+/// Returns an error if a circular dependency is detected among the workspace members.
 pub fn ordered_members(members: &[WorkspaceMember]) -> Result<Vec<&WorkspaceMember>> {
     let publish: Vec<&WorkspaceMember> = members.iter().filter(|m| m.publish).collect();
 

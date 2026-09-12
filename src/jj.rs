@@ -15,25 +15,58 @@ use crate::commits::CommitInfo;
 pub trait JjBackend {
     /// Return `(change_id, description)` pairs for every commit matched by
     /// `revset`, newest-first.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the `revset` expression is syntactically invalid or
+    /// if the underlying command execution fails.
     fn log_commits(&self, revset: &str) -> Result<Vec<CommitInfo>>;
 
     /// Create a new commit on top of `@` with the given message.
     /// Returns the new commit's change id.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if there are unresolved conflicts or if the commit
+    /// creation fails.
     fn new_commit(&self, message: &str) -> Result<String>;
 
     /// Create (or move) a tag to the given revision.
+    /// # Errors
+    ///
+    /// Returns an error if the target revision does not exist or if tag
+    /// creation fails.
     fn create_tag(&self, tag: &str, revision: &str) -> Result<()>;
 
     /// Move a bookmark to the given revision.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the bookmark or revision can't be resolved, or
+    /// if the update fails.
     fn set_bookmark(&self, name: &str, revision: &str) -> Result<()>;
 
     /// Push bookmark(s) and tags to `origin`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if network operations fail, authentication fails,
+    /// or the remote rejects the push.
     fn git_push(&self, bookmark: &str, tag: Option<&str>) -> Result<()>;
 
     /// Export jj state to the colocated git repo (needed before raw git ops).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the export fails due to workspace state or
+    /// command execution failure.
     fn git_export(&self) -> Result<()>;
 
     /// List all local tag names.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying command fails to retrieve tags.
     fn list_tags(&self) -> Result<Vec<String>>;
 }
 
@@ -48,9 +81,15 @@ pub struct ShellBackend {
 }
 
 impl ShellBackend {
+    /// Creates a new backend instance rooted at the specified path,
+    /// locating the jj binary on the system PATH.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the jj executable is not found on the system PATH.
     pub fn new(root: impl AsRef<Path>) -> Result<Self> {
         let jj_bin =
-            which::which("jj").context("jj binary not found on PATH — is Jujutsu installed?")?;
+            which::which("jj").context("jj binary not found on PATH: is Jujutsu installed?")?;
         Ok(Self {
             root: root.as_ref().to_path_buf(),
             jj_bin,
@@ -158,6 +197,11 @@ impl JjBackend for ShellBackend {
 // -- Helpers --
 
 /// Locate the repo root by walking up from `start` until we find `.jj/`.
+///
+/// # Errors
+///
+/// Returns an error if no .jj/ directory is found between the starting path
+/// and the filesystem root.
 pub fn find_repo_root(start: &Path) -> Result<PathBuf> {
     let mut dir = start.to_path_buf();
     loop {

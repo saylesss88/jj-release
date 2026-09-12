@@ -93,7 +93,20 @@ impl ForgeBackend for ForgejoForge {
 }
 
 pub trait ForgeBackend {
+    /// Creates a new release associated with the specified tag.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails due to network issues, invalid
+    /// authentication, or if the release cannot be created on the remote forge.
     fn create_release(&self, tag: &str) -> Result<()>;
+
+    /// Opens a pull request from a head branch into a base branch for a given tag.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails due to network issues, invalid
+    /// authentication, or if the target branches are invalid or already have a conflicting PR.
     fn create_pr(&self, tag: &str, head: &str, base: &str) -> Result<()>;
 }
 
@@ -128,12 +141,14 @@ mod tests {
 
     #[test]
     fn github_forge_uses_gh_cli() {
-        let _forge: &dyn ForgeBackend = &GitHubForge;
+        let forge: &dyn ForgeBackend = &GitHubForge;
+        let _ = forge;
     }
 
     #[test]
     fn gitlab_forge_implements_trait() {
-        let _forge: &dyn ForgeBackend = &GitLabForge;
+        let forge: &dyn ForgeBackend = &GitLabForge;
+        let _ = forge;
     }
 
     #[test]

@@ -7,8 +7,22 @@ use anyhow::{bail, Context, Result};
 use semver::Version;
 use toml_edit::DocumentMut;
 
+/// Manages reading and writing version information in project manifests.
 pub trait ManifestBackend {
+    /// Reads the current version from the project manifest at the given root path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the manifest file cannot be found, cannot be read due
+    /// to permissions, or contains invalid syntax that prevents version extraction.
     fn read_version(&self, root: &Path) -> Result<Version>;
+
+    /// Writes the specified version to the project manifest at the given root path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the manifest file cannot be read or written due to
+    /// permissions, or if serialization of the new version fails.
     fn write_version(&self, root: &Path, version: &Version) -> Result<()>;
 }
 
@@ -214,7 +228,8 @@ edition = "2024"
 
     #[test]
     fn go_manifest_implements_trait() {
-        let _manifest: &dyn ManifestBackend = &GoManifest;
+        let manifest: &dyn ManifestBackend = &GoManifest;
+        let _ = manifest;
     }
 
     #[test]

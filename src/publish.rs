@@ -4,6 +4,12 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 
 pub trait PublishBackend {
+    /// Publishes the project crate to a package registry (such as crates.io).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the publishing process fails due to network issues,
+    /// compilation/packaging errors, or if the registry rejects the upload.
     fn publish(&self, root: &Path, extra_flags: &[String]) -> Result<()>;
 }
 
@@ -57,14 +63,13 @@ mod tests {
     #[test]
     fn no_publish_is_noop() {
         let publisher = NoPublish;
-        assert!(publisher
-            .publish(&std::path::Path::new("/tmp"), &[])
-            .is_ok());
+        assert!(publisher.publish(Path::new("/tmp"), &[]).is_ok());
     }
 
     #[test]
     fn no_publish_implements_trait() {
-        let _publisher: &dyn PublishBackend = &NoPublish;
+        let publisher: &dyn PublishBackend = &NoPublish;
+        let _ = publisher;
     }
 
     #[test]

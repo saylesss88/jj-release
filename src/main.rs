@@ -8,12 +8,12 @@ use clap::Parser;
 
 use jj_release::config::{self, Config};
 use jj_release::forge::{ForgeBackend, ForgejoForge, GitHubForge, GitLabForge, NoForge};
-use jj_release::jj::{JjBackend, ShellBackend};
+use jj_release::jj::ShellBackend;
 use jj_release::manifest::{CargoManifest, GoManifest, ManifestBackend, NpmManifest};
-use jj_release::pipeline::{self, PreparedRelease};
+use jj_release::pipeline::{self, PreparedRelease, ReleaseContext};
 use jj_release::publish::{CargoPublish, NoPublish, NpmPublish, PublishBackend};
 use jj_release::workspace::WorkspaceManifest;
-use jj_release::{changelog, commits, jj, workspace};
+use jj_release::{changelog, jj, workspace};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -111,37 +111,13 @@ fn run() -> Result<()> {
 
     match cli.command.unwrap_or(Subcommand::Run) {
         Subcommand::Run => release_pipeline(&ctx, &config, &root, cli.dry_run, cli.quiet),
-        Subcommand::NextVersion => print_next_version(&ctx, &config, &root),
-        Subcommand::Changelog => print_changelog(&ctx, &config, &root),
+        Subcommand::NextVersion => pipeline::print_next_version(&ctx, &config, &root),
+        Subcommand::Changelog => pipeline::print_changelog(&ctx, &config, &root),
         Subcommand::Pr => release_pr(&ctx, &config, &root, cli.quiet),
     }
 }
 
-fn print_changelog(
-    ctx: &ReleaseContext<'_>,
-    config: &Config,
-    root: &std::path::Path,
-) -> Result<()> {
-    let current = ctx.manifest.read_version(root)?;
-    let since = match commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)? {
-        Some(tag) => tag.name,
-        None => "root()".to_owned(),
-    };
-    let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
-    let next = commits::apply_bump(&current, commits::compute_bump(&commits));
-    let section = changelog::render_changelog_section(&commits, &next);
-    print!("{section}");
-    Ok(())
-}
-
 // -- Pipeline --
-
-pub struct ReleaseContext<'a> {
-    pub backend: &'a dyn JjBackend,
-    pub manifest: &'a dyn ManifestBackend,
-    pub forge: &'a dyn ForgeBackend,
-    pub publisher: &'a dyn PublishBackend,
-}
 
 fn release_pipeline(
     ctx: &ReleaseContext<'_>,
@@ -295,23 +271,6 @@ fn release_pr(
         .create_pr(tag_name, &pr_bookmark, &config.release.bookmark)?;
 
     info!("✓ PR opened for {tag_name}");
-    Ok(())
-}
-
-fn print_next_version(
-    ctx: &ReleaseContext<'_>,
-    config: &Config,
-    root: &std::path::Path,
-) -> Result<()> {
-    let current = ctx.manifest.read_version(root)?;
-    let since = match commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)? {
-        Some(tag) => tag.name,
-        None => "root()".to_owned(),
-    };
-    let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
-    let bump = commits::resolve_bump(config.bump.force.as_ref(), &commits)?;
-    let next = commits::apply_bump(&current, bump);
-    println!("{next}");
     Ok(())
 }
 

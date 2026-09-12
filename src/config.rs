@@ -55,17 +55,12 @@ pub struct ChangelogConfig {
     pub file: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Versioning {
+    #[default]
     Unified,
     Independent,
-}
-
-impl Default for Versioning {
-    fn default() -> Self {
-        Self::Unified
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -139,8 +134,13 @@ impl Default for PublishConfig {
     }
 }
 
-/// Load config from `<root>/release.toml`, falling back to defaults if the
-/// file doesn't exist.
+/// Loads release configuration from <root>/release.toml, falling back to
+/// default values if the configuration file does not exist.
+///
+/// # Errors
+///
+/// Returns an error if the configuration file exists but cannot be read
+/// (e.g., due to insufficient permissions) or if its contents contain invalid TOML syntax.
 pub fn load(root: &Path) -> Result<Config> {
     let path = root.join("release.toml");
     if !path.exists() {
