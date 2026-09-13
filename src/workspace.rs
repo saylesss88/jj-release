@@ -115,6 +115,13 @@ pub fn member_versions(root: &Path) -> Result<HashMap<String, Version>> {
     Ok(versions)
 }
 
+/// Update the version of a workspace member using `cargo set-version`.
+///
+/// # Errors
+///
+/// This function will return an error in the following situations:
+/// * Spawning the `cargo` command fails (e.g., if Cargo or `cargo-edit` is not installed).
+/// * The `cargo set-version` command execution fails with a non-zero exit
 pub fn bump_member_version(root: &Path, member_name: &str, version: &Version) -> Result<()> {
     let status = Command::new("cargo")
         .args(["set-version", "-p", member_name, &version.to_string()])
@@ -129,6 +136,12 @@ pub fn bump_member_version(root: &Path, member_name: &str, version: &Version) ->
 
 /// Compute the bump kind for each workspace member based on commits
 /// that touched its path since the last tag.
+///
+/// # Errors
+///
+/// This function will return an error in the following situations:
+/// * Querying commit logs for any workspace member path via the backend fails.
+/// * Resolving the version bump fails (e.g., if an invalid `force` override string is provided).
 pub fn member_bumps(
     backend: &dyn JjBackend,
     members: &[WorkspaceMember],

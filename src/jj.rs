@@ -79,6 +79,12 @@ pub trait JjBackend {
     fn check_identity(&self) -> Result<()>;
 
     /// Return commits that modified files under `path`, filtered by `revset`.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error in the following situations:
+    /// * The provided `revset` string is invalid or malformed.
+    /// * Querying the underlying version control backend for commit logs fails.
     fn log_commits_for_path(&self, revset: &str, path: &str) -> Result<Vec<CommitInfo>>;
 }
 

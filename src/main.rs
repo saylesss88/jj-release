@@ -7,7 +7,8 @@ use std::{borrow, env, fs};
 use anyhow::{Context, Result};
 use clap::Parser;
 
-use jj_release::config::Config;
+use jj_release::commits::BumpKind;
+use jj_release::config::{Config, Versioning};
 use jj_release::errors::CliError;
 use jj_release::forge::{ForgeBackend, ForgejoForge, GitHubForge, GitLabForge, NoForge};
 use jj_release::jj::ShellBackend;
@@ -15,7 +16,7 @@ use jj_release::manifest::{CargoManifest, GoManifest, ManifestBackend, NpmManife
 use jj_release::pipeline::{PreparedRelease, ReleaseContext};
 use jj_release::publish::{CargoPublish, NoPublish, NpmPublish, PublishBackend};
 use jj_release::workspace::WorkspaceManifest;
-use jj_release::{changelog, config, detect, errors, jj, pipeline, workspace};
+use jj_release::{changelog, commits, config, detect, errors, jj, pipeline, workspace};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -236,19 +237,7 @@ fn release_pipeline(
         .git_push(&config.release.bookmark, Some(tag_name))?;
 
     // 4. Publish.
-    if let Some(ws) = &config.workspace {
-        if ws.enabled {
-            let ordered = workspace::ordered_members(&ws.members)?;
-            for member in ordered {
-                info!("→ Publishing {}…", member.name);
-                ctx.publisher
-                    .publish(&root.join(&member.path), &config.publish.cargo_flags)?;
-            }
-        }
-    } else {
-        info!("→ Publishing…");
-        ctx.publisher.publish(root, &config.publish.cargo_flags)?;
-    }
+    run_publish(ctx, config, root, &prepared, quiet)?;
 
     // 5. Forge release.
     if config.release.create_release {
@@ -432,6 +421,68 @@ fn parse_workspace_members(cargo_toml: &Path) -> Vec<(String, String)> {
             (name, path.to_owned())
         })
         .collect::<Vec<_>>()
+}
+
+fn run_publish(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    root: &std::path::Path,
+    prepared: &PreparedRelease,
+    quiet: bool,
+) -> Result<()> {
+    macro_rules! info {
+        ($($t:tt)*) => { if !quiet { println!($($t)*); } }
+    }
+
+    let Some(ws) = &config.workspace else {
+        info!("→ Publishing…");
+        return ctx.publisher.publish(root, &config.publish.cargo_flags);
+    };
+
+    if !ws.enabled {
+        info!("→ Publishing…");
+        return ctx.publisher.publish(root, &config.publish.cargo_flags);
+    }
+
+    let ordered = workspace::ordered_members(&ws.members)?;
+
+    match ws.versioning {
+        Versioning::Unified => {
+            for member in &ordered {
+                info!("→ Publishing {}…", member.name);
+                ctx.publisher
+                    .publish(&root.join(&member.path), &config.publish.cargo_flags)?;
+            }
+        }
+        Versioning::Independent => {
+            let since = prepared.since.clone();
+            let bumps = workspace::member_bumps(
+                ctx.backend,
+                &ws.members,
+                &since,
+                config.bump.force.as_ref(),
+            )?;
+            let versions = workspace::member_versions(root)?;
+            for member in &ordered {
+                let bump = bumps.get(&member.name).copied().unwrap_or(BumpKind::None);
+                if bump == BumpKind::None {
+                    info!("→ Skipping {} (no releasable commits)…", member.name);
+                    continue;
+                }
+                let current = versions
+                    .get(&member.name)
+                    .cloned()
+                    .unwrap_or_else(|| semver::Version::new(0, 0, 0));
+                let next = commits::apply_bump(&current, bump);
+                info!("→ Bumping {} to {next}…", member.name);
+                workspace::bump_member_version(root, &member.name, &next)?;
+                info!("→ Publishing {}…", member.name);
+                ctx.publisher
+                    .publish(&root.join(&member.path), &config.publish.cargo_flags)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

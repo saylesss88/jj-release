@@ -53,7 +53,12 @@ pub(crate) fn find_trigger(
 /// Return the latest `vX.Y.Z` tag reachable from `@`, as a `(tag_name,
 /// Version)` pair.  Returns `None` if no version tag exists yet (first
 /// release).
-pub(crate) fn latest_version_tag(backend: &dyn JjBackend, prefix: &str) -> Result<Option<Tag>> {
+///
+/// # Errors
+///
+/// This function will return an error if listing the tags from the backend fails
+/// (e.g., due to an issue communicating with the underlying version control system).
+pub fn latest_version_tag(backend: &dyn JjBackend, prefix: &str) -> Result<Option<Tag>> {
     let raw_tags = backend.list_tags()?;
     let tags: Vec<Tag> = raw_tags
         .into_iter()
@@ -85,7 +90,14 @@ pub(crate) fn compute_bump(commits: &[CommitInfo]) -> BumpKind {
     bump
 }
 
-pub(crate) fn resolve_bump(force: Option<&String>, commits: &[CommitInfo]) -> Result<BumpKind> {
+/// Resolve the version bump kind, either by respecting a forced override
+/// or by analyzing the given commits.
+///
+/// # Errors
+///
+/// This function will return an error if a `force` override is provided
+/// but is not one of the valid values (`"major"`, `"minor"`, or `"patch"`)
+pub fn resolve_bump(force: Option<&String>, commits: &[CommitInfo]) -> Result<BumpKind> {
     if let Some(force) = force {
         return match force.as_str() {
             "major" => Ok(BumpKind::Major),
@@ -118,7 +130,7 @@ fn classify(description: &str) -> BumpKind {
 
 /// Apply a bump to a version, returning the new version.
 #[must_use]
-pub(crate) fn apply_bump(current: &Version, bump: BumpKind) -> Version {
+pub fn apply_bump(current: &Version, bump: BumpKind) -> Version {
     let mut next = current.clone();
     match bump {
         BumpKind::Major => {
