@@ -58,9 +58,17 @@ pub fn prepare_release(
     root: &Path,
 ) -> Result<Option<PreparedRelease>> {
     backend.check_identity()?;
-    let since = match commits::latest_version_tag(backend, &config.release.tag_prefix)? {
-        Some(tag) => tag.name,
-        None => "root()".to_owned(),
+
+    let since: String = if let Some(tag) =
+        commits::latest_version_tag(backend, &config.release.tag_prefix)?
+    {
+        tag.name
+    } else if config.changelog.require_tag {
+        anyhow::bail!(
+            "no version tag found\nhint: create a baseline tag first:\n  jj tag set v0.1.0 -r <your-last-release-commit>"
+        );
+    } else {
+        "root()".to_owned()
     };
 
     // Check for trigger commit.
@@ -105,9 +113,17 @@ pub fn print_next_version(
     root: &std::path::Path,
 ) -> Result<()> {
     let current = ctx.manifest.read_version(root)?;
-    let since = match commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)? {
-        Some(tag) => tag.name,
-        None => "root()".to_owned(),
+
+    let since: String = if let Some(tag) =
+        commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)?
+    {
+        tag.name
+    } else if config.changelog.require_tag {
+        anyhow::bail!(
+            "no version tag found\nhint: create a baseline tag first:\n  jj tag set v0.1.0 -r <your-last-release-commit>"
+        );
+    } else {
+        "root()".to_owned()
     };
     let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
     let bump = commits::resolve_bump(config.bump.force.as_ref(), &commits)?;
@@ -129,6 +145,7 @@ pub fn print_changelog(
     output: Option<&Path>,
 ) -> Result<()> {
     let current = ctx.manifest.read_version(root)?;
+
     let since = match commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)? {
         Some(tag) => tag.name,
         None => "root()".to_owned(),
@@ -240,7 +257,7 @@ mod tests {
     #[test]
     fn prepare_release_returns_none_when_no_trigger() {
         let backend = MockBackend {
-            tags: vec![],
+            tags: vec!["v0.0.0".into()],
             commits: vec![CommitInfo {
                 change_id: "abc".into(),
                 description: "feat: add thing".into(),
