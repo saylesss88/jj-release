@@ -202,15 +202,13 @@ impl JjBackend for ShellBackend {
     }
     fn check_identity(&self) -> Result<()> {
         self.run(&["config", "get", "user.email"]).context(
-            "jj user.email not set — run: jj config set --user user.email 'you@example.com'",
+            "jj user.email not set, run: jj config set --user user.email 'you@example.com'",
         )?;
         self.run(&["config", "get", "user.name"])
-            .context("jj user.name not set — run: jj config set --user user.name 'Your Name'")?;
+            .context("jj user.name not set, run: jj config set --user user.name 'Your Name'")?;
         Ok(())
     }
 }
-
-// -- Helpers --
 
 /// Locate the repo root by walking up from `start` until we find `.jj/`.
 ///

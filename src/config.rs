@@ -1,8 +1,10 @@
 //! `release.toml` config loading.
 
+use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use semver::Version;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,15 +153,14 @@ pub fn load(root: &Path) -> Result<Config> {
     if !path.exists() {
         return Ok(Config::default());
     }
-    let raw =
-        std::fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+    let raw = fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     toml::from_str(&raw).with_context(|| format!("parsing {}", path.display()))
 }
 
 impl Config {
     /// Format a version as a tag name, e.g. `"v1.2.3"`.
     #[must_use]
-    pub fn tag_name(&self, version: &semver::Version) -> String {
+    pub fn tag_name(&self, version: &Version) -> String {
         format!("{}{version}", self.release.tag_prefix)
     }
 }
@@ -180,7 +181,7 @@ mod tests {
     #[test]
     fn tag_name_format() {
         let cfg = Config::default();
-        let v = semver::Version::parse("1.2.3").unwrap();
+        let v = Version::parse("1.2.3").unwrap();
         assert_eq!(cfg.tag_name(&v), "v1.2.3");
     }
 

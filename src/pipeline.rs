@@ -288,6 +288,7 @@ mod tests {
     use super::*;
     use crate::commits::CommitInfo;
     use crate::jj::JjBackend;
+    use crate::{config, manifest};
     use anyhow::Result;
     use semver::Version;
     use std::cell::RefCell;
@@ -331,7 +332,7 @@ mod tests {
         version: Version,
     }
 
-    impl crate::manifest::ManifestBackend for MockManifest {
+    impl manifest::ManifestBackend for MockManifest {
         fn read_version(&self, _root: &Path) -> Result<Version> {
             Ok(self.version.clone())
         }
@@ -359,7 +360,7 @@ mod tests {
         let manifest = MockManifest {
             version: Version::parse("0.1.0").unwrap(),
         };
-        let config = crate::config::Config::default();
+        let config = config::Config::default();
         let prepared = prepare_release(&backend, &manifest, &config, Path::new("/tmp")).unwrap();
         assert!(prepared.is_some());
         let p = prepared.unwrap();
@@ -380,7 +381,7 @@ mod tests {
         let manifest = MockManifest {
             version: Version::parse("0.0.0").unwrap(),
         };
-        let config = crate::config::Config::default();
+        let config = config::Config::default();
         let prepared = prepare_release(&backend, &manifest, &config, Path::new("/tmp")).unwrap();
         assert!(prepared.is_none());
     }

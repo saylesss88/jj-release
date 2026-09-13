@@ -7,15 +7,15 @@ use std::{borrow, env, fs};
 use anyhow::{Context, Result};
 use clap::Parser;
 
-use jj_release::config::{self, Config};
+use jj_release::config::Config;
 use jj_release::errors::CliError;
 use jj_release::forge::{ForgeBackend, ForgejoForge, GitHubForge, GitLabForge, NoForge};
 use jj_release::jj::ShellBackend;
 use jj_release::manifest::{CargoManifest, GoManifest, ManifestBackend, NpmManifest};
-use jj_release::pipeline::{self, PreparedRelease, ReleaseContext};
+use jj_release::pipeline::{PreparedRelease, ReleaseContext};
 use jj_release::publish::{CargoPublish, NoPublish, NpmPublish, PublishBackend};
 use jj_release::workspace::WorkspaceManifest;
-use jj_release::{changelog, jj, workspace};
+use jj_release::{changelog, config, detect, errors, jj, pipeline, workspace};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -52,7 +52,7 @@ enum Subcommand {
     Changelog {
         /// Write to a file instead of stdout. Creates or prepends to the file.
         #[arg(short, long)]
-        output: Option<std::path::PathBuf>,
+        output: Option<PathBuf>,
     },
     /// Push a PR
     Pr,
@@ -63,11 +63,11 @@ enum Subcommand {
 }
 
 fn main() {
-    let code = jj_release::errors::report(run());
+    let code = errors::report(run());
     std::process::exit(code);
 }
 
-fn run() -> Result<(), jj_release::errors::CliError> {
+fn run() -> Result<(), errors::CliError> {
     let cli = Cli::parse();
 
     // Resolve repo root.
@@ -107,13 +107,13 @@ fn run() -> Result<(), jj_release::errors::CliError> {
 
     let forge: Box<dyn ForgeBackend> = match config.release.forge.as_str() {
         "github" => {
-            if !jj_release::detect::tool_available("gh") {
+            if !detect::tool_available("gh") {
                 return Err(CliError::missing_tool("gh"));
             }
             Box::new(GitHubForge)
         }
         "gitlab" => {
-            if !jj_release::detect::tool_available("glab") {
+            if !detect::tool_available("glab") {
                 return Err(CliError::missing_tool("glab"));
             }
 
@@ -305,7 +305,7 @@ fn init(root: &Path) -> Result<()> {
 
     let release_toml = root.join("release.toml");
     if release_toml.exists() {
-        println!("release.toml already exists — delete it first to reinitialize.");
+        println!("release.toml already exists. Delete it first to reinitialize.");
         return Ok(());
     }
 

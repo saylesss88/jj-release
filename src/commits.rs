@@ -2,7 +2,7 @@
 
 use anyhow::{bail, Context, Result};
 use git_conventional::Commit;
-use semver::Version;
+use semver::{BuildMetadata, Prerelease, Version};
 
 use crate::jj::JjBackend;
 
@@ -136,8 +136,8 @@ pub(crate) fn apply_bump(current: &Version, bump: BumpKind) -> Version {
         BumpKind::None => {}
     }
     // Clear pre-release and build metadata on a real release.
-    next.pre = semver::Prerelease::EMPTY;
-    next.build = semver::BuildMetadata::EMPTY;
+    next.pre = Prerelease::EMPTY;
+    next.build = BuildMetadata::EMPTY;
     next
 }
 

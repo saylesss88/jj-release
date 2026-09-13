@@ -1,5 +1,6 @@
 //! Workspace support for multi-crate projects.
 
+use std::fs;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
@@ -14,8 +15,8 @@ pub struct WorkspaceManifest;
 impl ManifestBackend for WorkspaceManifest {
     fn read_version(&self, root: &Path) -> Result<Version> {
         let path = root.join("Cargo.toml");
-        let raw = std::fs::read_to_string(&path)
-            .with_context(|| format!("reading {}", path.display()))?;
+        let raw =
+            fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
         let doc: DocumentMut = raw
             .parse()
             .with_context(|| format!("parsing {}", path.display()))?;
@@ -30,14 +31,13 @@ impl ManifestBackend for WorkspaceManifest {
 
     fn write_version(&self, root: &Path, version: &Version) -> Result<()> {
         let path = root.join("Cargo.toml");
-        let raw = std::fs::read_to_string(&path)
-            .with_context(|| format!("reading {}", path.display()))?;
+        let raw =
+            fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
         let mut doc: DocumentMut = raw
             .parse()
             .with_context(|| format!("parsing {}", path.display()))?;
         doc["workspace"]["package"]["version"] = toml_edit::value(version.to_string());
-        std::fs::write(&path, doc.to_string())
-            .with_context(|| format!("writing {}", path.display()))?;
+        fs::write(&path, doc.to_string()).with_context(|| format!("writing {}", path.display()))?;
         Ok(())
     }
 }
@@ -156,7 +156,7 @@ mod tests {
     #[test]
     fn workspace_manifest_reads_version() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(
+        fs::write(
             dir.path().join("Cargo.toml"),
             r#"
 [workspace.package]
@@ -173,7 +173,7 @@ edition = "2024"
     #[test]
     fn workspace_manifest_writes_version() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(
+        fs::write(
             dir.path().join("Cargo.toml"),
             r#"
 [workspace.package]
@@ -186,7 +186,7 @@ edition = "2024"
         manifest
             .write_version(dir.path(), &Version::parse("0.6.0").unwrap())
             .unwrap();
-        let updated = std::fs::read_to_string(dir.path().join("Cargo.toml")).unwrap();
+        let updated = fs::read_to_string(dir.path().join("Cargo.toml")).unwrap();
         assert!(updated.contains("\"0.6.0\""));
         assert!(!updated.contains("\"0.5.32\""));
     }

@@ -78,8 +78,6 @@ mod tests {
     fn no_publish_ignores_flags() {
         let publisher = NoPublish;
         let flags = vec!["--dry-run".to_owned(), "--locked".to_owned()];
-        assert!(publisher
-            .publish(std::path::Path::new("/tmp"), &flags)
-            .is_ok());
+        assert!(publisher.publish(Path::new("/tmp"), &flags).is_ok());
     }
 }

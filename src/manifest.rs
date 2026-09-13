@@ -5,6 +5,7 @@ use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 use semver::Version;
+use serde_json::Value;
 use toml_edit::DocumentMut;
 
 /// Manages reading and writing version information in project manifests.
@@ -74,7 +75,7 @@ impl ManifestBackend for NpmManifest {
         let path = root.join("package.json");
         let raw =
             fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-        let json: serde_json::Value =
+        let json: Value =
             serde_json::from_str(&raw).with_context(|| format!("parsing {}", path.display()))?;
         let version_str = json["version"]
             .as_str()
@@ -87,9 +88,9 @@ impl ManifestBackend for NpmManifest {
         let path = root.join("package.json");
         let raw =
             fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-        let mut json: serde_json::Value =
+        let mut json: Value =
             serde_json::from_str(&raw).with_context(|| format!("parsing {}", path.display()))?;
-        json["version"] = serde_json::Value::String(version.to_string());
+        json["version"] = Value::String(version.to_string());
         fs::write(&path, serde_json::to_string_pretty(&json)?)
             .with_context(|| format!("writing {}", path.display()))?;
         Ok(())
