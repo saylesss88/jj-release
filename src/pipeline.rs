@@ -143,7 +143,12 @@ pub fn print_changelog(
     config: &Config,
     root: &std::path::Path,
     output: Option<&Path>,
+    full: bool,
 ) -> Result<()> {
+    if full {
+        return print_full_changelog(ctx, config, root, output);
+    }
+
     let current = ctx.manifest.read_version(root)?;
 
     let since = match commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)? {
@@ -166,6 +171,62 @@ pub fn print_changelog(
             println!("✓ Written to {}", path.display());
         }
         None => print!("{section}"),
+    }
+    Ok(())
+}
+
+fn print_full_changelog(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    root: &Path,
+    output: Option<&Path>,
+) -> Result<()> {
+    // Actually get all tags.
+    let raw_tags = ctx.backend.list_tags()?;
+    let mut all_tags: Vec<commits::Tag> = raw_tags
+        .into_iter()
+        .filter_map(|name| {
+            let stripped = name.strip_prefix(&config.release.tag_prefix)?;
+            let version = semver::Version::parse(stripped).ok()?;
+            Some(commits::Tag { name, version })
+        })
+        .collect();
+    all_tags.sort_by(|a, b| a.version.cmp(&b.version));
+
+    // Build sections, one per tag range.
+    let mut sections = Vec::new();
+    let mut versions = Vec::new();
+    let mut prev = "root()".to_owned();
+
+    for tag in &all_tags {
+        let revset = format!("{prev}..{}", tag.name);
+        let tag_commits = ctx.backend.log_commits(&revset)?;
+        sections.push((tag.name.clone(), tag_commits));
+        versions.push(tag.version.clone());
+
+        prev.clone_from(&tag.name);
+        // prev = tag.name.clone();
+    }
+
+    // Include commits since last tag.
+    let current = ctx.manifest.read_version(root)?;
+    let since = all_tags
+        .last()
+        .map_or_else(|| "root()".to_owned(), |t| t.name.clone());
+    let tip_commits = ctx.backend.log_commits(&format!("{since}..@"))?;
+    let bump = commits::compute_bump(&tip_commits);
+    let next = commits::apply_bump(&current, bump);
+    sections.push(("unreleased".to_owned(), tip_commits));
+    versions.push(next);
+
+    let result = changelog::render_full_changelog(&sections, &versions);
+
+    match output {
+        Some(path) => {
+            std::fs::write(path, &result)?;
+            println!("✓ Written to {}", path.display());
+        }
+        None => print!("{result}"),
     }
     Ok(())
 }
@@ -251,8 +312,8 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &std::path::Pat
     } else {
         if config.changelog.require_tag {
             anyhow::bail!(
-            "no version tag found\nhint: create a baseline tag first:\n  jj tag set v0.1.0 -r <your-last-release-commit>"
-        );
+                "no version tag found\nhint: create a baseline tag first:\n  jj tag set v0.1.0 -r <your-last-release-commit>"
+            );
         }
         "root()".to_owned()
     };

@@ -53,6 +53,9 @@ enum Subcommand {
         /// Write to a file instead of stdout. Creates or prepends to the file.
         #[arg(short, long)]
         output: Option<PathBuf>,
+        // Generate changelog for all tags, not just since the last one.
+        #[arg(long)]
+        full: bool,
     },
     /// Push a PR
     Pr,
@@ -144,11 +147,12 @@ fn run() -> Result<(), errors::CliError> {
             cli.quiet,
         )?),
         Subcommand::NextVersion => Ok(pipeline::print_next_version(&ctx, &config, &root)?),
-        Subcommand::Changelog { output } => Ok(pipeline::print_changelog(
+        Subcommand::Changelog { output, full } => Ok(pipeline::print_changelog(
             &ctx,
             &config,
             &root,
             output.as_deref(),
+            full,
         )?),
         Subcommand::Pr => Ok(commands::pr(&ctx, &config, &root, cli.quiet)?),
         Subcommand::Init => Ok(commands::init(&root)?),
