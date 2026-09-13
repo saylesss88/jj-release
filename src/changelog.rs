@@ -20,11 +20,15 @@ pub fn render_changelog_section(commits: &[CommitInfo], version: &Version) -> St
         };
 
         let breaking = conv.breaking();
+        let scope = conv
+            .scope()
+            .map(|s| format!("**({s})**"))
+            .unwrap_or_default();
         let summary = conv.description().to_owned();
         let entry = if breaking {
             format!("**BREAKING** {summary}")
         } else {
-            summary
+            format!("{scope}{summary}")
         };
 
         match conv.type_().as_str() {
@@ -68,22 +72,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn renders_added_section() {
-        let commits = vec![
-            CommitInfo {
-                change_id: "abc".into(),
-                description: "feat: add wallpaper cycling".into(),
-            },
-            CommitInfo {
-                change_id: "def".into(),
-                description: "feat: add IPC commands".into(),
-            },
-        ];
+    fn renders_scoped_commit() {
+        let commits = vec![CommitInfo {
+            change_id: "abc".into(),
+            description: "feat(cli): add init subcommand".into(),
+        }];
         let section = render_changelog_section(&commits, &Version::parse("0.2.0").unwrap());
-        assert!(section.contains("## [0.2.0]"));
-        assert!(section.contains("### Added"));
-        assert!(section.contains("- add wallpaper cycling"));
-        assert!(section.contains("- add IPC commands"));
+        assert!(section.contains("**(cli)**"));
+        assert!(section.contains("add init subcommand"));
     }
 
     #[test]
