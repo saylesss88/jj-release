@@ -1,9 +1,11 @@
 //! Workspace support for multi-crate projects.
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
+use cargo_metadata::MetadataCommand;
 use semver::Version;
 use toml_edit::DocumentMut;
 
@@ -84,6 +86,30 @@ pub fn ordered_members(members: &[WorkspaceMember]) -> Result<Vec<&WorkspaceMemb
     }
 
     Ok(ordered)
+}
+
+/// Read all workspace member versions via `cargo metadata`.
+///
+/// # Errors
+///
+/// This function will return an error in the following situations:
+/// * Executing the `cargo metadata` command fails (e.g., if Cargo is not installed
+///   or the manifest path is invalid).
+/// * Parsing the metadata output or any package version fails.
+pub fn member_versions(root: &Path) -> Result<HashMap<String, Version>> {
+    let metadata = MetadataCommand::new()
+        .manifest_path(root.join("Cargo.toml"))
+        .exec()?;
+
+    let mut versions = HashMap::new();
+    for package in &metadata.packages {
+        // Only include workspace members, not external dependencies.
+        if metadata.workspace_members.contains(&package.id) {
+            let version = Version::parse(&package.version.to_string())?;
+            versions.insert(package.name.clone().to_string(), version);
+        }
+    }
+    Ok(versions)
 }
 
 #[cfg(test)]
@@ -189,5 +215,55 @@ edition = "2024"
         let updated = fs::read_to_string(dir.path().join("Cargo.toml")).unwrap();
         assert!(updated.contains("\"0.6.0\""));
         assert!(!updated.contains("\"0.5.32\""));
+    }
+
+    #[test]
+    fn independent_versioning_reads_per_member_versions() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // Write workspace Cargo.toml
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            r#"
+[workspace]
+members = ["lib", "cli"]
+resolver = "2"
+"#,
+        )
+        .unwrap();
+
+        // Write lib member
+        fs::create_dir(dir.path().join("lib")).unwrap();
+        fs::write(
+            dir.path().join("lib/Cargo.toml"),
+            r#"
+[package]
+name = "mylib"
+version = "0.3.0"
+edition = "2021"
+"#,
+        )
+        .unwrap();
+        fs::create_dir(dir.path().join("lib/src")).unwrap();
+        fs::write(dir.path().join("lib/src/lib.rs"), "").unwrap();
+
+        // Write cli member
+        fs::create_dir(dir.path().join("cli")).unwrap();
+        fs::write(
+            dir.path().join("cli/Cargo.toml"),
+            r#"
+[package]
+name = "mycli"
+version = "0.5.0"
+edition = "2021"
+"#,
+        )
+        .unwrap();
+        fs::create_dir(dir.path().join("cli/src")).unwrap();
+        fs::write(dir.path().join("cli/src/main.rs"), "fn main() {}").unwrap();
+
+        let versions = member_versions(dir.path()).unwrap();
+        assert_eq!(versions.get("mylib").unwrap().to_string(), "0.3.0");
+        assert_eq!(versions.get("mycli").unwrap().to_string(), "0.5.0");
     }
 }
