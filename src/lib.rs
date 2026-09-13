@@ -21,6 +21,8 @@ pub mod jj;
 pub mod manifest;
 pub mod pipeline;
 pub mod publish;
+#[cfg(test)]
+pub mod test_helpers;
 pub mod workspace;
 
 pub use commits::{BumpKind, CommitInfo, Tag};

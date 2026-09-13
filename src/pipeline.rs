@@ -287,50 +287,12 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &std::path::Pat
 mod tests {
     use super::*;
     use crate::commits::CommitInfo;
-    use crate::jj::JjBackend;
+    use crate::test_helpers::mock::MockBackend;
     use crate::{config, manifest};
     use anyhow::Result;
     use semver::Version;
     use std::cell::RefCell;
     use std::path::Path;
-
-    struct MockBackend {
-        tags: Vec<String>,
-        commits: Vec<CommitInfo>,
-        calls: RefCell<Vec<String>>,
-    }
-
-    impl JjBackend for MockBackend {
-        fn list_tags(&self) -> Result<Vec<String>> {
-            Ok(self.tags.clone())
-        }
-        fn log_commits(&self, revset: &str) -> Result<Vec<CommitInfo>> {
-            self.calls.borrow_mut().push(revset.to_owned());
-            Ok(self.commits.clone())
-        }
-        fn new_commit(&self, _: &str) -> Result<String> {
-            Ok(String::new())
-        }
-        fn create_tag(&self, _: &str, _: &str) -> Result<()> {
-            Ok(())
-        }
-        fn set_bookmark(&self, _: &str, _: &str) -> Result<()> {
-            Ok(())
-        }
-        fn git_push(&self, _: &str, _: Option<&str>) -> Result<()> {
-            Ok(())
-        }
-        fn git_export(&self) -> Result<()> {
-            Ok(())
-        }
-        fn check_identity(&self) -> Result<()> {
-            Ok(())
-        }
-        fn log_commits_for_path(&self, revset: &str, _path: &str) -> Result<Vec<CommitInfo>> {
-            self.calls.borrow_mut().push(revset.to_owned());
-            Ok(self.commits.clone())
-        }
-    }
 
     struct MockManifest {
         version: Version,
