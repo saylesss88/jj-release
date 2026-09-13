@@ -66,11 +66,14 @@ jj-release --dry-run
 # Print the next version that would be released
 jj-release next-version
 
-# Generate and print the changelog section to stdout without releasing
+# Preview the next changelog section
 jj-release changelog
 
-# Write the changelog to a file without releasing
+# Prepend the next section to an existing CHANGELOG.md
 jj-release changelog -o CHANGELOG.md
+
+# Regenerate the full changelog from all tags (useful for bootstrapping)
+jj-release changelog --full -o CHANGELOG.md
 
 # Open a PR for review before publishing
 jj-release pr
@@ -89,7 +92,7 @@ jj-release validate # confirms everything is ready
 
 `init` detects:
 
-- Forge: from the git remote URL (github.com → github, gitlab.com → gitlab, codeberg.org → forgejo)
+- Forge: from the git remote URL (github.com → github, gitlab.com → gitlab, codeberg.org → forgejo (comming soon))
 - Language: from files present (`Cargo.toml` → cargo, `package.json` → npm, `go.mod` → go)
 - Workspace: reads [workspace.members] from `Cargo.toml` and auto-populates member names and paths
 
