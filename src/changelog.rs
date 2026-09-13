@@ -61,14 +61,11 @@ pub fn prepend_to_file(existing: &str, new_section: &str) -> String {
     if existing.is_empty() {
         return format!("{header}{new_section}");
     }
-    if let Some(rest) = existing.strip_prefix(header) {
-        format!("{header}{new_section}\n{rest}")
-    } else if let Some(rest) = existing.strip_prefix("# Changelog\n\n") {
-        // Handle simple header too so existing changelogs aren't broken.
-        format!("{header}{new_section}\n{rest}")
-    } else {
-        format!("{header}{new_section}\n{existing}")
-    }
+
+    existing.strip_prefix("# Changelog\n\n").map_or_else(
+        || format!("{header}{new_section}\n{existing}"),
+        |rest| format!("{header}{new_section}\n{rest}"),
+    )
 }
 
 #[cfg(test)]
