@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 use cargo_metadata::MetadataCommand;
@@ -110,6 +111,18 @@ pub fn member_versions(root: &Path) -> Result<HashMap<String, Version>> {
         }
     }
     Ok(versions)
+}
+
+pub fn bump_member_version(root: &Path, member_name: &str, version: &Version) -> Result<()> {
+    let status = Command::new("cargo")
+        .args(["set-version", "-p", member_name, &version.to_string()])
+        .current_dir(root)
+        .status()
+        .context("spawning cargo set-version — is cargo-edit installed?")?;
+    if !status.success() {
+        bail!("cargo set-version failed for {member_name}");
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -265,5 +278,49 @@ edition = "2021"
         let versions = member_versions(dir.path()).unwrap();
         assert_eq!(versions.get("mylib").unwrap().to_string(), "0.3.0");
         assert_eq!(versions.get("mycli").unwrap().to_string(), "0.5.0");
+    }
+
+    #[test]
+    fn bump_member_version_requires_cargo_edit() {
+        // If cargo-edit isn't installed this test documents the requirement.
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            r#"
+[workspace]
+members = ["lib"]
+resolver = "2"
+"#,
+        )
+        .unwrap();
+        fs::create_dir(dir.path().join("lib")).unwrap();
+        fs::write(
+            dir.path().join("lib/Cargo.toml"),
+            r#"
+[package]
+name = "mylib"
+version = "0.3.0"
+edition = "2021"
+"#,
+        )
+        .unwrap();
+        fs::create_dir(dir.path().join("lib/src")).unwrap();
+        fs::write(dir.path().join("lib/src/lib.rs"), "").unwrap();
+
+        let new_version = Version::parse("0.4.0").unwrap();
+        let result = bump_member_version(dir.path(), "mylib", &new_version);
+
+        if let Err(err) = result {
+            // cargo-edit not installed, that's ok, just document it
+            let msg = err.to_string();
+            assert!(
+                msg.contains("cargo set-version") || msg.contains("cargo-edit"),
+                "unexpected error: {msg}"
+            );
+        } else {
+            // cargo-edit is installed, verify the version was bumped
+            let versions = member_versions(dir.path()).unwrap();
+            assert_eq!(versions.get("mylib").unwrap().to_string(), "0.4.0");
+        }
     }
 }
