@@ -1,9 +1,11 @@
 use std::path::Path;
 
 use anyhow::Result;
-use jj_release::changelog;
-use jj_release::config::Config;
-use jj_release::pipeline::{self, ReleaseContext};
+use jj_release::{
+    changelog,
+    config::Config,
+    pipeline::{self, ReleaseContext},
+};
 
 pub fn release_pr(
     ctx: &ReleaseContext<'_>,
@@ -27,7 +29,7 @@ pub fn release_pr(
         prepared.bump, prepared.next_version, prepared.tag_name
     );
 
-    // Generate changelog preview for PR body — no file write.
+    // Generate changelog preview for PR body, no file write.
     let body = changelog::render_changelog_section(&prepared.commits, &prepared.next_version);
 
     // Push to a release bookmark so PR has something to merge into main.

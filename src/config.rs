@@ -1,7 +1,6 @@
 //! `release.toml` config loading.
 
-use std::fs;
-use std::path::Path;
+use std::{fs, path::Path};
 
 use anyhow::{Context, Result};
 use semver::Version;

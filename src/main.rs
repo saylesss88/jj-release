@@ -2,20 +2,21 @@
 
 mod commands;
 
-use std::env;
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Parser;
 
-use jj_release::errors::CliError;
-use jj_release::forge::{ForgeBackend, ForgejoForge, GitHubForge, GitLabForge, NoForge};
-use jj_release::jj::ShellBackend;
-use jj_release::manifest::{CargoManifest, GoManifest, ManifestBackend, NpmManifest};
-use jj_release::pipeline::ReleaseContext;
-use jj_release::publish::{CargoPublish, NoPublish, NpmPublish, PublishBackend};
-use jj_release::workspace::WorkspaceManifest;
 use jj_release::{config, detect, errors, jj, pipeline};
+use jj_release::{
+    errors::CliError,
+    forge::{ForgeBackend, ForgejoForge, GitHubForge, GitLabForge, NoForge},
+    jj::ShellBackend,
+    manifest::{CargoManifest, GoManifest, ManifestBackend, NpmManifest},
+    pipeline::ReleaseContext,
+    publish::{CargoPublish, NoPublish, NpmPublish, PublishBackend},
+    workspace::WorkspaceManifest,
+};
 
 #[derive(Parser, Debug)]
 #[command(

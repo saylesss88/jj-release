@@ -1,18 +1,19 @@
 //! Release pipeline orchestration.
 
-use std::fs;
-use std::path::Path;
+use std::{fs, path::Path};
 
 use anyhow::{Context, Result};
 use semver::Version;
 
 use crate::changelog;
-use crate::commits::{self, BumpKind, CommitInfo};
-use crate::config::Config;
-use crate::forge::ForgeBackend;
-use crate::jj::JjBackend;
-use crate::manifest::ManifestBackend;
-use crate::publish::PublishBackend;
+use crate::{
+    commits::{self, BumpKind, CommitInfo},
+    config::Config,
+    forge::ForgeBackend,
+    jj::JjBackend,
+    manifest::ManifestBackend,
+    publish::PublishBackend,
+};
 
 pub struct PreparedRelease {
     pub since: String,
@@ -342,6 +343,12 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &std::path::Pat
         std::process::exit(1);
     }
     Ok(())
+}
+
+pub fn info(quiet: bool, message: impl std::fmt::Display) {
+    if !quiet {
+        println!("{message}");
+    }
 }
 
 #[cfg(test)]

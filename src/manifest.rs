@@ -1,9 +1,8 @@
 //! Edit `Cargo.toml` version fields without destroying formatting.
 
-use std::fs;
-use std::path::Path;
+use std::{fs, path::Path};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use semver::Version;
 use serde_json::Value;
 use toml_edit::DocumentMut;

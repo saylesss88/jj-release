@@ -1,11 +1,13 @@
+use std::{fs, path::Path};
+
 use anyhow::Result;
-use jj_release::changelog;
-use jj_release::commits::{self, BumpKind};
-use jj_release::config::{Config, Versioning};
-use jj_release::pipeline::{self, PreparedRelease, ReleaseContext};
-use jj_release::workspace;
-use std::fs;
-use std::path::Path;
+use jj_release::{
+    changelog,
+    commits::{self, BumpKind},
+    config::{Config, Versioning},
+    pipeline::{self, PreparedRelease, ReleaseContext},
+    workspace,
+};
 
 pub fn release_pipeline(
     ctx: &ReleaseContext<'_>,

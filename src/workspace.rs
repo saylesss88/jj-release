@@ -1,19 +1,18 @@
 //! Workspace support for multi-crate projects.
 
-use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
-use std::process::Command;
+use std::{collections::HashMap, fs, path::Path, process::Command};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use cargo_metadata::MetadataCommand;
 use semver::Version;
 use toml_edit::DocumentMut;
 
-use crate::commits::{self, BumpKind};
-use crate::config::WorkspaceMember;
-use crate::jj::JjBackend;
-use crate::manifest::ManifestBackend;
+use crate::{
+    commits::{self, BumpKind},
+    config::WorkspaceMember,
+    jj::JjBackend,
+    manifest::ManifestBackend,
+};
 
 pub struct WorkspaceManifest;
 

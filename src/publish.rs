@@ -1,9 +1,8 @@
 //! Publish backends for Cargo, npm, and no-op.
 
-use std::path::Path;
-use std::process::Command;
+use std::{path::Path, process::Command};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 pub trait PublishBackend {
     /// Publishes the project crate to a package registry (such as crates.io).

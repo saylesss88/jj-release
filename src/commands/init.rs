@@ -1,7 +1,6 @@
+use std::{borrow, fmt::Write, fs, path::Path};
+
 use anyhow::Result;
-use std::fmt::Write;
-use std::path::Path;
-use std::{borrow, fs};
 
 pub fn init(root: &Path) -> Result<()> {
     use jj_release::detect;
