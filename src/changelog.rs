@@ -57,14 +57,18 @@ pub fn render_changelog_section(commits: &[CommitInfo], version: &Version) -> St
 
 #[must_use]
 pub fn prepend_to_file(existing: &str, new_section: &str) -> String {
-    let header = "# Changelog\n\n";
+    let header = "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\nand this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n";
     if existing.is_empty() {
         return format!("{header}{new_section}");
     }
-    existing.strip_prefix(header).map_or_else(
-        || format!("{header}{new_section}\n{existing}"),
-        |rest| format!("{header}{new_section}\n{rest}"),
-    )
+    if let Some(rest) = existing.strip_prefix(header) {
+        format!("{header}{new_section}\n{rest}")
+    } else if let Some(rest) = existing.strip_prefix("# Changelog\n\n") {
+        // Handle simple header too so existing changelogs aren't broken.
+        format!("{header}{new_section}\n{rest}")
+    } else {
+        format!("{header}{new_section}\n{existing}")
+    }
 }
 
 #[cfg(test)]
@@ -117,16 +121,19 @@ mod tests {
 
     #[test]
     fn prepend_inserts_after_header() {
-        let existing = "# Changelog\n\n## [0.1.0] - 2024-01-01\n\n### Added\n- initial release\n";
+        let existing = "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\nand this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n## [0.1.0] - 2024-01-01\n\n### Added\n- initial release\n";
         let new_section = "## [0.2.0] - 2024-06-01\n\n### Added\n- new thing\n";
         let result = prepend_to_file(existing, new_section);
-        assert!(result.starts_with("# Changelog\n\n## [0.2.0]"));
+        assert!(result.contains("## [0.2.0]"));
         assert!(result.contains("## [0.1.0]"));
+        // New section should come before old.
+        assert!(result.find("## [0.2.0]") < result.find("## [0.1.0]"));
     }
 
     #[test]
     fn prepend_creates_header_if_missing() {
         let result = prepend_to_file("", "## [0.1.0] - 2024-01-01\n\n### Added\n- thing\n");
-        assert!(result.starts_with("# Changelog\n\n## [0.1.0]"));
+        assert!(result.starts_with("# Changelog\n\nAll notable"));
+        assert!(result.contains("Keep a Changelog"));
     }
 }
