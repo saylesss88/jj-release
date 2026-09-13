@@ -77,6 +77,9 @@ pub trait JjBackend {
     /// Returns an error if either `user.name` or `user.email` is not set,
     /// with a hint on how to fix it.
     fn check_identity(&self) -> Result<()>;
+
+    /// Return commits that modified files under `path`, filtered by `revset`.
+    fn log_commits_for_path(&self, revset: &str, path: &str) -> Result<Vec<CommitInfo>>;
 }
 
 // Shell implementation
@@ -207,6 +210,34 @@ impl JjBackend for ShellBackend {
         self.run(&["config", "get", "user.name"])
             .context("jj user.name not set, run: jj config set --user user.name 'Your Name'")?;
         Ok(())
+    }
+
+    fn log_commits_for_path(&self, revset: &str, path: &str) -> Result<Vec<CommitInfo>> {
+        let raw = self.run(&[
+            "log",
+            "--no-graph",
+            "-r",
+            revset,
+            "-T",
+            r#"change_id ++ "\x1f" ++ description ++ "\x1e""#,
+            path, // jj log accepts a path filter as a positional argument
+        ])?;
+
+        let mut commits = Vec::new();
+        for record in raw.split('\x1e') {
+            let record = record.trim();
+            if record.is_empty() {
+                continue;
+            }
+            let (change_id, description) = record
+                .split_once('\x1f')
+                .with_context(|| format!("unexpected log format: {record:?}"))?;
+            commits.push(CommitInfo {
+                change_id: change_id.trim().to_owned(),
+                description: description.trim().to_owned(),
+            });
+        }
+        Ok(commits)
     }
 }
 

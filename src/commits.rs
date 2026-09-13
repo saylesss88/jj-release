@@ -190,6 +190,10 @@ mod tests {
         fn check_identity(&self) -> Result<()> {
             Ok(())
         }
+        fn log_commits_for_path(&self, revset: &str, _path: &str) -> Result<Vec<CommitInfo>> {
+            self.calls.borrow_mut().push(revset.to_owned());
+            Ok(self.commits.clone())
+        }
     }
 
     #[test]
@@ -371,5 +375,20 @@ mod tests {
     #[test]
     fn resolve_bump_unknown_force_errors() {
         assert!(resolve_bump(Some(&"banana".to_owned()), &[]).is_err());
+    }
+
+    #[test]
+    fn log_commits_for_path_uses_path_filter() {
+        let backend = MockBackend {
+            commits: vec![CommitInfo {
+                change_id: "abc".into(),
+                description: "feat: change lib".into(),
+            }],
+            ..MockBackend::default()
+        };
+        let commits = backend.log_commits_for_path("root()..@", "lib").unwrap();
+        assert_eq!(commits.len(), 1);
+        // verify the call was recorded
+        assert_eq!(backend.calls.borrow()[0], "root()..@");
     }
 }
