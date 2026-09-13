@@ -68,6 +68,27 @@ pub fn prepend_to_file(existing: &str, new_section: &str) -> String {
     )
 }
 
+/// Render a full changelog from all tag ranges, newest first.
+/// `sections` is a list of `(tag_name, commits)` pairs in chronological order.
+/// `versions` is the corresponding list of versions.
+pub fn render_full_changelog(
+    sections: &[(String, Vec<CommitInfo>)],
+    versions: &[Version],
+) -> String {
+    let header = "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\nand this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n";
+
+    let mut out = header.to_owned();
+
+    // Render newest first.
+    for (i, (_, commits)) in sections.iter().enumerate().rev() {
+        let version = &versions[i];
+        out.push_str(&render_changelog_section(commits, version));
+        out.push('\n');
+    }
+
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,5 +153,36 @@ mod tests {
         let result = prepend_to_file("", "## [0.1.0] - 2024-01-01\n\n### Added\n- thing\n");
         assert!(result.starts_with("# Changelog\n\nAll notable"));
         assert!(result.contains("Keep a Changelog"));
+    }
+
+    #[test]
+    fn full_changelog_generates_all_sections() {
+        let sections = vec![
+            (
+                "v0.1.0".to_string(),
+                vec![CommitInfo {
+                    change_id: "a".into(),
+                    description: "feat: initial implementation".into(),
+                }],
+            ),
+            (
+                "v0.2.0".to_string(),
+                vec![CommitInfo {
+                    change_id: "b".into(),
+                    description: "fix: handle edge case".into(),
+                }],
+            ),
+        ];
+        let versions = vec![
+            semver::Version::parse("0.1.0").unwrap(),
+            semver::Version::parse("0.2.0").unwrap(),
+        ];
+        let result = render_full_changelog(&sections, &versions);
+        assert!(result.contains("## [0.1.0]"));
+        assert!(result.contains("## [0.2.0]"));
+        // 0.2.0 should come before 0.1.0 (newest first)
+        assert!(result.find("## [0.2.0]") < result.find("## [0.1.0]"));
+        assert!(result.contains("### Added"));
+        assert!(result.contains("### Fixed"));
     }
 }
