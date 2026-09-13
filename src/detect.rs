@@ -1,7 +1,6 @@
-use std::fs;
-use std::path::Path;
-use std::process::Command;
-use std::result::Result;
+//! Environment detection for forge, language, and tool availability.
+
+use std::{fs, path::Path, process::Command};
 
 /// Detect the forge from a git remote URL.
 #[must_use]

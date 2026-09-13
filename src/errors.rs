@@ -1,3 +1,5 @@
+//! CLI error types with exit codes.
+
 use anyhow::anyhow;
 
 #[derive(Debug)]

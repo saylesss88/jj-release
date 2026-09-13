@@ -6,9 +6,22 @@
 //! version control system.
 //!
 //! # Example
+//!
 //! ```no_run
+//! use std::path::Path;
+//! use jj_release::pipeline::{prepare_release, ReleaseContext};
+//! use jj_release::manifest::CargoManifest;
 //! use jj_release::config::Config;
-//! use jj_release::pipeline::prepare_release;
+//! use jj_release::jj::ShellBackend;
+//!
+//! let root = Path::new(".");
+//! let backend = ShellBackend::new(root).unwrap();
+//! let manifest = CargoManifest;
+//! let config = Config::default();
+//!
+//! if let Some(release) = prepare_release(&backend, &manifest, &config, root).unwrap() {
+//!     println!("Next version: {}", release.next_version);
+//! }
 //! ```
 
 pub mod changelog;
@@ -21,9 +34,10 @@ pub mod jj;
 pub mod manifest;
 pub mod pipeline;
 pub mod publish;
+pub mod workspace;
+
 #[cfg(test)]
 pub mod test_helpers;
-pub mod workspace;
 
 pub use commits::{BumpKind, CommitInfo, Tag};
 pub use config::Config;
