@@ -1,5 +1,6 @@
 //! Release pipeline orchestration.
 
+use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result};
@@ -125,6 +126,7 @@ pub fn print_changelog(
     ctx: &ReleaseContext<'_>,
     config: &Config,
     root: &std::path::Path,
+    output: Option<&Path>,
 ) -> Result<()> {
     let current = ctx.manifest.read_version(root)?;
     let since = match commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)? {
@@ -134,7 +136,20 @@ pub fn print_changelog(
     let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
     let next = commits::apply_bump(&current, commits::compute_bump(&commits));
     let section = changelog::render_changelog_section(&commits, &next);
-    print!("{section}");
+
+    match output {
+        Some(path) => {
+            let existing = if path.exists() {
+                fs::read_to_string(path)?
+            } else {
+                String::new()
+            };
+            let updated = changelog::prepend_to_file(&existing, &section);
+            fs::write(path, updated)?;
+            println!("✓ Written to {}", path.display());
+        }
+        None => print!("{section}"),
+    }
     Ok(())
 }
 

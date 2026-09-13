@@ -48,7 +48,12 @@ enum Subcommand {
     /// Print the next version that would be released, then exit.
     NextVersion,
     /// Generate changelog for commits since last tag and print to stdout.
-    Changelog,
+    #[command(name = "changelog")]
+    Changelog {
+        /// Write to a file instead of stdout. Creates or prepends to the file.
+        #[arg(short, long)]
+        output: Option<std::path::PathBuf>,
+    },
     /// Push a PR
     Pr,
     /// Auto-detect environment and generate a release.toml.
@@ -137,7 +142,12 @@ fn run() -> Result<(), jj_release::errors::CliError> {
             cli.quiet,
         )?),
         Subcommand::NextVersion => Ok(pipeline::print_next_version(&ctx, &config, &root)?),
-        Subcommand::Changelog => Ok(pipeline::print_changelog(&ctx, &config, &root)?),
+        Subcommand::Changelog { output } => Ok(pipeline::print_changelog(
+            &ctx,
+            &config,
+            &root,
+            output.as_deref(),
+        )?),
         Subcommand::Pr => Ok(release_pr(&ctx, &config, &root, cli.quiet)?),
         Subcommand::Init => Ok(init(&root)?),
     }
