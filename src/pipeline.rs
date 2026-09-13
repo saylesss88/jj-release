@@ -170,6 +170,119 @@ pub fn print_changelog(
     Ok(())
 }
 
+/// Validates the release environment, checking backend identity, forge CLI availability, manifest readability, version tags, trigger commits, and tokens.
+///
+/// # Errors
+///
+/// Returns an error if any backend operations fail, the manifest cannot be read, or a required version tag is missing when `require_tag` is enabled.
+pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &std::path::Path) -> Result<()> {
+    use crate::detect;
+
+    let mut passed = 0;
+    let mut failed = 0;
+
+    macro_rules! check {
+        ($label:expr, $result:expr) => {
+            match $result {
+                Ok(msg) => {
+                    println!("✓ {}: {msg}", $label);
+                    passed += 1;
+                }
+                Err(msg) => {
+                    println!("✗ {}: {msg}", $label);
+                    failed += 1;
+                }
+            }
+        };
+    }
+
+    // 1. jj identity.
+    check!(
+        "jj identity",
+        ctx.backend
+            .check_identity()
+            .map(|()| "configured".to_owned())
+            .map_err(|e| e.to_string())
+    );
+
+    // 2. Forge CLI.
+    let forge_check = match config.release.forge.as_str() {
+        "github" => {
+            if detect::tool_available("gh") {
+                Ok("gh found".to_owned())
+            } else {
+                Err("gh not found. Install from https://cli.github.com".to_owned())
+            }
+        }
+        "gitlab" => {
+            if detect::tool_available("glab") {
+                Ok("glab found".to_owned())
+            } else {
+                Err("glab not found. Install from https://gitlab.com/gitlab-org/cli".to_owned())
+            }
+        }
+        _ => Ok("no forge CLI required".to_owned()),
+    };
+    check!("forge CLI", forge_check);
+
+    // 3. Manifest readable.
+    check!(
+        "manifest",
+        ctx.manifest
+            .read_version(root)
+            .map(|v| format!("version {v}"))
+            .map_err(|e| e.to_string())
+    );
+
+    // 4. Version tag exists.
+    check!(
+        "version tag",
+        commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)
+            .map_err(|e| e.to_string())
+            .and_then(|t| t.ok_or_else(|| "no version tag found. Create one first".to_owned()))
+            .map(|t| format!("found {}", t.name))
+    );
+
+    // 5. Trigger commit.
+    let since = if let Some(tag) =
+        commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)?
+    {
+        tag.name
+    } else {
+        if config.changelog.require_tag {
+            anyhow::bail!(
+            "no version tag found\nhint: create a baseline tag first:\n  jj tag set v0.1.0 -r <your-last-release-commit>"
+        );
+        }
+        "root()".to_owned()
+    };
+    check!(
+        "trigger commit",
+        commits::find_trigger(ctx.backend, &config.release.trigger, &since)
+            .map_err(|e| e.to_string())
+            .and_then(|t| t.ok_or_else(|| format!("no {:?} commit found", config.release.trigger)))
+            .map(|_| "found".to_owned())
+    );
+
+    // 6. CARGO_REGISTRY_TOKEN.
+    if config.publish.cargo {
+        check!(
+            "CARGO_REGISTRY_TOKEN",
+            std::env::var("CARGO_REGISTRY_TOKEN")
+                .map(|_| "set".to_owned())
+                .map_err(|_| "not set, needed for cargo publish".to_owned())
+        );
+    }
+
+    println!();
+    println!("{passed} passed, {failed} failed");
+
+    if failed > 0 {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

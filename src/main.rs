@@ -58,6 +58,8 @@ enum Subcommand {
     Pr,
     /// Auto-detect environment and generate a release.toml.
     Init,
+    /// Check that everything is ready for a release without making any changes.
+    Validate,
 }
 
 fn main() {
@@ -150,6 +152,7 @@ fn run() -> Result<(), jj_release::errors::CliError> {
         )?),
         Subcommand::Pr => Ok(release_pr(&ctx, &config, &root, cli.quiet)?),
         Subcommand::Init => Ok(init(&root)?),
+        Subcommand::Validate => Ok(pipeline::validate(&ctx, &config, &root)?),
     }
 }
 
