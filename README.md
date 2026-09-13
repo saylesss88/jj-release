@@ -51,6 +51,12 @@ CI.
 ## Usage
 
 ```sh
+# Auto-detect environment and generate a release.toml
+jj-release init
+
+# Check everything is ready before releasing
+jj-release validate
+
 # Full release pipeline
 jj-release
 
@@ -60,14 +66,41 @@ jj-release --dry-run
 # Print the next version that would be released
 jj-release next-version
 
-# Generate and print the changelog section without releasing
+# Generate and print the changelog section to stdout without releasing
 jj-release changelog
+
+# Write the changelog to a file without releasing
+jj-release changelog -o CHANGELOG.md
 
 # Open a PR for review before publishing
 jj-release pr
 ```
 
 ---
+
+## Getting Started
+
+The fastest way to set up a new repo:
+
+```sh
+jj-release init     # detects forge, language, workspace: writes release.toml
+jj-release validate # confirms everything is ready
+```
+
+`init` detects:
+
+- Forge: from the git remote URL (github.com → github, gitlab.com → gitlab, codeberg.org → forgejo)
+- Language: from files present (`Cargo.toml` → cargo, `package.json` → npm, `go.mod` → go)
+- Workspace: reads [workspace.members] from `Cargo.toml` and auto-populates member names and paths
+
+`validate` checks:
+
+- jj identity configured
+- Forge CLI available (`gh`, `glab`)
+- Manifest readable and version parseable
+- Version tag exists (needed as a baseline)
+- Trigger commit present
+- `CARGO_REGISTRY_TOKEN` set (if publishing to `crates.io`)
 
 ## First release
 
@@ -153,9 +186,25 @@ cargo_flags = []             # extra flags forwarded to `cargo publish`
 [changelog]
 enabled = true               # write a CHANGELOG.md entry on each release
 file = "CHANGELOG.md"        # path to the changelog file
+require_tag = true           # require a version tag baseline before releasing
 
 manifest_backend = "cargo"   # manifest format: cargo, npm, go
 ```
+
+---
+
+## Exit Codes
+
+`jj-release` uses distinct exit codes so CI scripts can distinguish failure
+modes:
+
+| Code | Meaning |
+|-----|--------|
+| 0 | Success, or no trigger found (nothing to do) |
+| 1 | Unexpected Error |
+| 2 | Missing or invalid configuration |
+| 3 | Missing required CLI tool (`gh`, `glab`) |
+| 101| General release failure |
 
 ---
 
@@ -267,8 +316,8 @@ Each release prepends a new section to `CHANGELOG.md`:
 
 ### Added
 
+- **(cli)** add init subcommand
 - add wallpaper cycling support
-- add IPC command interface
 
 ### Fixed
 
