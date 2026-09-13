@@ -10,7 +10,9 @@ use cargo_metadata::MetadataCommand;
 use semver::Version;
 use toml_edit::DocumentMut;
 
+use crate::commits::{self, BumpKind};
 use crate::config::WorkspaceMember;
+use crate::jj::JjBackend;
 use crate::manifest::ManifestBackend;
 
 pub struct WorkspaceManifest;
@@ -125,10 +127,69 @@ pub fn bump_member_version(root: &Path, member_name: &str, version: &Version) ->
     Ok(())
 }
 
+/// Compute the bump kind for each workspace member based on commits
+/// that touched its path since the last tag.
+pub fn member_bumps(
+    backend: &dyn JjBackend,
+    members: &[WorkspaceMember],
+    since: &str,
+    force: Option<&String>,
+) -> Result<HashMap<String, BumpKind>> {
+    let mut bumps = HashMap::new();
+    for member in members {
+        let member_commits = backend.log_commits_for_path(&format!("{since}..@"), &member.path)?;
+        let bump = commits::resolve_bump(force, &member_commits)?;
+        bumps.insert(member.name.clone(), bump);
+    }
+    Ok(bumps)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commits::CommitInfo;
+    use crate::jj::JjBackend;
+    use anyhow::Result;
+    use std::cell::RefCell;
 
+    #[derive(Default)]
+    struct MockBackend {
+        tags: Vec<String>,
+        commits: Vec<CommitInfo>,
+        calls: RefCell<Vec<String>>,
+    }
+
+    impl JjBackend for MockBackend {
+        fn list_tags(&self) -> Result<Vec<String>> {
+            Ok(self.tags.clone())
+        }
+        fn log_commits(&self, revset: &str) -> Result<Vec<CommitInfo>> {
+            self.calls.borrow_mut().push(revset.to_owned());
+            Ok(self.commits.clone())
+        }
+        fn log_commits_for_path(&self, revset: &str, _path: &str) -> Result<Vec<CommitInfo>> {
+            self.calls.borrow_mut().push(revset.to_owned());
+            Ok(self.commits.clone())
+        }
+        fn new_commit(&self, _: &str) -> Result<String> {
+            Ok(String::new())
+        }
+        fn create_tag(&self, _: &str, _: &str) -> Result<()> {
+            Ok(())
+        }
+        fn set_bookmark(&self, _: &str, _: &str) -> Result<()> {
+            Ok(())
+        }
+        fn git_push(&self, _: &str, _: Option<&str>) -> Result<()> {
+            Ok(())
+        }
+        fn git_export(&self) -> Result<()> {
+            Ok(())
+        }
+        fn check_identity(&self) -> Result<()> {
+            Ok(())
+        }
+    }
     #[test]
     fn ordered_members_lib_before_cli() {
         let members = vec![
@@ -322,5 +383,24 @@ edition = "2021"
             let versions = member_versions(dir.path()).unwrap();
             assert_eq!(versions.get("mylib").unwrap().to_string(), "0.4.0");
         }
+    }
+
+    #[test]
+    fn member_bumps_computes_per_member() {
+        let backend = MockBackend {
+            commits: vec![CommitInfo {
+                change_id: "abc".into(),
+                description: "feat: add thing".into(),
+            }],
+            ..MockBackend::default()
+        };
+        let members = vec![WorkspaceMember {
+            name: "mylib".into(),
+            path: "lib".into(),
+            publish: true,
+            depends_on: vec![],
+        }];
+        let bumps = member_bumps(&backend, &members, "v0.1.0", None).unwrap();
+        assert_eq!(*bumps.get("mylib").unwrap(), BumpKind::Minor);
     }
 }
