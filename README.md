@@ -33,7 +33,7 @@ jj git push --bookmark main
 CI detects the trigger, walks commits back to the last version tag, classifies
 them as patch/minor/major using
 [Conventional Commits](https://www.conventionalcommits.org), bumps `Cargo.toml`,
-writes a `CHANGELOG.md` entry, creates a tag, and pushes — all in one step.
+writes a `CHANGELOG.md` entry, creates a tag, and pushes, all in one step.
 
 ---
 
@@ -304,6 +304,19 @@ the version bump:
 | `chore:`, `docs:`, `test:`, etc.     | No release |
 
 The highest bump across all commits since the last tag wins.
+
+> [!NOTE]
+> `chore:`, `docs:`, `style:`, `test:`, `ci:`, and `build:` commits do not
+> trigger a release. If your only changes since the last tag are in these
+> categories, jj-release will exit with "No releasable commits". Either add a
+> `feat:` or `fix:` commit, or force a bump in `release.toml`:
+>
+> ```toml
+> [bump]
+> force = "patch"
+> ```
+>
+> Remove `force` after the release so future versions are computed automatically.
 
 ---
 
