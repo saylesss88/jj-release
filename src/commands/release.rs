@@ -158,11 +158,40 @@ fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
     {
         let ordered = workspace::ordered_members(&ws.members)?;
         println!("[dry-run] Would publish in order:");
-        for member in ordered {
-            println!("  - {} ({})", member.name, member.path);
+        match ws.versioning {
+            Versioning::Independent => {
+                for member in ordered {
+                    if let Some(ref mb) = prepared.member_bumps {
+                        if let Some((current, next)) = mb.get(&member.name) {
+                            if current == next {
+                                println!(
+                                    "  - {} ({}) {} (no changes, skipping)",
+                                    member.name, member.path, current
+                                );
+                            } else {
+                                println!(
+                                    "  - {} ({}) {} → {}",
+                                    member.name, member.path, current, next
+                                );
+                            }
+                            continue;
+                        }
+                    }
+                    println!("  - {} ({})", member.name, member.path);
+                }
+            }
+            Versioning::Unified => {
+                for member in ordered {
+                    println!(
+                        "  - {} ({}) → {}",
+                        member.name, member.path, prepared.next_version
+                    );
+                }
+            }
         }
         return Ok(());
     }
+
     println!("[dry-run] Would publish from root");
     Ok(())
 }

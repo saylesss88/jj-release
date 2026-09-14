@@ -71,6 +71,7 @@ pub fn prepend_to_file(existing: &str, new_section: &str) -> String {
 /// Render a full changelog from all tag ranges, newest first.
 /// `sections` is a list of `(tag_name, commits)` pairs in chronological order.
 /// `versions` is the corresponding list of versions.
+#[must_use]
 pub fn render_full_changelog(
     sections: &[(String, Vec<CommitInfo>)],
     versions: &[Version],

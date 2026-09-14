@@ -1,6 +1,6 @@
 //! Release pipeline orchestration.
 
-use std::{fs, path::Path};
+use std::{collections::HashMap, fs, path::Path};
 
 use anyhow::{Context, Result};
 use semver::Version;
@@ -13,6 +13,7 @@ use crate::{
     jj::JjBackend,
     manifest::ManifestBackend,
     publish::PublishBackend,
+    workspace,
 };
 
 pub struct PreparedRelease {
@@ -22,6 +23,7 @@ pub struct PreparedRelease {
     pub tag_name: String,
     pub commits: Vec<CommitInfo>,
     pub bump: BumpKind,
+    pub member_bumps: Option<HashMap<String, (Version, Version)>>,
 }
 
 pub struct ReleaseContext<'a> {
@@ -89,6 +91,38 @@ pub fn prepare_release(
         return Ok(None);
     }
 
+    let member_bumps = config.workspace.as_ref().map_or_else(
+        || None,
+        |ws| {
+            if ws.enabled && matches!(ws.versioning, crate::config::Versioning::Independent) {
+                let versions = workspace::member_versions(root).ok();
+                let bumps = workspace::member_bumps(
+                    backend,
+                    &ws.members,
+                    &since,
+                    config.bump.force.as_ref(),
+                )
+                .ok();
+                if let (Some(versions), Some(bumps)) = (versions, bumps) {
+                    let mut map = HashMap::new();
+                    for member in &ws.members {
+                        let current = versions
+                            .get(&member.name)
+                            .cloned()
+                            .unwrap_or_else(|| Version::new(0, 0, 0));
+                        let bump = bumps.get(&member.name).copied().unwrap_or(BumpKind::None);
+                        let next = commits::apply_bump(&current, bump);
+                        map.insert(member.name.clone(), (current, next));
+                    }
+                    Some(map)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        },
+    );
     let next_version = commits::apply_bump(&current_version, bump);
     let tag_name = config.tag_name(&next_version);
 
@@ -99,6 +133,7 @@ pub fn prepare_release(
         tag_name,
         commits,
         bump,
+        member_bumps,
     }))
 }
 
@@ -415,7 +450,7 @@ mod tests {
         let manifest = MockManifest {
             version: Version::parse("0.0.0").unwrap(),
         };
-        let config = config::Config::default();
+        let config = Config::default();
         let prepared = prepare_release(&backend, &manifest, &config, Path::new("/tmp")).unwrap();
         assert!(prepared.is_none());
     }
