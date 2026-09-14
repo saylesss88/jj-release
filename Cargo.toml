@@ -5,7 +5,6 @@ edition = "2024"
 description = "Semantic releases for Jujutsu VCS repositories"
 license = "Apache-2.0"
 repository = "https://github.com/saylesss88/jj-release"
-readme = "README.md"
 keywords = ["jujutsu", "release", "semantic-release", "changelog", "ci"]
 categories = ["command-line-utilities", "development-tools"]
 exclude = [".github"]
