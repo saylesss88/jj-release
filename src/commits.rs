@@ -1,6 +1,6 @@
 //! Commit walking and conventional commit parsing.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use git_conventional::Commit;
 use semver::{BuildMetadata, Prerelease, Version};
 
