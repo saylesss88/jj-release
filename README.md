@@ -92,9 +92,9 @@ jj-release validate # confirms everything is ready
 
 `init` detects:
 
-- Forge: from the git remote URL (github.com → github, gitlab.com → gitlab, codeberg.org → forgejo (comming soon))
+- Forge: from the git remote URL (`github.com` → github, `gitlab.com` → gitlab, `codeberg.org` → forgejo (comming soon))
 - Language: from files present (`Cargo.toml` → cargo, `package.json` → npm, `go.mod` → go)
-- Workspace: reads [workspace.members] from `Cargo.toml` and auto-populates member names and paths
+- Workspace: reads [workspace.members] from `Cargo.toml` and auto-populates member names, paths, and versioning strategy (unified vs independent)
 
 `validate` checks:
 
@@ -118,6 +118,15 @@ force = "minor"
 
 Remove `force` after the first release so subsequent versions are computed
 automatically from conventional commits.
+
+> [!NOTE]
+> `jj-release` requires a version tag as a baseline before releasing. If you
+> have an existing project with no tags, create one first:
+
+```sh
+jj tag set v0.1.0 -r <your-last-release-commit>
+jj-release validate  # confirm everything looks good
+```
 
 ---
 
@@ -158,17 +167,18 @@ jj new -m "Release: please"
 jj-release pr
 ```
 
-This does everything up to publishing: bumps the version, writes the changelog,
-creates the release commit. Then pushes to a `release/vX.Y.Z` bookmark and opens
-a PR via `gh pr create` or `glab mr create`. Merge the PR and CI runs
-`jj-release` to publish.
+This pushes your current bookmark to a `release/vX.Y.Z` branch and opens a PR
+with the changelog preview as the PR body. No version bump, no release commit,
+no tag. Merge the PR and CI runs `jj-release` to do the actual release.
+
 
 ---
 
 ## Configuration
 
-Drop a `release.toml` in your repo root for any overrides you need. All fields
-are optional, defaults are shown below:
+Drop a `release.toml` in your repo root, or run `jj-release init` to generate
+one automatically. All fields are optional, defaults work for most GitHub +
+Rust projects out of the box:
 
 ```toml
 [release]
@@ -250,18 +260,17 @@ forge_url = "https://gitlab.example.com"
 
 ## Workspace Support
 
-> [!NOTE]
-> Workspace support currently requires unified versioning
-> (`[workspace.package].version`). Independent per-crate versioning is planned
-> for a future release.
+`jj-release` supports Rust workspaces with two versioning strategies. Run
+`jj-release init` to auto-detect which one your workspace uses.
 
-For Rust workspaces with multiple crates, `jj-release` supports unified
-versioning where all members share a single version from [workspace.package]:
+### Unified Versioning
+
+All members share a single version from [workspace.package]. Every member bumps together on each release:
 
 ```toml
 [workspace]
 enabled = true
-versioning = "unified"
+versioning = "unified" # or "independent"
 
 [[workspace.members]]
 name = "mylib"
@@ -275,17 +284,47 @@ publish = true
 depends_on = ["mylib"]   # publish lib before cli
 ```
 
+### Independent Versioning
+
+Each member has its own version and only bumps when commits touched its path. Members get their own tag prefix:
+
+```toml
+[workspace]
+enabled = true
+versioning = "independent"
+
+[[workspace.members]]
+name = "mylib"
+path = "lib"
+publish = true
+tag_prefix = "mylib-v"   # creates tags like mylib-v0.5.0
+
+[[workspace.members]]
+name = "mycli"
+path = "cli"
+publish = true
+tag_prefix = "v"
+depends_on = ["mylib"]
+```
+
+> [!NOTE]
+> Independent versioning requires `cargo-edit` for version bumping:
+>
+> ```sh
+> cargo install cargo-edit
+> ```
+
 Members are published in dependency order: `mylib` before `mycli`. So
 `crates.io` has time to index the library before the CLI tries to depend on it.
 
 ```sh
- jj-release --dry-run
-  Current version: 0.5.32
-  Bump: Minor → 0.6.0  (tag: v0.6.0)
-[dry-run] Would release 0.6.0 as v0.6.0
+jj-release --dry-run
+  Current version: 0.7.0
+  Bump: Minor → 0.8.0  (tag: v0.8.0)
+[dry-run] Would release 0.8.0 as v0.8.0
 [dry-run] Would publish in order:
-  - mylib (lib)
-  - mycli (cli)
+  - mylib (lib) 0.4.0 → 0.5.0 (tag: mylib-v0.5.0)
+  - mycli (cli) 0.7.0 (no changes, skipping)
 ```
 
 ---
@@ -303,7 +342,9 @@ the version bump:
 | `feat!:` or `BREAKING CHANGE` footer | Major      |
 | `chore:`, `docs:`, `test:`, etc.     | No release |
 
-The highest bump across all commits since the last tag wins.
+The highest bump across all commits since the last tag wins. Scoped commits are
+preserved in the changelog. `feat(cli): add init subcommand` renders as
+`**(cli)** add init subcommand` under `### Added`
 
 > [!NOTE]
 > `chore:`, `docs:`, `style:`, `test:`, `ci:`, and `build:` commits do not
