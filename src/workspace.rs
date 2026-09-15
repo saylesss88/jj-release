@@ -156,6 +156,17 @@ pub fn member_bumps(
     Ok(bumps)
 }
 
+/// Get the effective tag name for a member version.
+#[must_use]
+pub fn member_tag_name(
+    member: &WorkspaceMember,
+    version: &Version,
+    default_prefix: &str,
+) -> String {
+    let prefix = member.tag_prefix.as_deref().unwrap_or(default_prefix);
+    format!("{prefix}{version}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -381,5 +392,31 @@ edition = "2024"
         }];
         let bumps = member_bumps(&backend, &members, "v0.1.0", None).unwrap();
         assert_eq!(*bumps.get("mylib").unwrap(), BumpKind::Minor);
+    }
+
+    #[test]
+    fn member_tag_name_uses_member_prefix() {
+        let member = WorkspaceMember {
+            name: "mylib".into(),
+            path: "lib".into(),
+            publish: true,
+            depends_on: vec![],
+            tag_prefix: Some("mylib-v".into()),
+        };
+        let v = Version::parse("0.5.0").unwrap();
+        assert_eq!(member_tag_name(&member, &v, "v"), "mylib-v0.5.0");
+    }
+
+    #[test]
+    fn member_tag_name_falls_back_to_default_prefix() {
+        let member = WorkspaceMember {
+            name: "mycli".into(),
+            path: "cli".into(),
+            publish: true,
+            depends_on: vec![],
+            tag_prefix: None,
+        };
+        let v = Version::parse("0.8.0").unwrap();
+        assert_eq!(member_tag_name(&member, &v, "v"), "v0.8.0");
     }
 }
