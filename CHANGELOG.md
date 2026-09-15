@@ -1,5 +1,36 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.3.0] - 2026-09-15
+
+### Added
+- **(init)**use crate name for independent tags
+- **(release)**wire per-member tagging into independent workspace release pipeline
+- **(workspace)**add member_tag_name helper for per-member tag naming in independent workspaces
+- add optional tag_prefix to WorkspaceMember for independent versioning
+- **(init)**tie in detect_versioning
+- add detect_versioning to auto-detect unified vs independent workspace versioning
+- show per-member version bumps in dry-run for independent workspace versioning
+- add --full flag to changelog subcommand for generating complete history
+- add render_full_changelog for generating complete changelog history
+- add member_bumps for per-member bump computation in independent workspaces
+- add log_commits_for_path to JjBackend trait for path-filtered commit walking
+- add bump_member_version via cargo set-version for independent workspace versioning
+- **(workspace)**add member_versions using cargo_metadata for independent workspace versioning
+
+### Changed
+- **(main)**create commands module and move functions out of main
+- extract run_publish helper to slim down release_pipeline
+- extract MockBackend to shared test_helpers module
+
+### Fixed
+- remove unused dependencies
+- **(changelog)**use Keep a Changelog header
+
 ## [0.2.0] - 2026-09-13
 
 ### Added
