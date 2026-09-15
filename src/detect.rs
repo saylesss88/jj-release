@@ -71,6 +71,49 @@ pub fn detect_language(root: &Path) -> Option<&'static str> {
     language_from_files(&file_refs)
 }
 
+/// Detect unified vs. independent versioning in workspace
+pub fn detect_versioning(workspace_toml: &Path) -> &'static str {
+    let Ok(raw) = fs::read_to_string(workspace_toml) else {
+        return "unified";
+    };
+    let Ok(doc) = raw.parse::<toml_edit::DocumentMut>() else {
+        return "unified";
+    };
+    let Some(members) = doc
+        .get("workspace")
+        .and_then(|w| w.get("members"))
+        .and_then(|m| m.as_array())
+    else {
+        return "unified";
+    };
+    let Some(workspace_dir) = workspace_toml.parent() else {
+        return "unified";
+    };
+
+    for member in members.iter().filter_map(|m| m.as_str()) {
+        let member_toml = workspace_dir.join(member).join("Cargo.toml");
+
+        let Ok(raw) = fs::read_to_string(&member_toml) else {
+            continue;
+        };
+        let Ok(doc) = raw.parse::<toml_edit::DocumentMut>() else {
+            continue;
+        };
+
+        // An ordinary string version means this package is independently versioned.
+        let has_own_version = doc
+            .get("package")
+            .and_then(|p| p.get("version"))
+            .is_some_and(|version| !version.is_inline_table() && version.as_str().is_some());
+
+        if has_own_version {
+            return "independent";
+        }
+    }
+
+    "unified"
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,5 +185,97 @@ mod tests {
     #[test]
     fn detect_language_unknown() {
         assert_eq!(language_from_files(&["main.py"]), None);
+    }
+
+    #[test]
+    fn detects_unified_versioning() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            r#"
+[workspace]
+members = ["lib"]
+"#,
+        )
+        .unwrap();
+        fs::create_dir(dir.path().join("lib")).unwrap();
+        fs::write(
+            dir.path().join("lib/Cargo.toml"),
+            r#"
+[package]
+name = "mylib"
+version.workspace = true
+edition = "2024"
+"#,
+        )
+        .unwrap();
+        assert_eq!(detect_versioning(&dir.path().join("Cargo.toml")), "unified");
+    }
+
+    #[test]
+    fn detects_independent_versioning() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            r#"
+[workspace]
+members = ["lib"]
+"#,
+        )
+        .unwrap();
+        fs::create_dir(dir.path().join("lib")).unwrap();
+        fs::write(
+            dir.path().join("lib/Cargo.toml"),
+            r#"
+[package]
+name = "mylib"
+version = "0.3.0"
+edition = "2024"
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            detect_versioning(&dir.path().join("Cargo.toml")),
+            "independent"
+        );
+    }
+
+    #[test]
+    fn mixed_members_detects_independent() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            r#"
+[workspace]
+members = ["lib", "cli"]
+"#,
+        )
+        .unwrap();
+        fs::create_dir(dir.path().join("lib")).unwrap();
+        fs::write(
+            dir.path().join("lib/Cargo.toml"),
+            r#"
+[package]
+name = "mylib"
+version.workspace = true
+edition = "2024"
+"#,
+        )
+        .unwrap();
+        fs::create_dir(dir.path().join("cli")).unwrap();
+        fs::write(
+            dir.path().join("cli/Cargo.toml"),
+            r#"
+[package]
+name = "mycli"
+version = "0.7.0"
+edition = "2024"
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            detect_versioning(&dir.path().join("Cargo.toml")),
+            "independent"
+        );
     }
 }
