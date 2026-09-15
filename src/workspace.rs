@@ -170,12 +170,14 @@ mod tests {
                 path: "cli".into(),
                 publish: true,
                 depends_on: vec!["mylib".into()],
+                tag_prefix: None,
             },
             WorkspaceMember {
                 name: "mylib".into(),
                 path: "lib".into(),
                 publish: true,
                 depends_on: vec![],
+                tag_prefix: None,
             },
         ];
         let ordered = ordered_members(&members).unwrap();
@@ -191,12 +193,14 @@ mod tests {
                 path: "a".into(),
                 publish: true,
                 depends_on: vec![],
+                tag_prefix: None,
             },
             WorkspaceMember {
                 name: "b".into(),
                 path: "b".into(),
                 publish: true,
                 depends_on: vec![],
+                tag_prefix: None,
             },
         ];
         let ordered = ordered_members(&members).unwrap();
@@ -212,12 +216,14 @@ mod tests {
                 path: "internal".into(),
                 publish: false,
                 depends_on: vec![],
+                tag_prefix: None,
             },
             WorkspaceMember {
                 name: "mylib".into(),
                 path: "lib".into(),
                 publish: true,
                 depends_on: vec![],
+                tag_prefix: None,
             },
         ];
         let ordered = ordered_members(&members).unwrap();
@@ -286,7 +292,7 @@ resolver = "2"
 [package]
 name = "mylib"
 version = "0.3.0"
-edition = "2021"
+edition = "2024"
 "#,
         )
         .unwrap();
@@ -301,7 +307,7 @@ edition = "2021"
 [package]
 name = "mycli"
 version = "0.5.0"
-edition = "2021"
+edition = "2024"
 "#,
         )
         .unwrap();
@@ -333,7 +339,7 @@ resolver = "2"
 [package]
 name = "mylib"
 version = "0.3.0"
-edition = "2021"
+edition = "2024"
 "#,
         )
         .unwrap();
@@ -371,6 +377,7 @@ edition = "2021"
             path: "lib".into(),
             publish: true,
             depends_on: vec![],
+            tag_prefix: None,
         }];
         let bumps = member_bumps(&backend, &members, "v0.1.0", None).unwrap();
         assert_eq!(*bumps.get("mylib").unwrap(), BumpKind::Minor);

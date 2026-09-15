@@ -161,21 +161,21 @@ fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
         match ws.versioning {
             Versioning::Independent => {
                 for member in ordered {
-                    if let Some(ref mb) = prepared.member_bumps {
-                        if let Some((current, next)) = mb.get(&member.name) {
-                            if current == next {
-                                println!(
-                                    "  - {} ({}) {} (no changes, skipping)",
-                                    member.name, member.path, current
-                                );
-                            } else {
-                                println!(
-                                    "  - {} ({}) {} → {}",
-                                    member.name, member.path, current, next
-                                );
-                            }
-                            continue;
+                    if let Some(ref mb) = prepared.member_bumps
+                        && let Some((current, next)) = mb.get(&member.name)
+                    {
+                        if current == next {
+                            println!(
+                                "  - {} ({}) {} (no changes, skipping)",
+                                member.name, member.path, current
+                            );
+                        } else {
+                            println!(
+                                "  - {} ({}) {} → {}",
+                                member.name, member.path, current, next
+                            );
                         }
+                        continue;
                     }
                     println!("  - {} ({})", member.name, member.path);
                 }

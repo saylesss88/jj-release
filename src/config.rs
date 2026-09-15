@@ -74,6 +74,7 @@ pub struct WorkspaceMember {
     pub path: String,
     pub publish: bool,
     pub depends_on: Vec<String>,
+    pub tag_prefix: Option<String>,
 }
 
 impl Default for WorkspaceMember {
@@ -83,6 +84,7 @@ impl Default for WorkspaceMember {
             path: String::new(),
             publish: true,
             depends_on: vec![],
+            tag_prefix: None,
         }
     }
 }
@@ -216,5 +218,29 @@ forge = "github"
         let cfg = Config::default();
         assert_eq!(cfg.release.forge, "github");
         assert!(!cfg.release.create_release);
+    }
+
+    #[test]
+    fn member_tag_prefix_defaults_to_none() {
+        let m = WorkspaceMember::default();
+        assert!(m.tag_prefix.is_none());
+    }
+
+    #[test]
+    fn parse_member_tag_prefix() {
+        let raw = r#"
+[workspace]
+enabled = true
+versioning = "independent"
+
+[[workspace.members]]
+name = "mylib"
+path = "lib"
+publish = true
+tag_prefix = "mylib-v"
+"#;
+        let cfg: Config = toml::from_str(raw).unwrap();
+        let member = &cfg.workspace.unwrap().members[0];
+        assert_eq!(member.tag_prefix.as_deref(), Some("mylib-v"));
     }
 }
