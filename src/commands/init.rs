@@ -62,6 +62,8 @@ manifest_backend = "{language}"
         // Try to parse members from [workspace] table.
         let members = parse_workspace_members(&workspace_toml);
 
+        let versioning = detect::detect_versioning(&workspace_toml);
+        println!("→ Detected versioning: {versioning}");
         let member_config = if members.is_empty() {
             r#"
 # Add your workspace members below:
@@ -75,16 +77,18 @@ manifest_backend = "{language}"
             let mut s = String::new();
             for (name, path) in &members {
                 println!("  → Found member: {name} ({path})");
+                let tag_prefix = if versioning == "independent" {
+                    format!("\ntag_prefix = \"{name}-v\"")
+                } else {
+                    String::new()
+                };
                 let _ = write!(
                     s,
-                    "\n[[workspace.members]]\nname = \"{name}\"\npath = \"{path}\"\npublish = true\n# depends_on = [] # add names of members this depends on\n"
+                    "\n[[workspace.members]]\nname = \"{name}\"\npath = \"{path}\"\npublish = true{tag_prefix}\n# depends_on = [] # add names of members this depends on\n"
                 );
             }
             s
         };
-
-        let versioning = detect::detect_versioning(&workspace_toml);
-        println!("→ Detected versioning: {versioning}");
 
         let _ = write!(
             content,
@@ -97,6 +101,7 @@ manifest_backend = "{language}"
 
     Ok(())
 }
+
 fn parse_workspace_members(cargo_toml: &Path) -> Vec<(String, String)> {
     let Ok(raw) = fs::read_to_string(cargo_toml) else {
         return vec![];
