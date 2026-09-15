@@ -137,8 +137,13 @@ fn run_publish(
                     .cloned()
                     .unwrap_or_else(|| semver::Version::new(0, 0, 0));
                 let next = commits::apply_bump(&current, bump);
+                let tag = workspace::member_tag_name(member, &next, &config.release.tag_prefix);
                 info!("→ Bumping {} to {next}…", member.name);
                 workspace::bump_member_version(root, &member.name, &next)?;
+                info!("→ Creating tag {tag}...");
+                ctx.backend.create_tag(&tag, "@")?;
+                info!("→  Pushing tag {tag}...");
+                ctx.backend.git_push(&config.release.bookmark, Some(&tag))?;
                 info!("→ Publishing {}…", member.name);
                 ctx.publisher
                     .publish(&root.join(&member.path), &config.publish.cargo_flags)?;
@@ -170,9 +175,14 @@ fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
                                 member.name, member.path, current
                             );
                         } else {
+                            let tag = workspace::member_tag_name(
+                                member,
+                                next,
+                                &config.release.tag_prefix,
+                            );
                             println!(
-                                "  - {} ({}) {} → {}",
-                                member.name, member.path, current, next
+                                "  - {} ({}) {} → {} (tag: {})",
+                                member.name, member.path, current, next, tag
                             );
                         }
                         continue;
