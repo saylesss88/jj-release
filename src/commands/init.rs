@@ -83,9 +83,12 @@ manifest_backend = "{language}"
             s
         };
 
+        let versioning = detect::detect_versioning(&workspace_toml);
+        println!("→ Detected versioning: {versioning}");
+
         let _ = write!(
             content,
-            "\n[workspace]\nenabled = true\nversioning = \"unified\"\n{member_config}"
+            "\n[workspace]\nenabled = true\nversioning = \"{versioning}\"\n{member_config}"
         );
     }
 

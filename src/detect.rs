@@ -72,6 +72,7 @@ pub fn detect_language(root: &Path) -> Option<&'static str> {
 }
 
 /// Detect unified vs. independent versioning in workspace
+#[must_use]
 pub fn detect_versioning(workspace_toml: &Path) -> &'static str {
     let Ok(raw) = fs::read_to_string(workspace_toml) else {
         return "unified";
