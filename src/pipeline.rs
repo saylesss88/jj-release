@@ -108,6 +108,7 @@ pub fn prepare_release(
                     &ws.members,
                     &since,
                     config.bump.force.as_ref(),
+                    &config.release.tag_prefix,
                 )
                 .ok();
                 if let (Some(versions), Some(bumps)) = (versions, bumps) {

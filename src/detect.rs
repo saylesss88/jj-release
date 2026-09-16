@@ -117,6 +117,7 @@ pub fn detect_versioning(workspace_toml: &Path) -> &'static str {
 
 /// Parse (owner, repo) from a git remote URL.
 /// Handles both HTTPS and SSH formats.
+#[must_use]
 pub fn parse_remote_owner_repo(url: &str) -> Option<(String, String)> {
     // HTTPS: https://codeberg.org/owner/repo.git
     // SSH:   git@codeberg.org:owner/repo.git

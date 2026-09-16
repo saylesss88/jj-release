@@ -161,9 +161,9 @@ pub fn member_bumps(
                 Some((name.clone(), version))
             })
             .max_by(|a, b| a.1.cmp(&b.1))
-            .map(|(name, _)| name)
-            .unwrap_or_else(|| since.to_owned());
-        let member_commits = backend.log_commits_for_path(&format!("{since}..@"), &member.path)?;
+            .map_or_else(|| since.to_owned(), |(name, _)| name);
+        let member_commits =
+            backend.log_commits_for_path(&format!("{member_since}..@"), &member.path)?;
         let bump = commits::resolve_bump(force, &member_commits)?;
         bumps.insert(member.name.clone(), bump);
     }
@@ -404,7 +404,7 @@ edition = "2024"
             depends_on: vec![],
             tag_prefix: None,
         }];
-        let bumps = member_bumps(&backend, &members, "v0.1.0", None).unwrap();
+        let bumps = member_bumps(&backend, &members, "v0.1.0", None, "v").unwrap();
         assert_eq!(*bumps.get("mylib").unwrap(), BumpKind::Minor);
     }
 

@@ -146,6 +146,7 @@ fn run_publish(
                 &ws.members,
                 &since,
                 config.bump.force.as_ref(),
+                &config.release.tag_prefix,
             )?;
             let versions = workspace::member_versions(root)?;
             for member in &ordered {
