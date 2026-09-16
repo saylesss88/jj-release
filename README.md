@@ -171,7 +171,6 @@ This pushes your current bookmark to a `release/vX.Y.Z` branch and opens a PR
 with the changelog preview as the PR body. No version bump, no release commit,
 no tag. Merge the PR and CI runs `jj-release` to do the actual release.
 
-
 ---
 
 ## Configuration
@@ -211,13 +210,13 @@ manifest_backend = "cargo"   # manifest format: cargo, npm, go
 `jj-release` uses distinct exit codes so CI scripts can distinguish failure
 modes:
 
-| Code | Meaning |
-|-----|--------|
-| 0 | Success, or no trigger found (nothing to do) |
-| 1 | Unexpected Error |
-| 2 | Missing or invalid configuration |
-| 3 | Missing required CLI tool (`gh`, `glab`) |
-| 101| General release failure |
+| Code | Meaning                                      |
+| ---- | -------------------------------------------- |
+| 0    | Success, or no trigger found (nothing to do) |
+| 1    | Unexpected Error                             |
+| 2    | Missing or invalid configuration             |
+| 3    | Missing required CLI tool (`gh`, `glab`)     |
+| 101  | General release failure                      |
 
 ---
 
@@ -225,12 +224,12 @@ modes:
 
 `jj-release` supports multiple forges for release creation and PR/MR opening:
 
-| Forge            | `forge =`   | CLI required | Release       | PR/MR       | Status                |
-| ---------------- | ----------- | ------------ | ------------- | ----------- | --------------------- |
-| GitHub (default) | `"github"`  | `gh`         | ✓             | ✓           | ✓ tested              |
-| GitLab           | `"gitlab"`  | `glab`       | ✓             | ✓ (MR)      | implemented, untested |
-| Forgejo/Codeberg | `"forgejo"` | none (REST)  | \ coming soon | coming soon | –                     |
-| None             | `"none"`    | –            | –             | –           | –                     |
+| Forge            | `forge =`   | CLI required | Release | PR/MR  | Status                |
+| ---------------- | ----------- | ------------ | ------- | ------ | --------------------- |
+| GitHub (default) | `"github"`  | `gh`         | ✓       | ✓      | ✓ tested              |
+| GitLab           | `"gitlab"`  | `glab`       | ✓       | ✓ (MR) | implemented, untested |
+| Forgejo/Codeberg | `"forgejo"` | none (REST)  | ✓ \     | ✓      | implemented, untested |
+| None             | `"none"`    | –            | –       | –      | –                     |
 
 For GitLab, set `forge_url` if using a self-hosted instance:
 
@@ -239,6 +238,21 @@ For GitLab, set `forge_url` if using a self-hosted instance:
 forge = "gitlab"
 forge_url = "https://gitlab.example.com"
 ```
+
+For Forgejo/Codeberg, set `forge_url` to your instance and provide a token:
+
+```toml
+[release]
+forge = "forgejo"
+forge_url = "https://codeberg.org"
+```
+
+```sh
+export FORGEJO_TOKEN=your-token
+```
+
+The token needs `repository` scope, create one at
+`https://codeberg.org/user/settings/applications`.
 
 ---
 
