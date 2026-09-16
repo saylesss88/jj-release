@@ -16,6 +16,7 @@ clap = {version = "4.6.6", default-features = false, features = [
 	"derive",
 	"std",
 ]}
+dirs = "7.0.0"
 git-conventional = "1.1.0"
 jiff = {version = "0.2.34", features = ["std"], default-features = false}
 semver = {version = "1.0.28", default-features = false}

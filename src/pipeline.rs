@@ -371,11 +371,20 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &std::path::Pat
 
     // 6. CARGO_REGISTRY_TOKEN.
     if config.publish.cargo {
+        let has_env_token = std::env::var("CARGO_REGISTRY_TOKEN").is_ok();
+        let has_credentials = dirs::home_dir()
+            .is_some_and(|h| h.join(".cargo/credentials.toml").exists());
+
         check!(
             "CARGO_REGISTRY_TOKEN",
-            std::env::var("CARGO_REGISTRY_TOKEN")
-                .map(|_| "set".to_owned())
-                .map_err(|_| "not set, needed for cargo publish".to_owned())
+            if has_env_token || has_credentials {
+                Ok("configured".to_owned())
+            } else {
+                Err(
+                    "not set and no ~/.cargo/credentials.toml found — needed for cargo publish"
+                        .to_owned(),
+                )
+            }
         );
     }
 
