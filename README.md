@@ -103,7 +103,8 @@ jj-release validate # confirms everything is ready
 - Manifest readable and version parseable
 - Version tag exists (needed as a baseline)
 - Trigger commit present
-- `CARGO_REGISTRY_TOKEN` set (if publishing to `crates.io`)
+- `CARGO_REGISTRY_TOKEN` set/`.cargo/credentials.toml` present (if publishing to
+  `crates.io`)
 
 ## First release
 
