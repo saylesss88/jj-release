@@ -1,8 +1,9 @@
 //! Forge backends for GitHub, GitLab, and Forgejo
 
 use std::process::Command;
+use std::borrow::ToOwned;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 pub struct GitHubForge;
 
@@ -87,11 +88,61 @@ pub struct ForgejoForge {
 }
 
 impl ForgeBackend for ForgejoForge {
-    fn create_release(&self, _tag: &str) -> Result<()> {
-        bail!("Forgejo forge support is not yet implemented")
+    fn create_release(&self, tag: &str) -> Result<()> {
+        let url = format!(
+            "{}/api/v1/repos/{}/{}/releases",
+            self.host, self.owner, self.repo
+        );
+        let body = serde_json::json!({
+            "tag_name": tag,
+            "name": tag,
+            "draft": false,
+            "prerelease": false,
+        });
+        let response = ureq::post(&url)
+            .header("Authorization", &format!("token {}", self.token))
+            .header("Content-Type", "application/json")
+            .send_json(body)
+            .context("creating Forgejo release")?;
+        if !response.status().is_success() {
+            bail!(
+                "Forgejo release creation failed with status {}",
+                response.status()
+            );
+        }
+        Ok(())
     }
-    fn create_pr(&self, _tag: &str, _head: &str, _base: &str, _body: &str) -> Result<()> {
-        bail!("Forgejo forge support is not yet implemented")
+    fn create_pr(&self, tag: &str, head: &str, base: &str, body: &str) -> Result<()> {
+        let url = format!(
+            "{}/api/v1/repos/{}/{}/pulls",
+            self.host, self.owner, self.repo
+        );
+        let payload = serde_json::json!({
+            "title": format!("chore: release {tag}"),
+            "body": body,
+            "head": head,
+            "base": base,
+        });
+        let response = ureq::post(&url)
+            .header("Authorization", &format!("token {}", self.token))
+            .header("Content-Type", "application/json")
+            .send_json(payload)
+            .context("creating Forgejo PR")?;
+        if !response.status().is_success() {
+            bail!(
+                "Forgejo PR creation failed with status {}",
+                response.status()
+            );
+        }
+        let pr_url = response
+            .into_body()
+            .read_json::<serde_json::Value>()
+            .ok()
+            .and_then(|v| v["html_url"].as_str().map(ToOwned::to_owned));
+        if let Some(url) = pr_url {
+            println!("  PR: {url}");
+        }
+        Ok(())
     }
 }
 
@@ -139,9 +190,11 @@ mod tests {
     #[test]
     fn no_forge_create_pr_is_noop() {
         let forge = NoForge;
-        assert!(forge
-            .create_pr("v0.2.0", "release/v0.2.0", "main", "")
-            .is_ok());
+        assert!(
+            forge
+                .create_pr("v0.2.0", "release/v0.2.0", "main", "")
+                .is_ok()
+        );
     }
 
     #[test]

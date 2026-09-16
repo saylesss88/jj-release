@@ -123,12 +123,19 @@ fn run() -> Result<(), errors::CliError> {
 
             Box::new(GitLabForge)
         }
-        "forgejo" => Box::new(ForgejoForge {
-            host: config.release.forge_url.clone(),
-            token: std::env::var("FORGEJO_TOKEN").unwrap_or_default(),
-            owner: String::new(), // TODO: parse from git remote
-            repo: String::new(),  // TODO: parse from git remote
-        }),
+        "forgejo" => {
+            let (owner, repo) = detect::remote_url(&root)
+                .as_deref()
+                .and_then(detect::parse_remote_owner_repo)
+                .unwrap_or_else(|| (String::new(), String::new()));
+            Box::new(ForgejoForge {
+                host: config.release.forge_url.clone(),
+                token: std::env::var("FORGEJO_TOKEN").unwrap_or_default(),
+                owner,
+                repo,
+            })
+        }
+
         _ => Box::new(NoForge),
     };
 
