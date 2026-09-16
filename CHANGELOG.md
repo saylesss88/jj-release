@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-16
+
+### Added
+- **(pipeline)**create first tag if one doesn't exist rather than warning user
+- implement ForgejoForge with REST API for releases and PRs
+- add parse_remote_owner_repo for extracting owner/repo from git remote URLs
+
+### Fixed
+- **(pipeline)**validate check for CARGO_REGISTRY_TOKEN too strict
+- call sites of member_bumps
+- **(workspace)**in member_bumps add per-member tag prefixes when computing since on each member
+- suppress unified version info in independent workspace dry-run output
+- create per-member release commits and tags in independent workspace mode
+- **(release)**skip workspace-level tag and version bump in independent mode
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.3.0] - 2026-09-15
 
 ### Added
