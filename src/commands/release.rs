@@ -31,12 +31,19 @@ pub fn release_pipeline(
         commits,
         ..
     } = &prepared;
+    let is_independent = config
+        .workspace
+        .as_ref()
+        .is_some_and(|ws| ws.enabled && matches!(ws.versioning, Versioning::Independent));
 
     info!("  Current version: {}", prepared.current_version);
-    info!(
-        "  Bump: {:?} → {next_version}  (tag: {tag_name})",
-        prepared.bump
-    );
+
+    if !is_independent {
+        info!(
+            "  Bump: {:?} → {next_version}  (tag: {tag_name})",
+            prepared.bump
+        );
+    }
 
     if dry_run {
         return print_dry_run(&prepared, config);
@@ -160,8 +167,7 @@ fn run_publish(
                 info!("→ Creating tag {tag}...");
                 ctx.backend.create_tag(&tag, "@")?;
                 info!("→  Pushing tag {tag}...");
-                ctx.backend
-                    .git_push(None, Some(&tag))?;
+                ctx.backend.git_push(None, Some(&tag))?;
                 info!("→ Publishing {}…", member.name);
                 ctx.publisher
                     .publish(&root.join(&member.path), &config.publish.cargo_flags)?;
@@ -172,7 +178,7 @@ fn run_publish(
 }
 
 fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
- let is_independent = config
+    let is_independent = config
         .workspace
         .as_ref()
         .is_some_and(|ws| ws.enabled && matches!(ws.versioning, Versioning::Independent));
@@ -186,7 +192,7 @@ fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
         );
     }
 
-   if let Some(ws) = &config.workspace
+    if let Some(ws) = &config.workspace
         && ws.enabled
     {
         let ordered = workspace::ordered_members(&ws.members)?;
