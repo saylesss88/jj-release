@@ -92,7 +92,7 @@ jj-release validate # confirms everything is ready
 
 `init` detects:
 
-- Forge: from the git remote URL (`github.com` → github, `gitlab.com` → gitlab, `codeberg.org` → forgejo (comming soon))
+- Forge: from the git remote URL (`github.com` → github, `gitlab.com` → gitlab, `codeberg.org` → forgejo)
 - Language: from files present (`Cargo.toml` → cargo, `package.json` → npm, `go.mod` → go)
 - Workspace: reads [workspace.members] from `Cargo.toml` and auto-populates member names, paths, and versioning strategy (unified vs independent)
 
@@ -119,6 +119,8 @@ force = "minor"
 Remove `force` after the first release so subsequent versions are computed
 automatically from conventional commits.
 
+If a tag doesn't already exist, `jj-release` will create one for you.
+
 ---
 
 ## Local usage
@@ -136,12 +138,12 @@ Running `jj-release` locally does the full pipeline:
 1. Scans for the trigger commit since the last version tag
 2. Walks commits and computes the semver bump from conventional commit types
 3. Writes a new section to `CHANGELOG.md`
-4. Bumps the version in `Cargo.toml`
+4. Bumps the version in manifest
 5. Creates a `chore: release vX.Y.Z` commit containing both changes
 6. Tags the commit with `vX.Y.Z`
 7. Advances the bookmark and pushes to origin
 8. Runs `cargo publish`
-9. Creates a GitHub release (if `github_release = true`)
+9. Creates a GitHub release (if `forge = "github"`)
 
 The `CARGO_REGISTRY_TOKEN` environment variable is only needed in CI where
 there's no credentials file.
@@ -150,7 +152,7 @@ there's no credentials file.
 
 ## PR Workflow
 
-If you want to review the release commit before it publishes, use the pr
+If you want to review before it publishes, use the `pr`
 subcommand instead:
 
 ```sh
@@ -209,6 +211,8 @@ modes:
 | 3    | Missing required CLI tool (`gh`, `glab`)     |
 | 101  | General release failure                      |
 
+This was adapted from `cargo-release`'s error handling.
+
 ---
 
 ## Forge Support
@@ -219,7 +223,7 @@ modes:
 | ---------------- | ----------- | ------------ | ------- | ------ | --------------------- |
 | GitHub (default) | `"github"`  | `gh`         | ✓       | ✓      | ✓ tested              |
 | GitLab           | `"gitlab"`  | `glab`       | ✓       | ✓ (MR) | implemented, untested |
-| Forgejo/Codeberg | `"forgejo"` | none (REST)  | ✓ \     | ✓      | implemented, untested |
+| Forgejo/Codeberg | `"forgejo"` | none (REST)  | ✓       | ✓      | implemented, untested |
 | None             | `"none"`    | –            | –       | –      | –                     |
 
 For GitLab, set `forge_url` if using a self-hosted instance:
@@ -324,12 +328,11 @@ Members are published in dependency order: `mylib` before `mycli`. So
 
 ```sh
 jj-release --dry-run
-  Current version: 0.7.0
-  Bump: Minor → 0.8.0  (tag: v0.8.0)
-[dry-run] Would release 0.8.0 as v0.8.0
+ Current version: 0.7.0
+[dry-run] Independent workspace release:
 [dry-run] Would publish in order:
-  - mylib (lib) 0.4.0 → 0.5.0 (tag: mylib-v0.5.0)
-  - mycli (cli) 0.7.0 (no changes, skipping)
+  - mylib (lib) 0.4.0 (no changes, skipping)
+  - mycli (cli) 0.7.0 → 0.8.0 (tag: mycli-v0.8.0)
 ```
 
 ---
