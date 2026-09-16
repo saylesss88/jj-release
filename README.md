@@ -119,15 +119,6 @@ force = "minor"
 Remove `force` after the first release so subsequent versions are computed
 automatically from conventional commits.
 
-> [!NOTE]
-> `jj-release` requires a version tag as a baseline before releasing. If you
-> have an existing project with no tags, create one first:
-
-```sh
-jj tag set v0.1.0 -r <your-last-release-commit>
-jj-release validate  # confirm everything looks good
-```
-
 ---
 
 ## Local usage
