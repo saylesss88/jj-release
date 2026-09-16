@@ -41,43 +41,58 @@ pub fn release_pipeline(
     if dry_run {
         return print_dry_run(&prepared, config);
     }
-    // 1. Write changelog.
-    if config.changelog.enabled {
-        info!("→ Writing changelog…");
-        let changelog_path = root.join(&config.changelog.file);
-        let existing = if changelog_path.exists() {
-            fs::read_to_string(&changelog_path)?
-        } else {
-            String::new()
-        };
-        let section = changelog::render_changelog_section(commits, next_version);
-        let updated = changelog::prepend_to_file(&existing, &section);
-        fs::write(&changelog_path, updated)?;
+
+    let is_independent = config
+        .workspace
+        .as_ref()
+        .is_some_and(|ws| ws.enabled && matches!(ws.versioning, Versioning::Independent));
+
+    if !is_independent {
+        // 1. Write changelog.
+        if config.changelog.enabled {
+            info!("→ Writing changelog…");
+            let changelog_path = root.join(&config.changelog.file);
+            let existing = if changelog_path.exists() {
+                fs::read_to_string(&changelog_path)?
+            } else {
+                String::new()
+            };
+            let section = changelog::render_changelog_section(commits, next_version);
+            let updated = changelog::prepend_to_file(&existing, &section);
+            fs::write(&changelog_path, updated)?;
+        }
+
+        // 2. Bump version and create release commit.
+        info!("→ Bumping version to {next_version}…");
+        ctx.manifest.write_version(root, next_version)?;
+        let release_message = format!("chore: release {tag_name}");
+        info!("→ Creating commit {:?}…", release_message);
+        ctx.backend.new_commit(&release_message)?;
+
+        // 3. Tag, bookmark, push.
+        info!("→ Creating tag {tag_name}…");
+        ctx.backend.create_tag(tag_name, "@")?;
+        info!("→ Moving bookmark {:?} to @…", config.release.bookmark);
+        ctx.backend.set_bookmark(&config.release.bookmark, "@")?;
+        info!("→ Exporting to git…");
+        ctx.backend.git_export()?;
+        info!("→ Pushing bookmark and tags…");
+        ctx.backend
+            .git_push(Some(&config.release.bookmark), Some(tag_name))?;
     }
-
-    // 2. Bump version and create release commit.
-    info!("→ Bumping version to {next_version}…");
-    ctx.manifest.write_version(root, next_version)?;
-    let release_message = format!("chore: release {tag_name}");
-    info!("→ Creating commit {:?}…", release_message);
-    ctx.backend.new_commit(&release_message)?;
-
-    // 3. Tag, bookmark, push.
-    info!("→ Creating tag {tag_name}…");
-    ctx.backend.create_tag(tag_name, "@")?;
-    info!("→ Moving bookmark {:?} to @…", config.release.bookmark);
-    ctx.backend.set_bookmark(&config.release.bookmark, "@")?;
-    info!("→ Exporting to git…");
-    ctx.backend.git_export()?;
-    info!("→ Pushing bookmark and tags…");
-    ctx.backend
-        .git_push(Some(&config.release.bookmark), Some(tag_name))?;
 
     // 4. Publish.
     run_publish(ctx, config, root, &prepared, quiet)?;
-
+    if is_independent {
+        info!("→ Moving bookmark {:?} to @…", config.release.bookmark);
+        ctx.backend.set_bookmark(&config.release.bookmark, "@")?;
+        info!("→ Exporting to git…");
+        ctx.backend.git_export()?;
+        info!("→ Pushing bookmark…");
+        ctx.backend.git_push(Some(&config.release.bookmark), None)?;
+    }
     // 5. Forge release.
-    if config.release.create_release {
+    if !is_independent && config.release.create_release {
         info!("→ Creating forge release {tag_name}…");
         ctx.forge.create_release(tag_name)?;
     }
@@ -143,7 +158,8 @@ fn run_publish(
                 info!("→ Creating tag {tag}...");
                 ctx.backend.create_tag(&tag, "@")?;
                 info!("→  Pushing tag {tag}...");
-                ctx.backend.git_push(Some(&config.release.bookmark), Some(&tag))?;
+                ctx.backend
+                    .git_push(Some(&config.release.bookmark), Some(&tag))?;
                 info!("→ Publishing {}…", member.name);
                 ctx.publisher
                     .publish(&root.join(&member.path), &config.publish.cargo_flags)?;
