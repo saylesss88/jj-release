@@ -146,9 +146,23 @@ pub fn member_bumps(
     members: &[WorkspaceMember],
     since: &str,
     force: Option<&String>,
+    tag_prefix: &str,
 ) -> Result<HashMap<String, BumpKind>> {
     let mut bumps = HashMap::new();
     for member in members {
+        // Use member's tag_prefix if set, otherwise workspace default.
+        let prefix = member.tag_prefix.as_deref().unwrap_or(tag_prefix);
+        let all_tags = backend.list_tags()?;
+        let member_since = all_tags
+            .iter()
+            .filter_map(|name| {
+                let stripped = name.strip_prefix(prefix)?;
+                let version = semver::Version::parse(stripped).ok()?;
+                Some((name.clone(), version))
+            })
+            .max_by(|a, b| a.1.cmp(&b.1))
+            .map(|(name, _)| name)
+            .unwrap_or_else(|| since.to_owned());
         let member_commits = backend.log_commits_for_path(&format!("{since}..@"), &member.path)?;
         let bump = commits::resolve_bump(force, &member_commits)?;
         bumps.insert(member.name.clone(), bump);
