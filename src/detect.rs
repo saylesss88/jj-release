@@ -115,6 +115,24 @@ pub fn detect_versioning(workspace_toml: &Path) -> &'static str {
     "unified"
 }
 
+/// Parse (owner, repo) from a git remote URL.
+/// Handles both HTTPS and SSH formats.
+pub fn parse_remote_owner_repo(url: &str) -> Option<(String, String)> {
+    // HTTPS: https://codeberg.org/owner/repo.git
+    // SSH:   git@codeberg.org:owner/repo.git
+    let path = if url.contains("://") {
+        // HTTPS format
+        url.splitn(4, '/').nth(3)?
+    } else {
+        // SSH format: git@host:owner/repo.git
+        url.split(':').nth(1)?
+    };
+
+    let path = path.trim_end_matches(".git");
+    let (owner, repo) = path.split_once('/')?;
+    Some((owner.to_owned(), repo.to_owned()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -278,5 +296,33 @@ edition = "2024"
             detect_versioning(&dir.path().join("Cargo.toml")),
             "independent"
         );
+    }
+    #[test]
+    fn parses_https_remote() {
+        let (owner, repo) =
+            parse_remote_owner_repo("https://codeberg.org/saylesss88/myrepo.git").unwrap();
+        assert_eq!(owner, "saylesss88");
+        assert_eq!(repo, "myrepo");
+    }
+
+    #[test]
+    fn parses_ssh_remote() {
+        let (owner, repo) =
+            parse_remote_owner_repo("git@codeberg.org:saylesss88/myrepo.git").unwrap();
+        assert_eq!(owner, "saylesss88");
+        assert_eq!(repo, "myrepo");
+    }
+
+    #[test]
+    fn parses_without_git_extension() {
+        let (owner, repo) =
+            parse_remote_owner_repo("https://codeberg.org/saylesss88/myrepo").unwrap();
+        assert_eq!(owner, "saylesss88");
+        assert_eq!(repo, "myrepo");
+    }
+
+    #[test]
+    fn returns_none_for_invalid_url() {
+        assert!(parse_remote_owner_repo("not-a-url").is_none());
     }
 }
