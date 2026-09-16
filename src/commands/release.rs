@@ -71,7 +71,7 @@ pub fn release_pipeline(
     ctx.backend.git_export()?;
     info!("→ Pushing bookmark and tags…");
     ctx.backend
-        .git_push(&config.release.bookmark, Some(tag_name))?;
+        .git_push(Some(&config.release.bookmark), Some(tag_name))?;
 
     // 4. Publish.
     run_publish(ctx, config, root, &prepared, quiet)?;
@@ -143,7 +143,7 @@ fn run_publish(
                 info!("→ Creating tag {tag}...");
                 ctx.backend.create_tag(&tag, "@")?;
                 info!("→  Pushing tag {tag}...");
-                ctx.backend.git_push(&config.release.bookmark, Some(&tag))?;
+                ctx.backend.git_push(Some(&config.release.bookmark), Some(&tag))?;
                 info!("→ Publishing {}…", member.name);
                 ctx.publisher
                     .publish(&root.join(&member.path), &config.publish.cargo_flags)?;

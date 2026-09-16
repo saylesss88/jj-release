@@ -39,7 +39,7 @@ pub fn release_pr(
     info!("→ Exporting to git…");
     ctx.backend.git_export()?;
     info!("→ Pushing {pr_bookmark}…");
-    ctx.backend.git_push(&pr_bookmark, None)?;
+    ctx.backend.git_push(Some(&pr_bookmark), None)?;
     info!("→ Opening PR…");
     ctx.forge.create_pr(
         &prepared.tag_name,

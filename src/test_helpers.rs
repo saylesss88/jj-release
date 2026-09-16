@@ -33,7 +33,7 @@ pub mod mock {
         fn set_bookmark(&self, _: &str, _: &str) -> Result<()> {
             Ok(())
         }
-        fn git_push(&self, _: &str, _: Option<&str>) -> Result<()> {
+        fn git_push(&self, _: Option<&str>, _: Option<&str>) -> Result<()> {
             Ok(())
         }
         fn git_export(&self) -> Result<()> {

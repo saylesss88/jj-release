@@ -62,16 +62,23 @@ pub fn prepare_release(
 ) -> Result<Option<PreparedRelease>> {
     backend.check_identity()?;
 
-    let since: String = if let Some(tag) =
-        commits::latest_version_tag(backend, &config.release.tag_prefix)?
-    {
-        tag.name
-    } else if config.changelog.require_tag {
-        anyhow::bail!(
-            "no version tag found\nhint: create a baseline tag first:\n  jj tag set v0.1.0 -r <your-last-release-commit>"
-        );
-    } else {
-        "root()".to_owned()
+    let since = match commits::latest_version_tag(backend, &config.release.tag_prefix)? {
+        Some(tag) => tag.name,
+        None => {
+            if config.changelog.require_tag {
+                // Auto-tag the current version as baseline instead of erroring.
+                let current = manifest.read_version(root)?;
+                let tag_name = format!("{}{current}", config.release.tag_prefix);
+                eprintln!(
+                    "hint: no version tag found — tagging current version {tag_name} as baseline"
+                );
+                backend.create_tag(&tag_name, "@-")?;
+                backend.git_push(None, Some(&tag_name))?;
+                tag_name
+            } else {
+                "root()".to_owned()
+            }
+        }
     };
 
     // Check for trigger commit.
