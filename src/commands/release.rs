@@ -155,11 +155,13 @@ fn run_publish(
                 let tag = workspace::member_tag_name(member, &next, &config.release.tag_prefix);
                 info!("→ Bumping {} to {next}…", member.name);
                 workspace::bump_member_version(root, &member.name, &next)?;
+                info!("→ Creating commit for {}…", member.name);
+                ctx.backend.new_commit(&format!("chore: release {tag}"))?;
                 info!("→ Creating tag {tag}...");
                 ctx.backend.create_tag(&tag, "@")?;
                 info!("→  Pushing tag {tag}...");
                 ctx.backend
-                    .git_push(Some(&config.release.bookmark), Some(&tag))?;
+                    .git_push(None, Some(&tag))?;
                 info!("→ Publishing {}…", member.name);
                 ctx.publisher
                     .publish(&root.join(&member.path), &config.publish.cargo_flags)?;
@@ -170,11 +172,21 @@ fn run_publish(
 }
 
 fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
-    println!(
-        "[dry-run] Would release {} as {}",
-        prepared.next_version, prepared.tag_name
-    );
-    if let Some(ws) = &config.workspace
+ let is_independent = config
+        .workspace
+        .as_ref()
+        .is_some_and(|ws| ws.enabled && matches!(ws.versioning, Versioning::Independent));
+
+    if is_independent {
+        println!("[dry-run] Independent workspace release:");
+    } else {
+        println!(
+            "[dry-run] Would release {} as {}",
+            prepared.next_version, prepared.tag_name
+        );
+    }
+
+   if let Some(ws) = &config.workspace
         && ws.enabled
     {
         let ordered = workspace::ordered_members(&ws.members)?;
