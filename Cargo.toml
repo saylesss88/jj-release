@@ -10,22 +10,31 @@ categories = ["command-line-utilities", "development-tools"]
 exclude = [".github"]
 
 [dependencies]
-anyhow = {version = "1.0.104", default-features = false}
+anyhow = { version = "1.0.104", default-features = false }
 cargo_metadata = "0.23.1"
-clap = { version = "4.6.6", default-features = false, features = ["derive", "std"] }
+clap = { version = "4.6.6", default-features = false, features = [
+  "derive",
+  "std",
+] }
 dirs = "7.0.0"
 git-conventional = "1.1.0"
 jiff = { version = "0.2.34", features = ["std"], default-features = false }
-semver = {version = "1.0.28", default-features = false}
-serde = {version = "1.0.229", default-features = false}
+semver = { version = "1.0.28", default-features = false }
+serde = { version = "1.0.229", default-features = false }
 serde_json = "1.0.151"
-toml = { version = "1.1.6", features = ["parse", "serde"], default-features = false }
+toml = { version = "1.1.6", features = [
+  "parse",
+  "serde",
+], default-features = false }
 toml_edit = "0.25.15"
-ureq = { version = "3.4.2", features = ["_tls", "json"], default-features = false }
+ureq = { version = "3.4.2", features = [
+  "_tls",
+  "json",
+], default-features = false }
 which = "8.0.6"
 
 [dev-dependencies]
-tempfile = {version = "3", default-features = false}
+tempfile = { version = "3", default-features = false }
 
 [lib]
 name = "jj_release"
@@ -45,13 +54,13 @@ debug = false
 [lints.rust]
 unsafe_code = "forbid"
 # missing_docs = "warn"
-rust_2018_idioms = {level = "warn", priority = -1}
-future_incompatible = {level = "warn", priority = -1}
-nonstandard_style = {level = "warn", priority = -1}
+rust_2018_idioms = { level = "warn", priority = -1 }
+future_incompatible = { level = "warn", priority = -1 }
+nonstandard_style = { level = "warn", priority = -1 }
 
 [lints.clippy]
-all = {level = "warn", priority = -1}
-pedantic = {level = "warn", priority = -1}
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
 module_name_repetitions = "allow"
 must_use_candidate = "allow"
 todo = "warn"

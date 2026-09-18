@@ -2,7 +2,7 @@
 
 mod commands;
 
-use std::{env, path::PathBuf};
+use std::{env, process, path::PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -68,7 +68,7 @@ enum Subcommand {
 
 fn main() {
     let code = errors::report(run());
-    std::process::exit(code);
+    process::exit(code);
 }
 
 fn run() -> Result<(), errors::CliError> {
@@ -130,7 +130,7 @@ fn run() -> Result<(), errors::CliError> {
                 .unwrap_or_else(|| (String::new(), String::new()));
             Box::new(ForgejoForge {
                 host: config.release.forge_url.clone(),
-                token: std::env::var("FORGEJO_TOKEN").unwrap_or_default(),
+                token: env::var("FORGEJO_TOKEN").unwrap_or_default(),
                 owner,
                 repo,
             })
