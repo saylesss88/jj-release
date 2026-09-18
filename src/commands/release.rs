@@ -1,12 +1,15 @@
 use std::{fs, path::Path};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
+use semver::Version;
+
 use jj_release::{
     changelog,
     commits::{self, BumpKind},
     config::{Config, Versioning},
+    manifest,
     pipeline::{self, PreparedRelease, ReleaseContext},
-    workspace,
+    registry, workspace,
 };
 
 pub fn release_pipeline(
@@ -118,6 +121,18 @@ fn run_publish(
     macro_rules! info {
         ($($t:tt)*) => { if !quiet { println!($($t)*); } }
     }
+    // Preflight: check crates.io to avoid publishing duplicate versions.
+    if config.publish.cargo {
+        let cargo_toml = root.join("Cargo.toml");
+        if let Ok(name) = manifest::read_name(&cargo_toml)
+            && registry::version_exists_on_crates_io(&name, &prepared.next_version)?
+        {
+            bail!(
+                "v{} of {name} is already published on crates.io",
+                prepared.next_version
+            );
+        }
+    }
 
     let Some(ws) = &config.workspace else {
         info!("→ Publishing…");
@@ -158,8 +173,16 @@ fn run_publish(
                 let current = versions
                     .get(&member.name)
                     .cloned()
-                    .unwrap_or_else(|| semver::Version::new(0, 0, 0));
+                    .unwrap_or_else(|| Version::new(0, 0, 0));
                 let next = commits::apply_bump(&current, bump);
+                // Check this member's version before publishing.
+                let member_cargo_toml = root.join(&member.path).join("Cargo.toml");
+                if let Ok(name) = manifest::read_name(&member_cargo_toml)
+                    && registry::version_exists_on_crates_io(&name, &next)?
+                {
+                    info!("→ Skipping {} : v{next} already published", member.name);
+                    continue;
+                }
                 let tag = workspace::member_tag_name(member, &next, &config.release.tag_prefix);
                 info!("→ Bumping {} to {next}…", member.name);
                 workspace::bump_member_version(root, &member.name, &next)?;
