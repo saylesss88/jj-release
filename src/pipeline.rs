@@ -1,13 +1,13 @@
 //! Release pipeline orchestration.
 
-use std::{collections::HashMap, fs, path::Path};
+use std::{collections::HashMap, env, fmt::Display, fs, path::Path, process};
 
 use anyhow::{Context, Result};
 use semver::Version;
 
 use crate::changelog;
 use crate::{
-    commits::{self, BumpKind, CommitInfo},
+    commits::{self, BumpKind, CommitInfo, Tag},
     config::Config,
     forge::ForgeBackend,
     jj::JjBackend,
@@ -43,11 +43,11 @@ pub struct ReleaseContext<'a> {
 ///
 /// # Example
 /// ```no_run
-/// use jj_release::pipeline::prepare_release;
-/// use jj_release::manifest::CargoManifest;
-/// use jj_release::config::Config;
-/// use jj_release::jj::ShellBackend;
 /// use std::path::Path;
+/// use jj_release::{pipeline::prepare_release,
+///     manifest::CargoManifest,
+///     config::Config, jj::ShellBackend,
+/// };
 ///
 /// let backend = ShellBackend::new(Path::new(".")).unwrap();
 /// let manifest = CargoManifest;
@@ -151,11 +151,7 @@ pub fn prepare_release(
 ///
 /// Returns an error if reading the version manifest, finding the latest tag,
 /// or fetching commit logs fails.
-pub fn print_next_version(
-    ctx: &ReleaseContext<'_>,
-    config: &Config,
-    root: &std::path::Path,
-) -> Result<()> {
+pub fn print_next_version(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Result<()> {
     let current = ctx.manifest.read_version(root)?;
 
     let since: String = if let Some(tag) =
@@ -185,7 +181,7 @@ pub fn print_next_version(
 pub fn print_changelog(
     ctx: &ReleaseContext<'_>,
     config: &Config,
-    root: &std::path::Path,
+    root: &Path,
     output: Option<&Path>,
     full: bool,
 ) -> Result<()> {
@@ -227,12 +223,12 @@ fn print_full_changelog(
 ) -> Result<()> {
     // Actually get all tags.
     let raw_tags = ctx.backend.list_tags()?;
-    let mut all_tags: Vec<commits::Tag> = raw_tags
+    let mut all_tags: Vec<Tag> = raw_tags
         .into_iter()
         .filter_map(|name| {
             let stripped = name.strip_prefix(&config.release.tag_prefix)?;
-            let version = semver::Version::parse(stripped).ok()?;
-            Some(commits::Tag { name, version })
+            let version = Version::parse(stripped).ok()?;
+            Some(Tag { name, version })
         })
         .collect();
     all_tags.sort_by(|a, b| a.version.cmp(&b.version));
@@ -249,7 +245,6 @@ fn print_full_changelog(
         versions.push(tag.version.clone());
 
         prev.clone_from(&tag.name);
-        // prev = tag.name.clone();
     }
 
     // Include commits since last tag.
@@ -267,7 +262,7 @@ fn print_full_changelog(
 
     match output {
         Some(path) => {
-            std::fs::write(path, &result)?;
+            fs::write(path, &result)?;
             println!("✓ Written to {}", path.display());
         }
         None => print!("{result}"),
@@ -280,7 +275,7 @@ fn print_full_changelog(
 /// # Errors
 ///
 /// Returns an error if any backend operations fail, the manifest cannot be read, or a required version tag is missing when `require_tag` is enabled.
-pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &std::path::Path) -> Result<()> {
+pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Result<()> {
     use crate::detect;
 
     let mut passed = 0;
@@ -371,9 +366,9 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &std::path::Pat
 
     // 6. CARGO_REGISTRY_TOKEN.
     if config.publish.cargo {
-        let has_env_token = std::env::var("CARGO_REGISTRY_TOKEN").is_ok();
-        let has_credentials = dirs::home_dir()
-            .is_some_and(|h| h.join(".cargo/credentials.toml").exists());
+        let has_env_token = env::var("CARGO_REGISTRY_TOKEN").is_ok();
+        let has_credentials =
+            dirs::home_dir().is_some_and(|h| h.join(".cargo/credentials.toml").exists());
 
         check!(
             "CARGO_REGISTRY_TOKEN",
@@ -381,7 +376,7 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &std::path::Pat
                 Ok("configured".to_owned())
             } else {
                 Err(
-                    "not set and no ~/.cargo/credentials.toml found — needed for cargo publish"
+                    "not set and no ~/.cargo/credentials.toml found, needed for cargo publish"
                         .to_owned(),
                 )
             }
@@ -392,12 +387,12 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &std::path::Pat
     println!("{passed} passed, {failed} failed");
 
     if failed > 0 {
-        std::process::exit(1);
+        process::exit(1);
     }
     Ok(())
 }
 
-pub fn info(quiet: bool, message: impl std::fmt::Display) {
+pub fn info(quiet: bool, message: impl Display) {
     if !quiet {
         println!("{message}");
     }
@@ -406,13 +401,12 @@ pub fn info(quiet: bool, message: impl std::fmt::Display) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commits::CommitInfo;
-    use crate::test_helpers::mock::MockBackend;
-    use crate::{config, manifest};
+    use std::{cell::RefCell, path::Path};
+
     use anyhow::Result;
     use semver::Version;
-    use std::cell::RefCell;
-    use std::path::Path;
+
+    use crate::{commits::CommitInfo, config, manifest, test_helpers::mock::MockBackend};
 
     struct MockManifest {
         version: Version,

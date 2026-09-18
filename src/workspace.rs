@@ -126,7 +126,7 @@ pub fn bump_member_version(root: &Path, member_name: &str, version: &Version) ->
         .args(["set-version", "-p", member_name, &version.to_string()])
         .current_dir(root)
         .status()
-        .context("spawning cargo set-version — is cargo-edit installed?")?;
+        .context("spawning cargo set-version, is cargo-edit installed?")?;
     if !status.success() {
         bail!("cargo set-version failed for {member_name}");
     }
@@ -157,7 +157,7 @@ pub fn member_bumps(
             .iter()
             .filter_map(|name| {
                 let stripped = name.strip_prefix(prefix)?;
-                let version = semver::Version::parse(stripped).ok()?;
+                let version = Version::parse(stripped).ok()?;
                 Some((name.clone(), version))
             })
             .max_by(|a, b| a.1.cmp(&b.1))

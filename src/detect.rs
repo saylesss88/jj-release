@@ -2,6 +2,8 @@
 
 use std::{fs, path::Path, process::Command};
 
+use toml_edit::DocumentMut;
+
 /// Detect the forge from a git remote URL.
 #[must_use]
 pub fn forge_from_url(url: &str) -> Option<&'static str> {
@@ -77,7 +79,7 @@ pub fn detect_versioning(workspace_toml: &Path) -> &'static str {
     let Ok(raw) = fs::read_to_string(workspace_toml) else {
         return "unified";
     };
-    let Ok(doc) = raw.parse::<toml_edit::DocumentMut>() else {
+    let Ok(doc) = raw.parse::<DocumentMut>() else {
         return "unified";
     };
     let Some(members) = doc
@@ -97,7 +99,7 @@ pub fn detect_versioning(workspace_toml: &Path) -> &'static str {
         let Ok(raw) = fs::read_to_string(&member_toml) else {
             continue;
         };
-        let Ok(doc) = raw.parse::<toml_edit::DocumentMut>() else {
+        let Ok(doc) = raw.parse::<DocumentMut>() else {
             continue;
         };
 

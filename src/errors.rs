@@ -1,10 +1,12 @@
 //! CLI error types with exit codes.
 
-use anyhow::anyhow;
+use std::fmt::{Display, Formatter};
+
+use anyhow::{Error, anyhow};
 
 #[derive(Debug)]
 pub struct CliError {
-    pub error: Option<anyhow::Error>,
+    pub error: Option<Error>,
     pub code: i32,
 }
 
@@ -16,7 +18,7 @@ impl CliError {
     }
 
     /// Exit with code 101 and a message.
-    pub fn message(e: impl Into<anyhow::Error>) -> Self {
+    pub fn message(e: impl Into<Error>) -> Self {
         Self {
             error: Some(e.into()),
             code: 101,
@@ -55,14 +57,14 @@ impl CliError {
     }
 }
 
-impl std::fmt::Display for CliError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Display for CliError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.error.as_ref().map_or(Ok(()), |error| error.fmt(f))
     }
 }
 
-impl From<anyhow::Error> for CliError {
-    fn from(error: anyhow::Error) -> Self {
+impl From<Error> for CliError {
+    fn from(error: Error) -> Self {
         Self::message(error)
     }
 }

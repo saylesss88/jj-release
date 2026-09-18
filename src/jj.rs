@@ -192,7 +192,7 @@ impl JjBackend for ShellBackend {
     fn git_push(&self, bookmark: Option<&str>, tag: Option<&str>) -> Result<()> {
         // Push the bookmark first.
         if let Some(bookmark) = bookmark {
-        self.run_silent(&["git", "push", "--bookmark", bookmark])?;
+            self.run_silent(&["git", "push", "--bookmark", bookmark])?;
         }
         // Push the tag by name, --tag is mutually exclusive with --bookmark.
         if let Some(tag) = tag {

@@ -178,7 +178,7 @@ anyhow = "1"
         let new_v = Version::parse("1.3.0").unwrap();
         write_version(f.path(), &new_v).unwrap();
 
-        let updated = std::fs::read_to_string(f.path()).unwrap();
+        let updated = fs::read_to_string(f.path()).unwrap();
         // Comment and other fields must survive.
         assert!(updated.contains("# Important crate"));
         assert!(updated.contains("anyhow = \"1\""));
@@ -196,7 +196,7 @@ anyhow = "1"
     fn cargo_manifest_reads_version() {
         let dir = tempfile::tempdir().unwrap();
         let cargo_toml = dir.path().join("Cargo.toml");
-        std::fs::write(
+        fs::write(
             &cargo_toml,
             r#"[package]
 name = "my-crate"
@@ -214,7 +214,7 @@ edition = "2024"
     fn cargo_manifest_writes_version() {
         let dir = tempfile::tempdir().unwrap();
         let cargo_toml = dir.path().join("Cargo.toml");
-        std::fs::write(
+        fs::write(
             &cargo_toml,
             r#"[package]
 name = "my-crate"
@@ -252,7 +252,7 @@ edition = "2024"
     #[test]
     fn npm_manifest_reads_version() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(
+        fs::write(
             dir.path().join("package.json"),
             r#"{"name": "my-pkg", "version": "1.2.3"}"#,
         )
@@ -265,7 +265,7 @@ edition = "2024"
     #[test]
     fn npm_manifest_writes_version() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(
+        fs::write(
             dir.path().join("package.json"),
             r#"{"name": "my-pkg", "version": "1.2.3"}"#,
         )
@@ -308,7 +308,7 @@ edition = "2024"
     #[test]
     fn npm_manifest_errors_on_missing_version_field() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("package.json"), r#"{"name": "no-version"}"#).unwrap();
+        fs::write(dir.path().join("package.json"), r#"{"name": "no-version"}"#).unwrap();
         let manifest = NpmManifest;
         assert!(manifest.read_version(dir.path()).is_err());
     }

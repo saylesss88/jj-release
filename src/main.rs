@@ -2,7 +2,7 @@
 
 mod commands;
 
-use std::{env, process, path::PathBuf};
+use std::{env, path::PathBuf, process};
 
 use anyhow::{Context, Result};
 use clap::Parser;
