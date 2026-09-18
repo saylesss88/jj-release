@@ -8,12 +8,12 @@ use semver::Version;
 use crate::changelog;
 use crate::{
     commits::{self, BumpKind, CommitInfo, Tag},
-    config::Config,
+    config::{Config, Versioning},
     forge::ForgeBackend,
     jj::JjBackend,
-    manifest::ManifestBackend,
+    manifest::{self, ManifestBackend},
     publish::PublishBackend,
-    workspace,
+    registry, workspace,
 };
 
 pub struct PreparedRelease {
@@ -70,7 +70,7 @@ pub fn prepare_release(
                 let current = manifest.read_version(root)?;
                 let tag_name = format!("{}{current}", config.release.tag_prefix);
                 eprintln!(
-                    "hint: no version tag found — tagging current version {tag_name} as baseline"
+                    "hint: no version tag found, tagging current version {tag_name} as baseline"
                 );
                 backend.create_tag(&tag_name, "@-")?;
                 backend.git_push(None, Some(&tag_name))?;
@@ -101,7 +101,7 @@ pub fn prepare_release(
     let member_bumps = config.workspace.as_ref().map_or_else(
         || None,
         |ws| {
-            if ws.enabled && matches!(ws.versioning, crate::config::Versioning::Independent) {
+            if ws.enabled && matches!(ws.versioning, Versioning::Independent) {
                 let versions = workspace::member_versions(root).ok();
                 let bumps = workspace::member_bumps(
                     backend,
@@ -296,7 +296,7 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
         };
     }
 
-    // 1. jj identity.
+    // jj identity.
     check!(
         "jj identity",
         ctx.backend
@@ -305,7 +305,7 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
             .map_err(|e| e.to_string())
     );
 
-    // 2. Forge CLI.
+    // Forge CLI.
     let forge_check = match config.release.forge.as_str() {
         "github" => {
             if detect::tool_available("gh") {
@@ -325,7 +325,7 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
     };
     check!("forge CLI", forge_check);
 
-    // 3. Manifest readable.
+    // Manifest readable.
     check!(
         "manifest",
         ctx.manifest
@@ -334,7 +334,7 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
             .map_err(|e| e.to_string())
     );
 
-    // 4. Version tag exists.
+    // Version tag exists.
     check!(
         "version tag",
         commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)
@@ -342,8 +342,28 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
             .and_then(|t| t.ok_or_else(|| "no version tag found. Create one first".to_owned()))
             .map(|t| format!("found {}", t.name))
     );
+    // crates.io version check.
+    if config.publish.cargo {
+        let cargo_toml = root.join("Cargo.toml");
+        if let Ok(name) = manifest::read_name(&cargo_toml)
+            && let Ok(version) = ctx.manifest.read_version(root)
+        {
+            check!(
+                "crates.io",
+                registry::version_exists_on_crates_io(&name, &version)
+                    .map_err(|e| e.to_string())
+                    .and_then(|exists| if exists {
+                        Err(format!(
+                            "v{version} of {name} already published, bump the version"
+                        ))
+                    } else {
+                        Ok(format!("v{version} of {name} not yet published"))
+                    })
+            );
+        }
+    }
 
-    // 5. Trigger commit.
+    // Trigger commit.
     let since = if let Some(tag) =
         commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)?
     {
@@ -364,7 +384,7 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
             .map(|_| "found".to_owned())
     );
 
-    // 6. CARGO_REGISTRY_TOKEN.
+    // CARGO_REGISTRY_TOKEN.
     if config.publish.cargo {
         let has_env_token = env::var("CARGO_REGISTRY_TOKEN").is_ok();
         let has_credentials =

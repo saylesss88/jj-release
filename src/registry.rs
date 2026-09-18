@@ -5,6 +5,10 @@ use semver::Version;
 use ureq::{Agent, Error};
 
 /// Check if a specific version of a crate is already published on crates.io
+///
+/// # Errors
+/// Returns an error if the network request fails or if the API returns an unexpected
+/// status code other than a success (2xx) or 404 Not Found.
 pub fn version_exists_on_crates_io(name: &str, version: &Version) -> Result<bool> {
     let agent = Agent::new_with_defaults();
     let url = format!("https://crates.io/api/v1/crates/{name}/{version}");
