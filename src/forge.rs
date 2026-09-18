@@ -19,19 +19,19 @@ impl ForgeBackend for GitHubForge {
         Ok(())
     }
 
-    fn create_pr(&self, tag: &str, head: &str, base: &str, body: &str) -> Result<()> {
+    fn create_pr(&self, pr: &PrRequest<'_>) -> Result<()> {
         let output = Command::new("gh")
             .args([
                 "pr",
                 "create",
                 "--title",
-                &format!("chore: release {tag}"),
+                &format!("chore: release {}", pr.tag),
                 "--body",
-                body,
+                pr.body,
                 "--head",
-                head,
+                pr.head,
                 "--base",
-                base,
+                pr.base,
             ])
             .output()
             .context("spawning gh pr create")?;
@@ -57,19 +57,19 @@ impl ForgeBackend for GitLabForge {
         Ok(())
     }
 
-    fn create_pr(&self, tag: &str, head: &str, base: &str, body: &str) -> Result<()> {
+    fn create_pr(&self, pr: &PrRequest<'_>) -> Result<()> {
         let status = Command::new("glab")
             .args([
                 "mr",
                 "create",
                 "--title",
-                &format!("chore: release {tag}"),
+                &format!("chore: release {}", pr.tag),
                 "--description",
-                body,
+                pr.body,
                 "--source-branch",
-                head,
+                pr.head,
                 "--target-branch",
-                base,
+                pr.base,
             ])
             .status()
             .context("spawning glab mr create")?;
@@ -118,14 +118,14 @@ impl ForgeBackend for ForgejoForge {
         )?;
         Ok(())
     }
-    fn create_pr(&self, tag: &str, head: &str, base: &str, body: &str) -> Result<()> {
+    fn create_pr(&self, pr: &PrRequest<'_>) -> Result<()> {
         let response_body = self.post(
             "pulls",
             serde_json::json!({
-                "title": format!("chore: release {tag}"),
-                "body": body,
-                "head": head,
-                "base": base,
+                "title": format!("chore: release {}", pr.tag),
+                "body": pr.body,
+                "head": pr.head,
+                "base": pr.base,
             }),
         )?;
         let pr_url = serde_json::from_str::<Value>(&response_body)
@@ -136,6 +136,13 @@ impl ForgeBackend for ForgejoForge {
         }
         Ok(())
     }
+}
+
+pub struct PrRequest<'a> {
+    pub tag: &'a str,
+    pub head: &'a str,
+    pub base: &'a str,
+    pub body: &'a str,
 }
 
 pub trait ForgeBackend {
@@ -153,7 +160,7 @@ pub trait ForgeBackend {
     ///
     /// Returns an error if the request fails due to network issues, invalid
     /// authentication, or if the target branches are invalid or already have a conflicting PR.
-    fn create_pr(&self, tag: &str, head: &str, base: &str, body: &str) -> Result<()>;
+    fn create_pr(&self, pr: &PrRequest<'_>) -> Result<()>;
 }
 
 pub struct NoForge;
@@ -163,7 +170,7 @@ impl ForgeBackend for NoForge {
         Ok(())
     }
 
-    fn create_pr(&self, _tag: &str, _head: &str, _base: &str, _body: &str) -> Result<()> {
+    fn create_pr(&self, _pr: &PrRequest<'_>) -> Result<()> {
         Ok(())
     }
 }
@@ -184,7 +191,12 @@ mod tests {
         let forge = NoForge;
         assert!(
             forge
-                .create_pr("v0.2.0", "release/v0.2.0", "main", "")
+                .create_pr(&PrRequest {
+                    tag: "v0.2.0",
+                    head: "release/v0.2.0",
+                    base: "main",
+                    body: "",
+                })
                 .is_ok()
         );
     }

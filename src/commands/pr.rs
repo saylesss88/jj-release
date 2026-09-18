@@ -4,6 +4,7 @@ use anyhow::Result;
 use jj_release::{
     changelog,
     config::Config,
+    forge::PrRequest,
     pipeline::{self, ReleaseContext},
 };
 
@@ -41,12 +42,12 @@ pub fn release_pr(
     info!("→ Pushing {pr_bookmark}…");
     ctx.backend.git_push(Some(&pr_bookmark), None)?;
     info!("→ Opening PR…");
-    ctx.forge.create_pr(
-        &prepared.tag_name,
-        &pr_bookmark,
-        &config.release.bookmark,
-        &body,
-    )?;
+    ctx.forge.create_pr(&PrRequest {
+        tag: &prepared.tag_name,
+        head: &pr_bookmark,
+        base: &config.release.bookmark,
+        body: &body,
+    })?;
 
     info!("✓ PR opened for {}", prepared.tag_name);
     Ok(())
