@@ -3,6 +3,7 @@
 use std::{borrow::ToOwned, process::Command};
 
 use anyhow::{Context, Result, bail};
+use serde_json::Value;
 
 pub struct GitHubForge;
 
@@ -86,56 +87,48 @@ pub struct ForgejoForge {
     pub repo: String,
 }
 
-impl ForgeBackend for ForgejoForge {
-    fn create_release(&self, tag: &str) -> Result<()> {
+impl ForgejoForge {
+    fn post(&self, endpoint: &str, payload: Value) -> Result<String> {
         let url = format!(
-            "{}/api/v1/repos/{}/{}/releases",
-            self.host, self.owner, self.repo
+            "{}/api/v1/repos/{}/{}/{}",
+            self.host, self.owner, self.repo, endpoint
         );
-        let body = serde_json::json!({
-            "tag_name": tag,
-            "name": tag,
-            "draft": false,
-            "prerelease": false,
-        });
-        let response = ureq::post(&url)
-            .header("Authorization", &format!("token {}", self.token))
-            .header("Content-Type", "application/json")
-            .send_json(body)
-            .context("creating Forgejo release")?;
-        if !response.status().is_success() {
-            bail!(
-                "Forgejo release creation failed with status {}",
-                response.status()
-            );
-        }
-        Ok(())
-    }
-    fn create_pr(&self, tag: &str, head: &str, base: &str, body: &str) -> Result<()> {
-        let url = format!(
-            "{}/api/v1/repos/{}/{}/pulls",
-            self.host, self.owner, self.repo
-        );
-        let payload = serde_json::json!({
-            "title": format!("chore: release {tag}"),
-            "body": body,
-            "head": head,
-            "base": base,
-        });
         let response = ureq::post(&url)
             .header("Authorization", &format!("token {}", self.token))
             .header("Content-Type", "application/json")
             .send_json(payload)
-            .context("creating Forgejo PR")?;
+            .with_context(|| format!("POST {url}"))?;
         if !response.status().is_success() {
-            bail!(
-                "Forgejo PR creation failed with status {}",
-                response.status()
-            );
+            bail!("Forgejo API error: {}", response.status());
         }
-        let pr_url = response
-            .into_body()
-            .read_json::<serde_json::Value>()
+        Ok(response.into_body().read_to_string()?)
+    }
+}
+
+impl ForgeBackend for ForgejoForge {
+    fn create_release(&self, tag: &str) -> Result<()> {
+        self.post(
+            "releases",
+            serde_json::json!({
+                "tag_name": tag,
+                "name": tag,
+                "draft": false,
+                "prerelease": false
+            }),
+        )?;
+        Ok(())
+    }
+    fn create_pr(&self, tag: &str, head: &str, base: &str, body: &str) -> Result<()> {
+        let response_body = self.post(
+            "pulls",
+            serde_json::json!({
+                "title": format!("chore: release {tag}"),
+                "body": body,
+                "head": head,
+                "base": base,
+            }),
+        )?;
+        let pr_url = serde_json::from_str::<Value>(&response_body)
             .ok()
             .and_then(|v| v["html_url"].as_str().map(ToOwned::to_owned));
         if let Some(url) = pr_url {
