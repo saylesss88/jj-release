@@ -1,9 +1,10 @@
 #[cfg(test)]
 pub mod mock {
-    use crate::commits::CommitInfo;
-    use crate::jj::JjBackend;
-    use anyhow::Result;
     use std::cell::RefCell;
+
+    use anyhow::Result;
+
+    use crate::{commits::CommitInfo, jj::JjBackend};
 
     #[derive(Default)]
     pub struct MockBackend {

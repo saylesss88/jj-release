@@ -1,7 +1,6 @@
 //! Forge backends for GitHub, GitLab, and Forgejo
 
-use std::process::Command;
-use std::borrow::ToOwned;
+use std::{borrow::ToOwned, process::Command};
 
 use anyhow::{Context, Result, bail};
 
