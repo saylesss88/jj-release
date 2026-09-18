@@ -49,6 +49,7 @@ pub struct PublishConfig {
     pub cargo: bool,
     /// Extra flags forwarded to `cargo publish`.
     pub cargo_flags: Vec<String>,
+    pub semver_checks: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,6 +139,7 @@ impl Default for PublishConfig {
         Self {
             cargo: true,
             cargo_flags: vec![],
+            semver_checks: true,
         }
     }
 }

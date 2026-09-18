@@ -325,6 +325,18 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
     };
     check!("forge CLI", forge_check);
 
+    // cargo-semver-checks availability.
+    if config.publish.cargo && config.publish.semver_checks {
+        check!(
+            "cargo-semver-checks",
+            if detect::tool_available("cargo-semver-checks") {
+                Ok("found".to_owned())
+            } else {
+                Err("not found, install with: cargo install cargo-semver-checks".to_owned())
+            }
+        );
+    }
+
     // Manifest readable.
     check!(
         "manifest",
@@ -484,5 +496,20 @@ mod tests {
         let config = Config::default();
         let prepared = prepare_release(&backend, &manifest, &config, Path::new("/tmp")).unwrap();
         assert!(prepared.is_none());
+    }
+    #[test]
+    fn semver_checks_defaults_to_true() {
+        let cfg = Config::default();
+        assert!(cfg.publish.semver_checks);
+    }
+
+    #[test]
+    fn parse_semver_checks_config() {
+        let raw = r"
+        [publish]
+        semver_checks = false
+        ";
+        let cfg: Config = toml::from_str(raw).unwrap();
+        assert!(!cfg.publish.semver_checks);
     }
 }
