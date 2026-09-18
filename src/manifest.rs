@@ -1,6 +1,6 @@
 //! Edit `Cargo.toml` version fields without destroying formatting.
 
-use std::{fs, path::Path};
+use std::{borrow::ToOwned, fs, path::Path};
 
 use anyhow::{Context, Result, bail};
 use semver::Version;
@@ -136,6 +136,26 @@ pub(crate) fn write_version(cargo_toml: &Path, new_version: &Version) -> Result<
         .with_context(|| format!("writing {}", cargo_toml.display()))?;
 
     Ok(())
+}
+
+/// Reads the package name from Cargo.toml
+///
+/// # Errors
+/// Returns an error if:
+/// - The file can't be read (I/O error)
+/// - The TOML syntax is invalid
+/// - The `[package].name` field is missing or not a string
+pub fn read_name(cargo_toml: &Path) -> Result<String> {
+    let raw = fs::read_to_string(cargo_toml)
+        .with_context(|| format!("reading {}", cargo_toml.display()))?;
+    let doc: DocumentMut = raw
+        .parse()
+        .with_context(|| format!("parsing {}", cargo_toml.display()))?;
+    doc.get("package")
+        .and_then(|p| p.get("name"))
+        .and_then(|n| n.as_str())
+        .map(ToOwned::to_owned)
+        .with_context(|| format!("missing [package].name in {}", cargo_toml.display()))
 }
 
 #[cfg(test)]
@@ -311,5 +331,33 @@ edition = "2024"
         fs::write(dir.path().join("package.json"), r#"{"name": "no-version"}"#).unwrap();
         let manifest = NpmManifest;
         assert!(manifest.read_version(dir.path()).is_err());
+    }
+    #[test]
+    fn read_name_basic() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("Cargo.toml"),
+            r#"[package]
+name = "my-crate"
+version = "1.2.3"
+edition = "2024"
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            read_name(&dir.path().join("Cargo.toml")).unwrap(),
+            "my-crate"
+        );
+    }
+
+    #[test]
+    fn read_name_errors_when_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("Cargo.toml"),
+            "[package]\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        assert!(read_name(&dir.path().join("Cargo.toml")).is_err());
     }
 }
