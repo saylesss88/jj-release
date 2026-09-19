@@ -217,7 +217,8 @@ manifest_backend = "cargo"   # manifest format: cargo, npm, go
 
 ## Exit Codes
 
-`jj-release` uses distinct exit codes so CI scripts can distinguish failure modes help me wrap this:
+`jj-release` uses distinct exit codes so CI scripts can distinguish failure
+modes:
 
 | Code | Meaning                                      |
 | ---- | -------------------------------------------- |

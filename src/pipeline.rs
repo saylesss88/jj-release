@@ -21,6 +21,7 @@ use crate::{
 pub struct PreparedRelease {
     pub since: String,
     pub current_version: Version,
+    pub baseline_version: Version,
     pub next_version: Version,
     pub tag_name: String,
     pub commits: Vec<CommitInfo>,
@@ -109,6 +110,17 @@ pub fn prepare_release(
         .read_version(root)
         .context("reading current version")?;
 
+    // Use crates.io version as baseline if available, more reliable than manifest.
+    let baseline_version = if config.publish.cargo {
+        let cargo_toml = root.join("Cargo.toml");
+        manifest::read_name(&cargo_toml)
+            .ok()
+            .and_then(|name| registry::latest_version_on_crates_io(&name).ok().flatten())
+            .unwrap_or_else(|| current_version.clone())
+    } else {
+        current_version.clone()
+    };
+
     let commits = backend.log_commits(&format!("{since}..@"))?;
 
     let mut bump = commits::resolve_bump(config.bump.force.as_ref(), &commits)?;
@@ -170,12 +182,13 @@ pub fn prepare_release(
     }
 
     // Compute next_version AFTER potential bump upgrade.
-    let next_version = commits::apply_bump(&current_version, bump);
+    let next_version = commits::apply_bump(&baseline_version, bump);
     let tag_name = config.tag_name(&next_version);
 
     Ok(Some(PreparedRelease {
         since,
         current_version,
+        baseline_version,
         next_version,
         tag_name,
         commits,
@@ -417,18 +430,20 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
         if let Ok(name) = manifest::read_name(&cargo_toml)
             && let Ok(version) = ctx.manifest.read_version(root)
         {
-            check!(
-                "crates.io",
-                registry::version_exists_on_crates_io(&name, &version)
+            check!("crates.io", {
+                let result: Result<String, String> = registry::latest_version_on_crates_io(&name)
                     .map_err(|e| e.to_string())
-                    .and_then(|exists| if exists {
-                        Err(format!(
-                            "v{version} of {name} already published, bump the version"
-                        ))
-                    } else {
-                        Ok(format!("v{version} of {name} not yet published"))
-                    })
-            );
+                    .map(|latest| match latest {
+                        Some(published) if published == version => {
+                            format!("v{version} published, in sync with manifest")
+                        }
+                        Some(published) => {
+                            format!("v{published} published, manifest is v{version}")
+                        }
+                        None => "not yet published".to_owned(),
+                    });
+                result
+            });
         }
     }
 

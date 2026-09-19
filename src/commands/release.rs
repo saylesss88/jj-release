@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use semver::Version;
 
 use jj_release::{
@@ -41,11 +41,9 @@ pub fn release_pipeline(
 
     info!("  Current version: {}", prepared.current_version);
 
-    if !is_independent {
-        info!(
-            "  Bump: {:?} → {next_version}  (tag: {tag_name})",
-            prepared.bump
-        );
+    if !is_independent && prepared.baseline_version != prepared.current_version {
+        info!("  crates.io version: {}", prepared.baseline_version);
+        info!("  (using crates.io version as bump baseline)");
     }
 
     if dry_run {
@@ -120,18 +118,6 @@ fn run_publish(
 ) -> Result<()> {
     macro_rules! info {
         ($($t:tt)*) => { if !quiet { println!($($t)*); } }
-    }
-    // Preflight: check crates.io to avoid publishing duplicate versions.
-    if config.publish.cargo {
-        let cargo_toml = root.join("Cargo.toml");
-        if let Ok(name) = manifest::read_name(&cargo_toml)
-            && registry::version_exists_on_crates_io(&name, &prepared.next_version)?
-        {
-            bail!(
-                "v{} of {name} is already published on crates.io",
-                prepared.next_version
-            );
-        }
     }
 
     let Some(ws) = &config.workspace else {
