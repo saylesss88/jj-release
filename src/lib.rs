@@ -38,7 +38,7 @@ pub mod registry;
 pub mod workspace;
 
 #[cfg(test)]
-pub mod test_helpers;
+pub(crate) mod test_helpers;
 
 pub use commits::{BumpKind, CommitInfo, Tag};
 pub use config::Config;
