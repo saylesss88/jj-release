@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, env, fmt::Display, fs, path::Path, process};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use semver::Version;
 
 use crate::changelog;
@@ -206,17 +206,14 @@ pub fn prepare_release(
 pub fn print_next_version(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Result<()> {
     let current = ctx.manifest.read_version(root)?;
 
-    let since: String = if let Some(tag) =
-        commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)?
-    {
-        tag.name
-    } else if config.changelog.require_tag {
-        anyhow::bail!(
-            "no version tag found\nhint: create a baseline tag first:\n  jj tag set v0.1.0 -r <your-last-release-commit>"
-        );
-    } else {
-        "root()".to_owned()
-    };
+    let since: String =
+        if let Some(tag) = commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)? {
+            tag.name
+        } else if config.changelog.require_tag {
+            bail!("no version tag found\ncreating first tag...");
+        } else {
+            "root()".to_owned()
+        };
     let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
     let bump = commits::resolve_bump(config.bump.force.as_ref(), &commits)?;
     let next = commits::apply_bump(&current, bump);
@@ -322,14 +319,14 @@ fn print_full_changelog(
     Ok(())
 }
 
+type CheckResult = Result<String, String>;
+
 /// Validates the release environment, checking backend identity, forge CLI availability, manifest readability, version tags, trigger commits, and tokens.
 ///
 /// # Errors
 ///
 /// Returns an error if any backend operations fail, the manifest cannot be read, or a required version tag is missing when `require_tag` is enabled.
 pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Result<()> {
-    use crate::detect;
-
     let mut passed = 0;
     let mut failed = 0;
 
@@ -421,7 +418,7 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
         "version tag",
         commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)
             .map_err(|e| e.to_string())
-            .and_then(|t| t.ok_or_else(|| "no version tag found. Create one first".to_owned()))
+            .and_then(|t| t.ok_or_else(|| "no version tag found".to_owned()))
             .map(|t| format!("found {}", t.name))
     );
     // crates.io version check.
@@ -448,18 +445,15 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
     }
 
     // Trigger commit.
-    let since = if let Some(tag) =
-        commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)?
-    {
-        tag.name
-    } else {
-        if config.changelog.require_tag {
-            anyhow::bail!(
-                "no version tag found\nhint: create a baseline tag first:\n  jj tag set v0.1.0 -r <your-last-release-commit>"
-            );
-        }
-        "root()".to_owned()
-    };
+    let since =
+        if let Some(tag) = commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)? {
+            tag.name
+        } else {
+            if config.changelog.require_tag {
+                bail!("no version tag found");
+            }
+            "root()".to_owned()
+        };
     check!(
         "trigger commit",
         commits::find_trigger(ctx.backend, &config.release.trigger, &since)

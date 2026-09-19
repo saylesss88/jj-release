@@ -8,16 +8,16 @@ repositories.
 [semantic-release](https://github.com/semantic-release/semantic-release),
 [release-please](https://github.com/googleapis/release-please), and
 [cargo-release](https://github.com/crate-ci/cargo-release) are all great tools,
-but they assume Git's branch model. They expect a mutable `main` branch,
-branch-based triggers, and tags anchored to branch tips. Jujutsu's branchless,
-immutable-commit workflow breaks all of these assumptions in ways that are
-annoying to work around.
+but they assume Git's branch model. They are designed around a mutable Git
+branch ref, typically `main` as the primary release cursor. In `jj`, the
+corresponding workflow is often built around immutable commits and movable
+bookmarks instead.
 
 `jj-release` is built specifically for `jj`: it uses `jj`'s revset language to
-walk commit history, works with bookmarks instead of branches, and uses a simple
+walk commit history, works with bookmarks instead of branches, and uses a
 commit-message trigger that fits naturally into the `jj` workflow.
 
-Inspired by semantic-release, release-please, and cargo-release.
+Inspired by semantic-release, release-please, release-plz, and cargo-release.
 
 ---
 
@@ -30,10 +30,54 @@ jj new -m "Release: please"
 jj git push --bookmark main
 ```
 
-CI detects the trigger, walks commits back to the last version tag, classifies
-them as patch/minor/major using
-[Conventional Commits](https://www.conventionalcommits.org), bumps `Cargo.toml`,
-writes a `CHANGELOG.md` entry, creates a tag, and pushes, all in one step.
+CI detects the trigger, walks commits back to the last version tag, and
+classifies them as patch/minor/major using
+[Conventional Commits](https://www.conventionalcommits.org). API-breaking
+changes are detected via
+[cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks) and can
+automatically upgrade the bump to major. The version baseline comes from
+crates.io rather than the local manifest, ensuring the correct bump even when
+versions have drifted. `jj-release` then bumps the version manifest, writes a
+`CHANGELOG.md` entry, creates a tag, and pushes, all in one step.
+
+A trigger is recognized when any commit reachable from `release.bookmark` has a
+description containing `release.trigger` (case-sensitive substring match) since
+the last version tag. The trigger commit itself is not included in changelog
+generation or bump calculation unless its message also matches a Conventional
+Commit type.
+
+Accidentally triggering a release with `docs: Release: please improve wording`
+is possible, choose a trigger string unlikely to appear in normal commit
+messages.
+
+### What a Release Changes
+
+Unless `--dry-run` is used, `jj-release` may:
+
+- Modify version manifests and `CHANGELOG.md`
+- Create a release commit and version tag
+- Move and push the configured bookmark
+- Publish packages to the configured registry
+- Create a GitHub, GitLab, or Forgejo release
+
+Run `jj-release validate` and `jj-release --dry-run` before enabling it in CI.
+
+---
+
+## Quick Start
+
+```sh
+cargo install jj-release
+jj-release init
+jj-release validate
+
+# After adding releasable commits:
+jj new -m "Release: please"
+jj git push --bookmark main
+```
+
+On GitHub Actions, add the workflow shown below so pushes containing the trigger
+run the release pipeline.
 
 ---
 
@@ -103,13 +147,13 @@ jj-release validate # confirms everything is ready
 
 - `jj` identity configured
 - Forge CLI available (`gh`, `glab`)
-- Runs `cargo-semver-checks` to check for breaking API changes & correct release
-  version
-- Manifest readable, version parsable, not yet published on `crates.io`
+- `cargo-semver-checks` detects breaking API changes & warns if bump should be
+  major version
+- Manifest readable, version parseable, and in sync with crates.io
 - Version tag exists (needed as a baseline)
 - Trigger commit present
 - `CARGO_REGISTRY_TOKEN` set/`.cargo/credentials.toml` present (if publishing to
-  `crates.io`)
+  crates.io)
 
 ## First release
 
@@ -161,10 +205,15 @@ Running `jj-release` locally does the full pipeline:
 6. Tags the commit with `vX.Y.Z`
 7. Advances the bookmark and pushes to origin
 8. Runs `cargo publish`
-9. Creates a GitHub release (if `forge = "github"`)
+9. Creates a GitHub release (if `create_release = true`)
 
 The `CARGO_REGISTRY_TOKEN` environment variable is only needed in CI where
 there's no credentials file.
+
+Steps are executed in order. If a later step fails (e.g. `cargo publish` after a
+successful push), `jj-release` reports the error but does not attempt to undo
+completed steps. A pushed tag or published crate cannot be rolled back
+automatically.
 
 ---
 
@@ -181,6 +230,13 @@ This pushes your current bookmark to a `release/vX.Y.Z` branch and opens a PR
 with the changelog preview as the PR body. No version bump, no release commit,
 no tag. Merge the PR and CI runs `jj-release` to do the actual release.
 
+<!-- prettier-ignore -->
+> [!NOTE]
+> Unlike release-plz's continuously maintained release PR, `jj-release pr` is a
+> one-shot preview. No version bump or release commit in the PR itself. If you
+> want a persistent release PR that stays up to date, run `jj-release pr` in CI
+> on every push to main.
+
 ---
 
 ## Configuration
@@ -191,26 +247,28 @@ projects out of the box:
 
 ```toml
 [release]
-trigger = "Release: please"  # commit message substring that kicks off a release
-tag_prefix = "v"             # prefix for version tags, e.g. v1.2.3
-bookmark = "main"            # bookmark to advance after release
-forge = "github"             # forge for releases and PRs: github, gitlab, none
-create_release = false       # create a release on the forge after tagging
-forge_url = ""               # base URL for self-hosted forges
+trigger = "Release: please"          # commit message substring that kicks off a release
+tag_prefix = "v"                     # prefix for version tags, e.g. v1.2.3
+bookmark = "main"                    # bookmark to advance after release
+forge = "github"                     # forge for releases and PRs: github, gitlab, forgejo, or none
+create_release = false               # create a release on the forge after tagging
+forge_url = ""                       # base URL for self-hosted forges
 
 [bump]
-# force = "minor"            # override commit analysis: "major", "minor", or "patch"
+# force = "minor"                    # override commit analysis: "major", "minor", or "patch"
 
 [publish]
-cargo = true                 # run `cargo publish` after tagging
-cargo_flags = []             # extra flags forwarded to `cargo publish`
+cargo = true                         # run `cargo publish` after tagging
+cargo_flags = []                     # extra flags forwarded to `cargo publish`
+semver_checks = true                 # run cargo-semver-checks before publishing
+semver_checks_upgrade_major = false  # auto-upgrade to major (default: only post-1.0)
 
 [changelog]
-enabled = true               # write a CHANGELOG.md entry on each release
-file = "CHANGELOG.md"        # path to the changelog file
-require_tag = true           # require a version tag baseline before releasing
+enabled = true                       # write a CHANGELOG.md entry on each release
+file = "CHANGELOG.md"                # path to the changelog file
+require_tag = true                   # require a version tag baseline before releasing
 
-manifest_backend = "cargo"   # manifest format: cargo, npm, go
+manifest_backend = "cargo"           # manifest format: cargo, npm, go
 ```
 
 ---
@@ -227,8 +285,6 @@ modes:
 | 2    | Missing or invalid configuration             |
 | 3    | Missing required CLI tool (`gh`, `glab`)     |
 | 101  | General release failure                      |
-
-This was adapted from `cargo-release`'s error handling.
 
 ---
 
@@ -270,8 +326,10 @@ The token needs `repository` scope, create one at
 
 ## Multi-Language Support
 
-> [!NOTE] npm and Go support is implemented but not yet battle-tested in
-> production. Feedback welcome if you use `jj-release` with these languages.
+<!-- prettier-ignore -->
+> [!NOTE]
+> npm and Golang support is implemented but not yet battle-tested in production.
+> Feedback welcome if you use `jj-release` with these languages.
 
 `jj-release` supports multiple manifest formats via `manifest_backend`:
 
@@ -279,7 +337,7 @@ The token needs `repository` scope, create one at
 | ---------- | -------------------- | -------------- | --------------- |
 | Rust       | `"cargo"` (default)  | `Cargo.toml`   | `cargo publish` |
 | JavaScript | `"npm"`              | `package.json` | `npm publish`   |
-| Go         | `"go"`               | tag-only       | –               |
+| Golang     | `"go"`               | tag-only       | –               |
 
 ---
 
@@ -334,14 +392,16 @@ tag_prefix = "v"
 depends_on = ["mylib"]
 ```
 
-> [!NOTE] Independent versioning requires `cargo-edit` for version bumping:
+<!-- prettier-ignore -->
+> [!NOTE]
+> Independent versioning requires `cargo-edit` for version bumping:
 >
 > ```sh
 > cargo install cargo-edit
 > ```
 
-Members are published in dependency order: `mylib` before `mycli`. So
-`crates.io` has time to index the library before the CLI tries to depend on it.
+Members are published in dependency order. `mylib` before `mycli`. So crates.io
+has time to index the library before the CLI tries to depend on it.
 
 ```sh
 jj-release --dry-run
@@ -362,17 +422,19 @@ the version bump:
 
 | Commit type                          | Bump       |
 | ------------------------------------ | ---------- |
-| `feat:`                              | Minor      |
-| `fix:`, `perf:`, `refactor:`         | Patch      |
-| `feat!:` or `BREAKING CHANGE` footer | Major      |
+| `feat:`                              | minor      |
+| `fix:`, `perf:`, `refactor:`         | patch      |
+| `feat!:` or `BREAKING CHANGE` footer | major      |
 | `chore:`, `docs:`, `test:`, etc.     | No release |
 
 The highest bump across all commits since the last tag wins. Scoped commits are
 preserved in the changelog. `feat(cli): add init subcommand` renders as
 `**(cli)** add init subcommand` under `### Added`
 
-> [!NOTE] `chore:`, `docs:`, `style:`, `test:`, `ci:`, and `build:` commits do
-> not trigger a release. If your only changes since the last tag are in these
+<!-- prettier-ignore -->
+> [!NOTE]
+> `chore:`, `docs:`, `style:`, `test:`, `ci:`, and `build:` commits do not
+> trigger a release. If your only changes since the last tag are in these
 > categories, jj-release will exit with "No releasable commits". Either add a
 > `feat:` or `fix:` commit, or force a bump in `release.toml`:
 >
@@ -416,8 +478,10 @@ and this project adheres to
 
 ## GitHub Actions
 
-> [!NOTE] This action takes a while to finish since it compiles `jj` and
-> `jj-release` from source. Use `jj-release` locally if you're in a hurry.
+<!-- prettier-ignore -->
+> [!NOTE]
+> This action takes a while to finish since it compiles `jj` and `jj-release`
+> from source. Use `jj-release` locally if you're in a hurry.
 
 Add this workflow to your consumer repo at `.github/workflows/release.yml`:
 
@@ -466,10 +530,21 @@ jobs:
 
 - Rust 1.80+
 - jj 0.43+ (tested on 0.43.0; earlier versions may work but tag and push flag
-  syntax differs: see [jj compatibility](#jj-compatibility) below)
+  syntax differs)
 - A colocated jj/git repository (`jj git init --colocate`)
 
 ---
+
+## Credits
+
+Parts of the codebase are adapted from these great projects:
+
+- Version baseline from crates.io rather than manifest. Check for API breaking
+  changes with `cargo-semver-checks`:
+  [release-plz](https://github.com/release-plz/release-plz)
+
+- Error handling approach:
+  [cargo-release](https://github.com/crate-ci/cargo-release)
 
 ## License
 
