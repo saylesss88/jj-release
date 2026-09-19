@@ -2,6 +2,7 @@
 
 use anyhow::{Result, anyhow};
 use semver::Version;
+use serde_json::Value;
 use ureq::{Agent, Error};
 
 /// Check if a specific version of a crate is already published on crates.io
@@ -26,6 +27,27 @@ pub fn version_exists_on_crates_io(name: &str, version: &Version) -> Result<bool
     }
 }
 
+pub fn latest_version_on_crates_io(name: &str) -> Result<Option<Version>> {
+    let agent = Agent::new_with_defaults();
+    let url = format!("https://crates.io/api/v1/crates/{name}");
+    let response = agent
+        .get(&url)
+        .header(
+            "User-Agent",
+            "jj-release (github.com/saylesss88/jj-release)",
+        )
+        .call();
+    match response {
+        Ok(r) => {
+            let json: Value = r.into_body().read_json()?;
+            let version_str = json["crate"]["newest_version"].as_str();
+            Ok(version_str.and_then(|v| Version::parse(v).ok()))
+        }
+        Err(Error::StatusCode(404)) => Ok(None),
+        Err(e) => Err(anyhow!("crates.io API error: {e}")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -42,5 +64,19 @@ mod tests {
         // This version should never exist
         let v = Version::parse("99.99.99").unwrap();
         assert!(!version_exists_on_crates_io("anyhow", &v).unwrap());
+    }
+    #[test]
+    fn gets_latest_version_from_crates_io() {
+        // anyhow is stable and will always have a version
+        let v = latest_version_on_crates_io("anyhow").unwrap();
+        assert!(v.is_some());
+        assert!(v.unwrap().major >= 1);
+    }
+
+    #[test]
+    fn returns_none_for_nonexistent_crate() {
+        let v =
+            latest_version_on_crates_io("this-crate-definitely-does-not-exist-xyzzy123").unwrap();
+        assert!(v.is_none());
     }
 }

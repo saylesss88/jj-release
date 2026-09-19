@@ -127,6 +127,18 @@ automatically from conventional commits.
 
 If a tag doesn't already exist, `jj-release` will create one for you.
 
+### Releasing 1.0.0
+
+When you're ready to release 1.0.0, set `force` in `release.toml`:
+
+```toml
+[bump]
+force = "major"
+```
+
+This overrides the automatic bump calculation regardless of commit types. Remove
+it after the release.
+
 ---
 
 ## Local usage
@@ -158,8 +170,7 @@ there's no credentials file.
 
 ## PR Workflow
 
-If you want to review before it publishes, use the `pr`
-subcommand instead:
+If you want to review before it publishes, use the `pr` subcommand instead:
 
 ```sh
 jj new -m "Release: please"
@@ -175,8 +186,8 @@ no tag. Merge the PR and CI runs `jj-release` to do the actual release.
 ## Configuration
 
 Drop a `release.toml` in your repo root, or run `jj-release init` to generate
-one automatically. All fields are optional, defaults work for most GitHub +
-Rust projects out of the box:
+one automatically. All fields are optional, defaults work for most GitHub + Rust
+projects out of the box:
 
 ```toml
 [release]
@@ -206,8 +217,7 @@ manifest_backend = "cargo"   # manifest format: cargo, npm, go
 
 ## Exit Codes
 
-`jj-release` uses distinct exit codes so CI scripts can distinguish failure
-modes:
+`jj-release` uses distinct exit codes so CI scripts can distinguish failure modes help me wrap this:
 
 | Code | Meaning                                      |
 | ---- | -------------------------------------------- |
@@ -259,9 +269,8 @@ The token needs `repository` scope, create one at
 
 ## Multi-Language Support
 
-> [!NOTE]
-> npm and Go support is implemented but not yet battle-tested in production.
-> Feedback welcome if you use `jj-release` with these languages.
+> [!NOTE] npm and Go support is implemented but not yet battle-tested in
+> production. Feedback welcome if you use `jj-release` with these languages.
 
 `jj-release` supports multiple manifest formats via `manifest_backend`:
 
@@ -324,8 +333,7 @@ tag_prefix = "v"
 depends_on = ["mylib"]
 ```
 
-> [!NOTE]
-> Independent versioning requires `cargo-edit` for version bumping:
+> [!NOTE] Independent versioning requires `cargo-edit` for version bumping:
 >
 > ```sh
 > cargo install cargo-edit
@@ -362,9 +370,8 @@ The highest bump across all commits since the last tag wins. Scoped commits are
 preserved in the changelog. `feat(cli): add init subcommand` renders as
 `**(cli)** add init subcommand` under `### Added`
 
-> [!NOTE]
-> `chore:`, `docs:`, `style:`, `test:`, `ci:`, and `build:` commits do not
-> trigger a release. If your only changes since the last tag are in these
+> [!NOTE] `chore:`, `docs:`, `style:`, `test:`, `ci:`, and `build:` commits do
+> not trigger a release. If your only changes since the last tag are in these
 > categories, jj-release will exit with "No releasable commits". Either add a
 > `feat:` or `fix:` commit, or force a bump in `release.toml`:
 >
@@ -373,7 +380,8 @@ preserved in the changelog. `feat(cli): add init subcommand` renders as
 > force = "patch"
 > ```
 >
-> Remove `force` after the release so future versions are computed automatically.
+> Remove `force` after the release so future versions are computed
+> automatically.
 
 ---
 
@@ -388,7 +396,8 @@ Each release prepends a new section to `CHANGELOG.md`:
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and this project adheres to
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.2.0] - 2026-09-08
 
@@ -406,9 +415,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## GitHub Actions
 
-> [!NOTE]
-> This action takes a while to finish since it compiles `jj` and `jj-release`
-> from source. Use `jj-release` locally if you're in a hurry.
+> [!NOTE] This action takes a while to finish since it compiles `jj` and
+> `jj-release` from source. Use `jj-release` locally if you're in a hurry.
 
 Add this workflow to your consumer repo at `.github/workflows/release.yml`:
 
