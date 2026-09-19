@@ -331,6 +331,7 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
         ("forge CLI", check_forge_cli(config)),
         ("manifest", check_manifest(ctx, root)),
         ("version tag", check_version_tag(&tag)),
+        ("publish pre-flight", check_publish(ctx.publisher, root)),
     ];
 
     if config.publish.cargo && config.publish.semver_checks {
@@ -512,12 +513,19 @@ fn check_cargo_token() -> CheckResult {
     }
 }
 
+fn check_publish(publisher: &dyn PublishBackend, root: &Path) -> CheckResult {
+    publisher
+        .check(root)
+        .map(|()| "dry-run passed".to_owned())
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::{cell::RefCell, path::Path};
 
-    use anyhow::Result;
+    use anyhow::{Result, bail};
     use semver::Version;
 
     use crate::{commits::CommitInfo, config, manifest, test_helpers::mock::MockBackend};
@@ -531,6 +539,20 @@ mod tests {
             Ok(self.version.clone())
         }
         fn write_version(&self, _root: &Path, _version: &Version) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    struct MockPublisher(bool);
+
+    impl PublishBackend for MockPublisher {
+        fn check(&self, _root: &Path) -> Result<()> {
+            if self.0 {
+                bail!("mock failure");
+            }
+            Ok(())
+        }
+        fn publish(&self, _root: &Path, _flags: &[String]) -> Result<()> {
             Ok(())
         }
     }
@@ -593,5 +615,23 @@ mod tests {
         ";
         let cfg: Config = toml::from_str(raw).unwrap();
         assert!(!cfg.publish.semver_checks);
+    }
+
+    #[test]
+    fn check_publish_success() {
+        let publisher = MockPublisher(false);
+        assert_eq!(
+            check_publish(&publisher, Path::new("/tmp")),
+            Ok("dry-run passed".to_owned())
+        );
+    }
+
+    #[test]
+    fn check_publish_failure() {
+        let publisher = MockPublisher(true);
+        assert_eq!(
+            check_publish(&publisher, Path::new("/tmp")),
+            Err("mock failure".to_owned())
+        );
     }
 }
