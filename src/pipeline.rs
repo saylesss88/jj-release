@@ -345,7 +345,13 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
         check!(
             "cargo-semver-checks",
             if detect::tool_available("cargo-semver-checks") {
-                Ok("found".to_owned())
+                match publish::run_semver_checks(root) {
+                    Ok(true) => Err(
+                        "breaking API changes detected, bump will be upgraded to Major".to_owned(),
+                    ),
+                    Ok(false) => Ok("no breaking changes".to_owned()),
+                    Err(e) => Err(e.to_string()),
+                }
             } else {
                 Err("not found, install with: cargo install cargo-semver-checks".to_owned())
             }
