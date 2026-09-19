@@ -51,6 +51,7 @@ pub struct PublishConfig {
     /// Extra flags forwarded to `cargo publish`.
     pub cargo_flags: Vec<String>,
     pub semver_checks: bool,
+    pub semver_checks_upgrade_major: bool, // auto-upgrade to Major on breaking changes
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,6 +142,7 @@ impl Default for PublishConfig {
             cargo: true,
             cargo_flags: vec![],
             semver_checks: true,
+            semver_checks_upgrade_major: true,
         }
     }
 }

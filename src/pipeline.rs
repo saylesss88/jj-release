@@ -132,22 +132,28 @@ pub fn prepare_release(
             }
         },
     );
-    let next_version = commits::apply_bump(&current_version, bump);
-    let tag_name = config.tag_name(&next_version);
 
     // Upgrade bump to Major if cargo-semver-checks detects breaking changes.
     if config.publish.cargo
         && config.publish.semver_checks
         && detect::tool_available("cargo-semver-checks")
     {
+        let is_stable = current_version.major >= 1;
         let has_breaking = publish::run_semver_checks(root)?;
-        if has_breaking && bump < BumpKind::Major {
+        if has_breaking
+            && bump < BumpKind::Major
+            && (is_stable || config.publish.semver_checks_upgrade_major)
+        {
             eprintln!(
                 "warning: cargo-semver-checks detected API breaking changes, upgrading bump to Major"
             );
             bump = BumpKind::Major;
         }
     }
+
+    // Compute next_version AFTER potential bump upgrade.
+    let next_version = commits::apply_bump(&current_version, bump);
+    let tag_name = config.tag_name(&next_version);
 
     Ok(Some(PreparedRelease {
         since,
