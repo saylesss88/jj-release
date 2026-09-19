@@ -272,6 +272,10 @@ require_tag = true                   # require a version tag baseline; auto-crea
 manifest_backend = "cargo"           # manifest format: cargo, npm, go
 ```
 
+By default, Cargo projects publish to crates.io after the tag is pushed. Set
+`[publish] cargo = false` to use jj-release only for versioning, changelogs,
+tags, and forge releases.
+
 ---
 
 ## Exit Codes
@@ -322,6 +326,12 @@ export FORGEJO_TOKEN=your-token
 
 The token needs `repository` scope, create one at
 `https://codeberg.org/user/settings/applications`.
+
+| Forge   | Authentication                                                      |
+| ------- | ------------------------------------------------------------------- |
+| GitHub  | `gh auth login` locally or `GITHUB_TOKEN` in GitHub Actions         |
+| GitLab  | `glab auth login` locally or the token/env mechanism used by `glab` |
+| Forgejo | `FORGEJO_TOKEN` and `forge_url`                                     |
 
 ---
 
