@@ -20,6 +20,10 @@ pub fn release_pr(
 
     let Some(prepared) = pipeline::prepare_release(ctx.backend, ctx.manifest, config, root)? else {
         info!("No trigger commit found or no releasable commits. Nothing to release.");
+        info!("");
+        info!("hint: To trigger a PR, create a commit with the exact message:");
+        info!("      jj new -m {:?}", config.release.trigger);
+        info!("      (Run `jj-release --help` for full usage details)");
         return Ok(());
     };
 
