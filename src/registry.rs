@@ -27,6 +27,11 @@ pub fn version_exists_on_crates_io(name: &str, version: &Version) -> Result<bool
     }
 }
 
+/// Fetches the latest published version of a crate from the crates.io REST API.
+///
+/// # Errors
+/// Returns an error if the network request fails, JSON deserialization fails, or the API returns
+/// an unexpected non-404 status code.
 pub fn latest_version_on_crates_io(name: &str) -> Result<Option<Version>> {
     let agent = Agent::new_with_defaults();
     let url = format!("https://crates.io/api/v1/crates/{name}");

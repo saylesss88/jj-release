@@ -57,6 +57,14 @@ impl PublishBackend for NpmPublish {
     }
 }
 
+/// Runs `cargo-semver-checks` on the crate located at the specified root directory.
+///
+/// # Returns
+/// * `Ok(true)` if breaking API changes were detected (indicated by a non-zero exit code).
+/// * `Ok(false)` if no breaking changes were found (indicated by a zero exit code).
+///
+/// # Errors
+/// Returns an error if the process fails to spawn or if `cargo-semver-checks`
 pub fn run_semver_checks(root: &Path) -> Result<bool> {
     let output = Command::new("cargo")
         .args(["semver-checks"])

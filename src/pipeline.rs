@@ -1,8 +1,8 @@
 //! Release pipeline orchestration.
 
-use std::{collections::HashMap, env, fmt::Display, fs, path::Path, process};
+use std::{collections::HashMap, env, fs, path::Path, process};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use semver::Version;
 
 use crate::changelog;
@@ -53,6 +53,14 @@ impl<'a> ReleaseContext<'a> {
     }
 }
 
+enum MissingTagBehavior {
+    /// For commands that must not alter the repository. Mirrors the range a
+    /// newly-created baseline tag would produce.
+    AssumeBaseline,
+    /// For the actual release command. Creates and pushes the baseline tag.
+    CreateBaseline,
+}
+
 /// Prepares a new release by evaluating recent commits, checking for release triggers,
 /// and calculating the next version bump based on configuration and the project manifest.
 ///
@@ -82,24 +90,13 @@ pub fn prepare_release(
 ) -> Result<Option<PreparedRelease>> {
     backend.check_identity()?;
 
-    let since = match commits::latest_version_tag(backend, &config.release.tag_prefix)? {
-        Some(tag) => tag.name,
-        None => {
-            if config.changelog.require_tag {
-                // Auto-tag the current version as baseline instead of erroring.
-                let current = manifest.read_version(root)?;
-                let tag_name = format!("{}{current}", config.release.tag_prefix);
-                eprintln!(
-                    "hint: no version tag found, tagging current version {tag_name} as baseline"
-                );
-                backend.create_tag(&tag_name, "@-")?;
-                backend.git_push(None, Some(&tag_name))?;
-                tag_name
-            } else {
-                "root()".to_owned()
-            }
-        }
-    };
+    let since = resolve_since(
+        backend,
+        manifest,
+        config,
+        root,
+        &MissingTagBehavior::CreateBaseline,
+    )?;
 
     // Check for trigger commit.
     if commits::find_trigger(backend, &config.release.trigger, &since)?.is_none() {
@@ -206,14 +203,13 @@ pub fn prepare_release(
 pub fn print_next_version(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Result<()> {
     let current = ctx.manifest.read_version(root)?;
 
-    let since: String =
-        if let Some(tag) = commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)? {
-            tag.name
-        } else if config.changelog.require_tag {
-            bail!("no version tag found\ncreating first tag...");
-        } else {
-            "root()".to_owned()
-        };
+    let since = resolve_since(
+        ctx.backend,
+        ctx.manifest,
+        config,
+        root,
+        &MissingTagBehavior::AssumeBaseline,
+    )?;
     let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
     let bump = commits::resolve_bump(config.bump.force.as_ref(), &commits)?;
     let next = commits::apply_bump(&current, bump);
@@ -327,172 +323,192 @@ type CheckResult = Result<String, String>;
 ///
 /// Returns an error if any backend operations fail, the manifest cannot be read, or a required version tag is missing when `require_tag` is enabled.
 pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Result<()> {
-    let mut passed = 0;
-    let mut failed = 0;
+    let tag = commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)
+        .map_err(|e| e.to_string());
 
-    macro_rules! check {
-        ($label:expr, $result:expr) => {
-            match $result {
-                Ok(msg) => {
-                    println!("✓ {}: {msg}", $label);
-                    passed += 1;
-                }
-                Err(msg) => {
-                    println!("✗ {}: {msg}", $label);
-                    failed += 1;
-                }
-            }
-        };
-    }
+    let mut checks: Vec<(&str, CheckResult)> = vec![
+        ("jj identity", check_jj_identity(ctx)),
+        ("forge CLI", check_forge_cli(config)),
+        ("manifest", check_manifest(ctx, root)),
+        ("version tag", check_version_tag(&tag)),
+    ];
 
-    // jj identity.
-    check!(
-        "jj identity",
-        ctx.backend
-            .check_identity()
-            .map(|()| "configured".to_owned())
-            .map_err(|e| e.to_string())
-    );
-
-    // Forge CLI.
-    let forge_check = match config.release.forge.as_str() {
-        "github" => {
-            if detect::tool_available("gh") {
-                Ok("gh found".to_owned())
-            } else {
-                Err("gh not found. Install from https://cli.github.com".to_owned())
-            }
-        }
-        "gitlab" => {
-            if detect::tool_available("glab") {
-                Ok("glab found".to_owned())
-            } else {
-                Err("glab not found. Install from https://gitlab.com/gitlab-org/cli".to_owned())
-            }
-        }
-        _ => Ok("no forge CLI required".to_owned()),
-    };
-    check!("forge CLI", forge_check);
-
-    // cargo-semver-checks availability.
     if config.publish.cargo && config.publish.semver_checks {
-        check!(
-            "cargo-semver-checks",
-            if detect::tool_available("cargo-semver-checks") {
-                match publish::run_semver_checks(root) {
-                    Ok(false) => Ok("no breaking changes".to_owned()),
-                    Ok(true) => {
-                        let is_stable = ctx.manifest.read_version(root).is_ok_and(|v| v.major >= 1);
-                        let will_upgrade = is_stable || config.publish.semver_checks_upgrade_major;
-                        if will_upgrade {
-                            Err(
-                                "breaking API changes detected, bump will be upgraded to Major"
-                                    .to_owned(),
-                            )
-                        } else {
-                            Ok(
-                                "breaking API changes detected, skipping Major upgrade (pre-1.0)"
-                                    .to_owned(),
-                            )
-                        }
-                    }
-                    Err(e) => Err(e.to_string()),
-                }
-            } else {
-                Err("not found, install with: cargo install cargo-semver-checks".to_owned())
-            }
-        );
+        checks.push(("cargo-semver-checks", check_semver(ctx, config, root)));
+    }
+    if config.publish.cargo
+        && let Some(result) = check_crates_io(ctx, root)
+    {
+        checks.push(("crates.io", result));
     }
 
-    // Manifest readable.
-    check!(
-        "manifest",
-        ctx.manifest
-            .read_version(root)
-            .map(|v| format!("version {v}"))
-            .map_err(|e| e.to_string())
-    );
-
-    // Version tag exists.
-    check!(
-        "version tag",
-        commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)
-            .map_err(|e| e.to_string())
-            .and_then(|t| t.ok_or_else(|| "no version tag found".to_owned()))
-            .map(|t| format!("found {}", t.name))
-    );
-    // crates.io version check.
-    if config.publish.cargo {
-        let cargo_toml = root.join("Cargo.toml");
-        if let Ok(name) = manifest::read_name(&cargo_toml)
-            && let Ok(version) = ctx.manifest.read_version(root)
-        {
-            check!("crates.io", {
-                let result: Result<String, String> = registry::latest_version_on_crates_io(&name)
-                    .map_err(|e| e.to_string())
-                    .map(|latest| match latest {
-                        Some(published) if published == version => {
-                            format!("v{version} published, in sync with manifest")
-                        }
-                        Some(published) => {
-                            format!("v{published} published, manifest is v{version}")
-                        }
-                        None => "not yet published".to_owned(),
-                    });
-                result
-            });
-        }
-    }
-
-    // Trigger commit.
-    let since =
-        if let Some(tag) = commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)? {
-            tag.name
-        } else {
-            if config.changelog.require_tag {
-                bail!("no version tag found");
-            }
-            "root()".to_owned()
-        };
-    check!(
+    let since = resolve_since(
+        ctx.backend,
+        ctx.manifest,
+        config,
+        root,
+        &MissingTagBehavior::AssumeBaseline,
+    )
+    .map_err(|e| e.to_string());
+    checks.push((
         "trigger commit",
-        commits::find_trigger(ctx.backend, &config.release.trigger, &since)
-            .map_err(|e| e.to_string())
-            .and_then(|t| t.ok_or_else(|| format!("no {:?} commit found", config.release.trigger)))
-            .map(|_| "found".to_owned())
-    );
+        since
+            .as_ref()
+            .map_err(Clone::clone)
+            .and_then(|s| check_trigger(ctx, config, s)),
+    ));
 
-    // CARGO_REGISTRY_TOKEN.
     if config.publish.cargo {
-        let has_env_token = env::var("CARGO_REGISTRY_TOKEN").is_ok();
-        let has_credentials =
-            dirs::home_dir().is_some_and(|h| h.join(".cargo/credentials.toml").exists());
-
-        check!(
-            "CARGO_REGISTRY_TOKEN",
-            if has_env_token || has_credentials {
-                Ok("configured".to_owned())
-            } else {
-                Err(
-                    "not set and no ~/.cargo/credentials.toml found, needed for cargo publish"
-                        .to_owned(),
-                )
-            }
-        );
+        checks.push(("CARGO_REGISTRY_TOKEN", check_cargo_token()));
     }
 
-    println!();
-    println!("{passed} passed, {failed} failed");
-
-    if failed > 0 {
-        process::exit(1);
-    }
+    report(&checks);
     Ok(())
 }
 
-pub fn info(quiet: bool, message: impl Display) {
-    if !quiet {
-        println!("{message}");
+fn resolve_since(
+    backend: &dyn JjBackend,
+    manifest: &dyn ManifestBackend,
+    config: &Config,
+    root: &Path,
+    behavior: &MissingTagBehavior,
+) -> Result<String> {
+    if let Some(tag) = commits::latest_version_tag(backend, &config.release.tag_prefix)? {
+        return Ok(tag.name);
+    }
+
+    if !config.changelog.require_tag {
+        return Ok("root()".to_owned());
+    }
+
+    match behavior {
+        MissingTagBehavior::AssumeBaseline => Ok("@-".to_owned()),
+
+        MissingTagBehavior::CreateBaseline => {
+            let current = manifest.read_version(root)?;
+            let tag_name = format!("{}{current}", config.release.tag_prefix);
+
+            eprintln!("hint: no version tag found, tagging current version {tag_name} as baseline");
+
+            backend.create_tag(&tag_name, "@-")?;
+            backend.git_push(None, Some(&tag_name))?;
+
+            Ok(tag_name)
+        }
+    }
+}
+
+fn report(checks: &[(&str, CheckResult)]) {
+    let mut passed = 0;
+    let mut failed = 0;
+
+    for (label, result) in checks {
+        match result {
+            Ok(msg) => {
+                println!("✓ {label}: {msg}");
+                passed += 1;
+            }
+            Err(msg) => {
+                println!("✗ {label}: {msg}");
+                failed += 1;
+            }
+        }
+    }
+
+    println!("\n{passed} passed, {failed} failed");
+    if failed > 0 {
+        process::exit(1);
+    }
+}
+
+fn check_jj_identity(ctx: &ReleaseContext<'_>) -> CheckResult {
+    ctx.backend
+        .check_identity()
+        .map(|()| "configured".to_owned())
+        .map_err(|e| e.to_string())
+}
+
+fn check_forge_cli(config: &Config) -> CheckResult {
+    match config.release.forge.as_str() {
+        "github" if detect::tool_available("gh") => Ok("gh found".to_owned()),
+        "github" => Err("gh not found. Install from https://cli.github.com".to_owned()),
+        "gitlab" if detect::tool_available("glab") => Ok("glab found".to_owned()),
+        "gitlab" => {
+            Err("glab not found. Install from https://gitlab.com/gitlab-org/cli".to_owned())
+        }
+        _ => Ok("no forge CLI required".to_owned()),
+    }
+}
+
+fn check_semver(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> CheckResult {
+    if !detect::tool_available("cargo-semver-checks") {
+        return Err("not found, install with: cargo install cargo-semver-checks".to_owned());
+    }
+
+    match publish::run_semver_checks(root) {
+        Ok(false) => Ok("no breaking changes".to_owned()),
+        Ok(true) => {
+            let is_stable = ctx.manifest.read_version(root).is_ok_and(|v| v.major >= 1);
+            let will_upgrade = is_stable || config.publish.semver_checks_upgrade_major;
+            if will_upgrade {
+                Err("breaking API changes detected, bump will be upgraded to Major".to_owned())
+            } else {
+                Ok("breaking API changes detected, skipping Major upgrade (pre-1.0)".to_owned())
+            }
+        }
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+fn check_manifest(ctx: &ReleaseContext<'_>, root: &Path) -> CheckResult {
+    ctx.manifest
+        .read_version(root)
+        .map(|v| format!("version {v}"))
+        .map_err(|e| e.to_string())
+}
+
+fn check_version_tag(tag: &Result<Option<Tag>, String>) -> CheckResult {
+    match tag {
+        Ok(Some(t)) => Ok(format!("found {}", t.name)),
+        Ok(None) => Err("no version tag found".to_owned()),
+        Err(e) => Err(e.clone()),
+    }
+}
+
+fn check_crates_io(ctx: &ReleaseContext<'_>, root: &Path) -> Option<CheckResult> {
+    let cargo_toml = root.join("Cargo.toml");
+    let name = manifest::read_name(&cargo_toml).ok()?;
+    let version = ctx.manifest.read_version(root).ok()?;
+
+    let result = registry::latest_version_on_crates_io(&name)
+        .map_err(|e| e.to_string())
+        .map(|latest| match latest {
+            Some(published) if published == version => {
+                format!("v{version} published, in sync with manifest")
+            }
+            Some(published) => format!("v{published} published, manifest is v{version}"),
+            None => "not yet published".to_owned(),
+        });
+
+    Some(result)
+}
+
+fn check_trigger(ctx: &ReleaseContext<'_>, config: &Config, since: &str) -> CheckResult {
+    commits::find_trigger(ctx.backend, &config.release.trigger, since)
+        .map_err(|e| e.to_string())
+        .and_then(|t| t.ok_or_else(|| format!("no {:?} commit found", config.release.trigger)))
+        .map(|_| "found".to_owned())
+}
+
+fn check_cargo_token() -> CheckResult {
+    let has_env_token = env::var("CARGO_REGISTRY_TOKEN").is_ok();
+    let has_credentials =
+        dirs::home_dir().is_some_and(|h| h.join(".cargo/credentials.toml").exists());
+
+    if has_env_token || has_credentials {
+        Ok("configured".to_owned())
+    } else {
+        Err("not set and no ~/.cargo/credentials.toml found, needed for cargo publish".to_owned())
     }
 }
 
