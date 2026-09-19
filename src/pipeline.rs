@@ -36,6 +36,22 @@ pub struct ReleaseContext<'a> {
     pub publisher: &'a dyn PublishBackend,
 }
 
+impl<'a> ReleaseContext<'a> {
+    pub fn new(
+        backend: &'a dyn JjBackend,
+        manifest: &'a dyn ManifestBackend,
+        forge: &'a dyn ForgeBackend,
+        publisher: &'a dyn PublishBackend,
+    ) -> Self {
+        Self {
+            backend,
+            manifest,
+            forge,
+            publisher,
+        }
+    }
+}
+
 /// Prepares a new release by evaluating recent commits, checking for release triggers,
 /// and calculating the next version bump based on configuration and the project manifest.
 ///
@@ -354,10 +370,22 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
             "cargo-semver-checks",
             if detect::tool_available("cargo-semver-checks") {
                 match publish::run_semver_checks(root) {
-                    Ok(true) => Err(
-                        "breaking API changes detected, bump will be upgraded to Major".to_owned(),
-                    ),
                     Ok(false) => Ok("no breaking changes".to_owned()),
+                    Ok(true) => {
+                        let is_stable = ctx.manifest.read_version(root).is_ok_and(|v| v.major >= 1);
+                        let will_upgrade = is_stable || config.publish.semver_checks_upgrade_major;
+                        if will_upgrade {
+                            Err(
+                                "breaking API changes detected, bump will be upgraded to Major"
+                                    .to_owned(),
+                            )
+                        } else {
+                            Ok(
+                                "breaking API changes detected, skipping Major upgrade (pre-1.0)"
+                                    .to_owned(),
+                            )
+                        }
+                    }
                     Err(e) => Err(e.to_string()),
                 }
             } else {

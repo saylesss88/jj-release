@@ -139,12 +139,12 @@ fn run() -> Result<(), errors::CliError> {
         _ => Box::new(NoForge),
     };
 
-    let ctx = ReleaseContext {
-        backend: &backend,
-        manifest: manifest.as_ref(),
-        forge: forge.as_ref(),
-        publisher: publisher.as_ref(),
-    };
+    let ctx = ReleaseContext::new(
+        &backend,
+        manifest.as_ref(),
+        forge.as_ref(),
+        publisher.as_ref(),
+    );
 
     match cli.command.unwrap_or(Subcommand::Run) {
         Subcommand::Run => Ok(commands::release(
