@@ -18,6 +18,7 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 #[serde(default)]
 pub struct ReleaseConfig {
     /// Commit message substring that triggers a release.
@@ -55,6 +56,7 @@ pub struct PublishConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 #[serde(default)]
 pub struct ChangelogConfig {
     pub enabled: bool,
@@ -71,6 +73,7 @@ pub enum Versioning {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 #[serde(default)]
 pub struct WorkspaceMember {
     pub name: String,
@@ -93,6 +96,7 @@ impl Default for WorkspaceMember {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[non_exhaustive]
 #[serde(default)]
 pub struct WorkspaceConfig {
     pub enabled: bool,

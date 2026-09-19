@@ -17,6 +17,7 @@ use crate::{
     registry, workspace,
 };
 
+#[non_exhaustive]
 pub struct PreparedRelease {
     pub since: String,
     pub current_version: Version,
@@ -27,6 +28,7 @@ pub struct PreparedRelease {
     pub member_bumps: Option<HashMap<String, (Version, Version)>>,
 }
 
+#[non_exhaustive]
 pub struct ReleaseContext<'a> {
     pub backend: &'a dyn JjBackend,
     pub manifest: &'a dyn ManifestBackend,
