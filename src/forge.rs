@@ -175,9 +175,145 @@ impl ForgeBackend for NoForge {
     }
 }
 
+pub fn github_release_args(tag: &str) -> Vec<String> {
+    vec![
+        "release".to_owned(),
+        "create".to_owned(),
+        tag.to_owned(),
+        "--generate-notes".to_owned(),
+    ]
+}
+
+pub fn github_pr_args(pr: &PrRequest<'_>) -> Vec<String> {
+    vec![
+        "pr".to_owned(),
+        "create".to_owned(),
+        "--title".to_owned(),
+        format!("chore: release {}", pr.tag),
+        "--body".to_owned(),
+        pr.body.to_owned(),
+        "--head".to_owned(),
+        pr.head.to_owned(),
+        "--base".to_owned(),
+        pr.base.to_owned(),
+    ]
+}
+
+pub fn gitlab_release_args(tag: &str) -> Vec<String> {
+    vec![
+        "release".to_owned(),
+        "create".to_owned(),
+        tag.to_owned(),
+        "--generate-notes".to_owned(),
+    ]
+}
+
+pub fn gitlab_pr_args(pr: &PrRequest<'_>) -> Vec<String> {
+    vec![
+        "mr".to_owned(),
+        "create".to_owned(),
+        "--title".to_owned(),
+        format!("chore: release {}", pr.tag),
+        "--description".to_owned(),
+        pr.body.to_owned(),
+        "--source-branch".to_owned(),
+        pr.head.to_owned(),
+        "--target-branch".to_owned(),
+        pr.base.to_owned(),
+    ]
+}
+
+pub fn forgejo_release_payload(tag: &str) -> Value {
+    serde_json::json!({
+        "tag_name": tag,
+        "name": tag,
+        "draft": false,
+        "prerelease": false
+    })
+}
+
+pub fn forgejo_pr_payload(pr: &PrRequest<'_>) -> Value {
+    serde_json::json!({
+        "title": format!("chore: release {}", pr.tag),
+        "body": pr.body,
+        "head": pr.head,
+        "base": pr.base,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn github_pr_args_maps_correctly() {
+        let req = PrRequest {
+            tag: "v1.2.3",
+            head: "release/v1.2.3",
+            base: "main",
+            body: "Changelog here",
+        };
+        let args = github_pr_args(&req);
+
+        assert_eq!(
+            args,
+            vec![
+                "pr",
+                "create",
+                "--title",
+                "chore: release v1.2.3",
+                "--body",
+                "Changelog here",
+                "--head",
+                "release/v1.2.3",
+                "--base",
+                "main"
+            ]
+        );
+    }
+
+    #[test]
+    fn gitlab_pr_args_maps_correctly() {
+        let req = PrRequest {
+            tag: "v1.2.3",
+            head: "release/v1.2.3",
+            base: "main",
+            body: "Changelog here",
+        };
+        let args = gitlab_pr_args(&req);
+
+        assert_eq!(
+            args,
+            vec![
+                "mr",
+                "create",
+                "--title",
+                "chore: release v1.2.3",
+                "--description",
+                "Changelog here",
+                "--source-branch",
+                "release/v1.2.3",
+                "--target-branch",
+                "main"
+            ]
+        );
+    }
+
+    #[test]
+    fn forgejo_pr_payload_maps_correctly() {
+        let req = PrRequest {
+            tag: "v1.2.3",
+            head: "release/v1.2.3",
+            base: "main",
+            body: "Changelog here",
+        };
+        let payload = forgejo_pr_payload(&req);
+
+        assert_eq!(payload["title"], "chore: release v1.2.3");
+        assert_eq!(payload["body"], "Changelog here");
+        assert_eq!(payload["head"], "release/v1.2.3");
+        assert_eq!(payload["base"], "main");
+    }
 
     #[test]
     fn no_forge_create_release_is_noop() {
@@ -199,27 +335,5 @@ mod tests {
                 })
                 .is_ok()
         );
-    }
-
-    #[test]
-    fn github_forge_uses_gh_cli() {
-        let forge: &dyn ForgeBackend = &GitHubForge;
-        let _ = forge;
-    }
-
-    #[test]
-    fn gitlab_forge_implements_trait() {
-        let forge: &dyn ForgeBackend = &GitLabForge;
-        let _ = forge;
-    }
-
-    #[test]
-    fn forgejo_forge_implements_trait() {
-        let _forge: &dyn ForgeBackend = &ForgejoForge {
-            host: "https://codeberg.org".into(),
-            token: "test-token".into(),
-            owner: "myuser".into(),
-            repo: "myrepo".into(),
-        };
     }
 }
