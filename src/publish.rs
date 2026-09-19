@@ -5,6 +5,13 @@ use std::{path::Path, process::Command};
 use anyhow::{Context, Result, bail};
 
 pub trait PublishBackend {
+    /// Runs pre-flight checks (like a dry-run) to ensure the package can be published.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the dry-run fails (e.g., uncommitted files without --allow-dirty,
+    /// missing metadata, or missing registry tokens).
+    fn check(&self, root: &Path) -> Result<()>;
     /// Publishes the project crate to a package registry (such as crates.io).
     ///
     /// # Errors
@@ -17,6 +24,9 @@ pub trait PublishBackend {
 pub struct NoPublish;
 
 impl PublishBackend for NoPublish {
+    fn check(&self, _root: &Path) -> Result<()> {
+        Ok(())
+    }
     fn publish(&self, _root: &Path, _extra_flags: &[String]) -> Result<()> {
         Ok(())
     }
@@ -25,6 +35,17 @@ impl PublishBackend for NoPublish {
 pub struct CargoPublish;
 
 impl PublishBackend for CargoPublish {
+    fn check(&self, root: &Path) -> Result<()> {
+        let status = Command::new("cargo")
+            .args(["publish", "--dry-run", "--allow-dirty"])
+            .current_dir(root)
+            .status()
+            .context("spawning cargo publish --dry-run")?;
+        if !status.success() {
+            bail!("cargo publish --dry-run failed. Run manually to see errors.");
+        }
+        Ok(())
+    }
     fn publish(&self, root: &Path, extra_flags: &[String]) -> Result<()> {
         let status = Command::new("cargo")
             .arg("publish")
@@ -43,6 +64,17 @@ impl PublishBackend for CargoPublish {
 pub struct NpmPublish;
 
 impl PublishBackend for NpmPublish {
+    fn check(&self, root: &Path) -> Result<()> {
+        let status = Command::new("npm")
+            .args(["publish", "--dry-run"])
+            .current_dir(root)
+            .status()
+            .context("spawning npm publish --dry-run")?;
+        if !status.success() {
+            bail!("npm publish --dry-run failed. Run manually to see errors.");
+        }
+        Ok(())
+    }
     fn publish(&self, root: &Path, extra_flags: &[String]) -> Result<()> {
         let status = Command::new("npm")
             .arg("publish")
@@ -97,11 +129,17 @@ mod tests {
         let flags = vec!["--dry-run".to_owned(), "--locked".to_owned()];
         assert!(publisher.publish(Path::new("/tmp"), &flags).is_ok());
     }
+
     #[test]
     fn semver_checks_handles_missing_tool() {
         // If cargo-semver-checks isn't installed this should error gracefully
         // rather than panic.
         let dir = tempfile::tempdir().unwrap();
         let _ = run_semver_checks(dir.path());
+    }
+    #[test]
+    fn no_publish_check_is_noop() {
+        let publisher = NoPublish;
+        assert!(publisher.check(Path::new("/tmp")).is_ok());
     }
 }
