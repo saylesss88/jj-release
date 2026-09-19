@@ -260,3 +260,116 @@ fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
     println!("[dry-run] Would publish from root");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::bail;
+    use std::cell::RefCell;
+
+    use jj_release::{
+        commits::CommitInfo, forge::NoForge, jj::JjBackend, manifest::ManifestBackend,
+        publish::PublishBackend,
+    };
+
+    struct DummyManifest;
+
+    impl ManifestBackend for DummyManifest {
+        fn read_version(&self, _root: &Path) -> Result<Version> {
+            Ok(Version::parse("0.1.0").unwrap())
+        }
+        fn write_version(&self, _root: &Path, _version: &Version) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    struct FailPublish;
+
+    impl PublishBackend for FailPublish {
+        fn check(&self, _root: &Path) -> Result<()> {
+            Ok(()) // Pre-flight succeeds
+        }
+        fn publish(&self, _root: &Path, _flags: &[String]) -> Result<()> {
+            bail!("simulated crates.io outage") // Publish fails
+        }
+    }
+
+    #[derive(Default)]
+    struct TrackBackend {
+        calls: RefCell<Vec<String>>,
+    }
+
+    impl JjBackend for TrackBackend {
+        fn check_identity(&self) -> Result<()> {
+            Ok(())
+        }
+        fn list_tags(&self) -> Result<Vec<String>> {
+            Ok(vec!["v0.1.0".into()])
+        }
+
+        // Feed the pipeline a trigger and a feature commit so it attempts a release
+        fn log_commits(&self, _revset: &str) -> Result<Vec<CommitInfo>> {
+            Ok(vec![
+                CommitInfo {
+                    change_id: "1".into(),
+                    description: "Release: please".into(),
+                },
+                CommitInfo {
+                    change_id: "2".into(),
+                    description: "feat: new stuff".into(),
+                },
+            ])
+        }
+        fn log_commits_for_path(&self, _r: &str, _p: &str) -> Result<Vec<CommitInfo>> {
+            Ok(vec![])
+        }
+        fn new_commit(&self, _message: &str) -> Result<String> {
+            Ok("abc".into())
+        }
+
+        // Track local tag creation
+        fn create_tag(&self, _tag: &str, _revision: &str) -> Result<()> {
+            self.calls.borrow_mut().push("tag".into());
+            Ok(())
+        }
+        fn set_bookmark(&self, _name: &str, _revision: &str) -> Result<()> {
+            Ok(())
+        }
+
+        // Track remote push
+        fn git_push(&self, _bookmark: Option<&str>, _tag: Option<&str>) -> Result<()> {
+            self.calls.borrow_mut().push("push".into());
+            Ok(())
+        }
+        fn git_export(&self) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn pipeline_aborts_before_push_if_publish_fails() {
+        let backend = TrackBackend::default();
+        let manifest = DummyManifest;
+        let forge = NoForge;
+        let publisher = FailPublish;
+
+        let ctx = ReleaseContext::new(&backend, &manifest, &forge, &publisher);
+
+        let mut config = Config::default();
+        config.changelog.enabled = false; // Disable FS I/O for the test
+
+        // Run the pipeline
+        let result = release_pipeline(&ctx, &config, Path::new("/tmp"), false, true);
+
+        // Assert pipeline failed
+        assert!(result.is_err(), "Pipeline should fail when publish fails");
+
+        // Assert local state mutated but remote state didn't
+        let calls = backend.calls.borrow();
+        assert!(calls.contains(&"tag".into()), "Local tag should be created");
+        assert!(
+            !calls.contains(&"push".into()),
+            "Remote push MUST NOT be called"
+        );
+    }
+}
