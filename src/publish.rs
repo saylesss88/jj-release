@@ -36,16 +36,19 @@ pub struct CargoPublish;
 
 impl PublishBackend for CargoPublish {
     fn check(&self, root: &Path) -> Result<()> {
-        let status = Command::new("cargo")
+        let output = Command::new("cargo")
             .args(["publish", "--dry-run", "--allow-dirty"])
             .current_dir(root)
-            .status()
+            .output()
             .context("spawning cargo publish --dry-run")?;
-        if !status.success() {
-            bail!("cargo publish --dry-run failed. Run manually to see errors.");
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!("cargo publish --dry-run failed:\n{stderr}");
         }
         Ok(())
     }
+
     fn publish(&self, root: &Path, extra_flags: &[String]) -> Result<()> {
         let status = Command::new("cargo")
             .arg("publish")
@@ -65,13 +68,14 @@ pub struct NpmPublish;
 
 impl PublishBackend for NpmPublish {
     fn check(&self, root: &Path) -> Result<()> {
-        let status = Command::new("npm")
+        let output = Command::new("npm")
             .args(["publish", "--dry-run"])
             .current_dir(root)
-            .status()
+            .output()
             .context("spawning npm publish --dry-run")?;
-        if !status.success() {
-            bail!("npm publish --dry-run failed. Run manually to see errors.");
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!("npm publish --dry-run failed:\n{stderr}");
         }
         Ok(())
     }

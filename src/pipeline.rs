@@ -331,7 +331,10 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
         ("forge CLI", check_forge_cli(config)),
         ("manifest", check_manifest(ctx, root)),
         ("version tag", check_version_tag(&tag)),
-        ("publish pre-flight", check_publish(ctx.publisher, root)),
+        (
+            "publish pre-flight (dry-run)",
+            check_publish(ctx.publisher, root),
+        ),
     ];
 
     if config.publish.cargo && config.publish.semver_checks {
