@@ -57,6 +57,16 @@ impl PublishBackend for NpmPublish {
     }
 }
 
+pub fn run_semver_checks(root: &Path) -> Result<bool> {
+    let status = Command::new("cargo")
+        .args(["semver-checks"])
+        .current_dir(root)
+        .status()
+        .context("spawning cargo semver-checks, is cargo-semver-checks installed?")?;
+    // Exit code 0 = no breaking changes, non-zero = breaking changes detected
+    Ok(!status.success())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -78,5 +88,12 @@ mod tests {
         let publisher = NoPublish;
         let flags = vec!["--dry-run".to_owned(), "--locked".to_owned()];
         assert!(publisher.publish(Path::new("/tmp"), &flags).is_ok());
+    }
+    #[test]
+    fn semver_checks_handles_missing_tool() {
+        // If cargo-semver-checks isn't installed this should error gracefully
+        // rather than panic.
+        let dir = tempfile::tempdir().unwrap();
+        let _ = run_semver_checks(dir.path());
     }
 }

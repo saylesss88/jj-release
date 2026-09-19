@@ -9,10 +9,11 @@ use crate::changelog;
 use crate::{
     commits::{self, BumpKind, CommitInfo, Tag},
     config::{Config, Versioning},
+    detect,
     forge::ForgeBackend,
     jj::JjBackend,
     manifest::{self, ManifestBackend},
-    publish::PublishBackend,
+    publish::{self, PublishBackend},
     registry, workspace,
 };
 
@@ -92,7 +93,7 @@ pub fn prepare_release(
 
     let commits = backend.log_commits(&format!("{since}..@"))?;
 
-    let bump = commits::resolve_bump(config.bump.force.as_ref(), &commits)?;
+    let mut bump = commits::resolve_bump(config.bump.force.as_ref(), &commits)?;
 
     if bump == BumpKind::None {
         return Ok(None);
@@ -133,6 +134,20 @@ pub fn prepare_release(
     );
     let next_version = commits::apply_bump(&current_version, bump);
     let tag_name = config.tag_name(&next_version);
+
+    // Upgrade bump to Major if cargo-semver-checks detects breaking changes.
+    if config.publish.cargo
+        && config.publish.semver_checks
+        && detect::tool_available("cargo-semver-checks")
+    {
+        let has_breaking = publish::run_semver_checks(root)?;
+        if has_breaking && bump < BumpKind::Major {
+            eprintln!(
+                "warning: cargo-semver-checks detected API breaking changes, upgrading bump to Major"
+            );
+            bump = BumpKind::Major;
+        }
+    }
 
     Ok(Some(PreparedRelease {
         since,
