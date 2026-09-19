@@ -92,15 +92,20 @@ jj-release validate # confirms everything is ready
 
 `init` detects:
 
-- Forge: from the git remote URL (`github.com` → github, `gitlab.com` → gitlab, `codeberg.org` → forgejo)
-- Language: from files present (`Cargo.toml` → cargo, `package.json` → npm, `go.mod` → go)
-- Workspace: reads [workspace.members] from `Cargo.toml` and auto-populates member names, paths, and versioning strategy (unified vs independent)
+- Forge: from the git remote URL (`github.com` → github, `gitlab.com` → gitlab,
+  `codeberg.org` → forgejo)
+- Language: from files present (`Cargo.toml` → cargo, `package.json` → npm,
+  `go.mod` → go)
+- Workspace: reads [workspace.members] from `Cargo.toml` and auto-populates
+  member names, paths, and versioning strategy (unified vs independent)
 
 `validate` checks:
 
-- jj identity configured
+- `jj` identity configured
 - Forge CLI available (`gh`, `glab`)
-- Manifest readable and version parseable
+- Runs `cargo-semver-checks` to check for breaking API changes & correct release
+  version
+- Manifest readable, version parsable, not yet published on `crates.io`
 - Version tag exists (needed as a baseline)
 - Trigger commit present
 - `CARGO_REGISTRY_TOKEN` set/`.cargo/credentials.toml` present (if publishing to
@@ -275,7 +280,8 @@ The token needs `repository` scope, create one at
 
 ### Unified Versioning
 
-All members share a single version from [workspace.package]. Every member bumps together on each release:
+All members share a single version from [workspace.package]. Every member bumps
+together on each release:
 
 ```toml
 [workspace]
@@ -296,7 +302,8 @@ depends_on = ["mylib"]   # publish lib before cli
 
 ### Independent Versioning
 
-Each member has its own version and only bumps when commits touched its path. Members get their own tag prefix:
+Each member has its own version and only bumps when commits touched its path.
+Members get their own tag prefix:
 
 ```toml
 [workspace]
