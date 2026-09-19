@@ -142,7 +142,7 @@ impl Default for PublishConfig {
             cargo: true,
             cargo_flags: vec![],
             semver_checks: true,
-            semver_checks_upgrade_major: true,
+            semver_checks_upgrade_major: false,
         }
     }
 }
