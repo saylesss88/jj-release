@@ -165,6 +165,8 @@ pub fn prepare_release(
         && config.publish.semver_checks
         && detect::tool_available("cargo-semver-checks")
     {
+        eprintln!("→  Running cargo-semver-checks...");
+
         let is_stable = current_version.major >= 1;
         let has_breaking = publish::run_semver_checks(root)?;
         if has_breaking
@@ -323,27 +325,39 @@ type CheckResult = Result<String, String>;
 ///
 /// Returns an error if any backend operations fail, the manifest cannot be read, or a required version tag is missing when `require_tag` is enabled.
 pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Result<()> {
+    let mut passed = 0;
+    let mut failed = 0;
+
+    let mut run_check = |label: &str, result: CheckResult| match result {
+        Ok(msg) => {
+            println!("✓ {label}: {msg}");
+            passed += 1;
+        }
+        Err(msg) => {
+            println!("✗ {label}: {msg}");
+            failed += 1;
+        }
+    };
+
     let tag = commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)
         .map_err(|e| e.to_string());
 
-    let mut checks: Vec<(&str, CheckResult)> = vec![
-        ("jj identity", check_jj_identity(ctx)),
-        ("forge CLI", check_forge_cli(config)),
-        ("manifest", check_manifest(ctx, root)),
-        ("version tag", check_version_tag(&tag)),
-        (
-            "publish pre-flight (dry-run)",
-            check_publish(ctx.publisher, root),
-        ),
-    ];
+    run_check("jj identity", check_jj_identity(ctx));
+    run_check("forge CLI", check_forge_cli(config));
+    run_check("manifest", check_manifest(ctx, root));
+    run_check("version tag", check_version_tag(&tag));
+    run_check(
+        "publish pre-flight (dry-run)",
+        check_publish(ctx.publisher, root),
+    );
 
     if config.publish.cargo && config.publish.semver_checks {
-        checks.push(("cargo-semver-checks", check_semver(ctx, config, root)));
+        run_check("cargo-semver-checks", check_semver(ctx, config, root));
     }
     if config.publish.cargo
         && let Some(result) = check_crates_io(ctx, root)
     {
-        checks.push(("crates.io", result));
+        run_check("crates.io", result);
     }
 
     let since = resolve_since(
@@ -354,19 +368,23 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
         &MissingTagBehavior::AssumeBaseline,
     )
     .map_err(|e| e.to_string());
-    checks.push((
+
+    run_check(
         "trigger commit",
         since
             .as_ref()
             .map_err(Clone::clone)
             .and_then(|s| check_trigger(ctx, config, s)),
-    ));
+    );
 
     if config.publish.cargo {
-        checks.push(("CARGO_REGISTRY_TOKEN", check_cargo_token()));
+        run_check("CARGO_REGISTRY_TOKEN", check_cargo_token());
     }
 
-    report(&checks);
+    println!("\n{passed} passed, {failed} failed");
+    if failed > 0 {
+        process::exit(1)
+    }
     Ok(())
 }
 

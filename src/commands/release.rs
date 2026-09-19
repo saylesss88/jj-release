@@ -51,7 +51,7 @@ pub fn release_pipeline(
     }
 
     // Run pre-flight checks on all targets before touching anything
-    info!(" → Running pre-flight checks...");
+    info!(" → Running pre-flight checks (dry-run)...");
     if is_independent {
         if let Some(ws) = &config.workspace {
             for member in workspace::ordered_members(&ws.members)? {
