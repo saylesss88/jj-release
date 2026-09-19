@@ -50,13 +50,20 @@ pub fn release_pipeline(
         return print_dry_run(&prepared, config);
     }
 
-    let is_independent = config
-        .workspace
-        .as_ref()
-        .is_some_and(|ws| ws.enabled && matches!(ws.versioning, Versioning::Independent));
+    // Run pre-flight checks on all targets before touching anything
+    info!(" → Running pre-flight checks...");
+    if is_independent {
+        if let Some(ws) = &config.workspace {
+            for member in workspace::ordered_members(&ws.members)? {
+                ctx.publisher.check(&root.join(&member.path))?;
+            }
+        }
+    } else {
+        ctx.publisher.check(root)?;
+    }
 
     if !is_independent {
-        // 1. Write changelog.
+        // Write changelog.
         if config.changelog.enabled {
             info!("→ Writing changelog…");
             let changelog_path = root.join(&config.changelog.file);
@@ -70,27 +77,26 @@ pub fn release_pipeline(
             fs::write(&changelog_path, updated)?;
         }
 
-        // 2. Bump version and create release commit.
+        // Bump version and create release commit.
         info!("→ Bumping version to {next_version}…");
         ctx.manifest.write_version(root, next_version)?;
         let release_message = format!("chore: release {tag_name}");
         info!("→ Creating commit {:?}…", release_message);
         ctx.backend.new_commit(&release_message)?;
 
-        // 3. Tag, bookmark, push.
+        // Tag and bookmark locally
         info!("→ Creating tag {tag_name}…");
         ctx.backend.create_tag(tag_name, "@")?;
         info!("→ Moving bookmark {:?} to @…", config.release.bookmark);
         ctx.backend.set_bookmark(&config.release.bookmark, "@")?;
         info!("→ Exporting to git…");
         ctx.backend.git_export()?;
-        info!("→ Pushing bookmark and tags…");
-        ctx.backend
-            .git_push(Some(&config.release.bookmark), Some(tag_name))?;
     }
 
-    // 4. Publish.
+    // Publish to registry
     run_publish(ctx, config, root, &prepared, quiet)?;
+
+    // Push to remote
     if is_independent {
         info!("→ Moving bookmark {:?} to @…", config.release.bookmark);
         ctx.backend.set_bookmark(&config.release.bookmark, "@")?;
@@ -98,8 +104,13 @@ pub fn release_pipeline(
         ctx.backend.git_export()?;
         info!("→ Pushing bookmark…");
         ctx.backend.git_push(Some(&config.release.bookmark), None)?;
+    } else {
+        info!("→ Pushing bookmark and tags...");
+        ctx.backend
+            .git_push(Some(&config.release.bookmark), Some(tag_name))?;
     }
-    // 5. Forge release.
+
+    // Forge release.
     if !is_independent && config.release.create_release {
         info!("→ Creating forge release {tag_name}…");
         ctx.forge.create_release(tag_name)?;
@@ -176,11 +187,11 @@ fn run_publish(
                 ctx.backend.new_commit(&format!("chore: release {tag}"))?;
                 info!("→ Creating tag {tag}...");
                 ctx.backend.create_tag(&tag, "@")?;
-                info!("→  Pushing tag {tag}...");
-                ctx.backend.git_push(None, Some(&tag))?;
                 info!("→ Publishing {}…", member.name);
                 ctx.publisher
                     .publish(&root.join(&member.path), &config.publish.cargo_flags)?;
+                info!("→ Pushing tag {tag}...");
+                ctx.backend.git_push(None, Some(&tag))?;
             }
         }
     }
