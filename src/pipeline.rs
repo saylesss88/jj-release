@@ -420,29 +420,6 @@ fn resolve_since(
     }
 }
 
-fn report(checks: &[(&str, CheckResult)]) {
-    let mut passed = 0;
-    let mut failed = 0;
-
-    for (label, result) in checks {
-        match result {
-            Ok(msg) => {
-                println!("✓ {label}: {msg}");
-                passed += 1;
-            }
-            Err(msg) => {
-                println!("✗ {label}: {msg}");
-                failed += 1;
-            }
-        }
-    }
-
-    println!("\n{passed} passed, {failed} failed");
-    if failed > 0 {
-        process::exit(1);
-    }
-}
-
 fn check_jj_identity(ctx: &ReleaseContext<'_>) -> CheckResult {
     ctx.backend
         .check_identity()
