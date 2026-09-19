@@ -43,6 +43,7 @@ pub struct BumpConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 #[serde(default)]
 pub struct PublishConfig {
     /// Run `cargo publish` after tagging.
