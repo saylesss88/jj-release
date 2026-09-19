@@ -58,13 +58,13 @@ impl PublishBackend for NpmPublish {
 }
 
 pub fn run_semver_checks(root: &Path) -> Result<bool> {
-    let status = Command::new("cargo")
+    let output = Command::new("cargo")
         .args(["semver-checks"])
         .current_dir(root)
-        .status()
+        .output()
         .context("spawning cargo semver-checks, is cargo-semver-checks installed?")?;
     // Exit code 0 = no breaking changes, non-zero = breaking changes detected
-    Ok(!status.success())
+    Ok(!output.status.success())
 }
 
 #[cfg(test)]
