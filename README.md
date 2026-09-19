@@ -3,21 +3,10 @@
 Automated semantic releases for [Jujutsu](https://github.com/jj-vcs/jj)
 repositories.
 
-## Why
-
-[semantic-release](https://github.com/semantic-release/semantic-release),
-[release-please](https://github.com/googleapis/release-please), and
-[cargo-release](https://github.com/crate-ci/cargo-release) are all great tools,
-but they assume Git's branch model. They are designed around a mutable Git
-branch ref, typically `main` as the primary release cursor. In `jj`, the
-corresponding workflow is often built around immutable commits and movable
-bookmarks instead.
-
-`jj-release` is built specifically for `jj`: it uses `jj`'s revset language to
-walk commit history, works with bookmarks instead of branches, and uses a
-commit-message trigger that fits naturally into the `jj` workflow.
-
-Inspired by semantic-release, release-please, release-plz, and cargo-release.
+Unlike tools built around mutable Git branches (like `release-plz` or
+`cargo-release`), `jj-release` is designed natively for `jj`. It uses `jj`'s
+revset language to walk commit history, operates on movable bookmarks, and uses
+a commit-message trigger that fits naturally into the `jj` workflow.
 
 ---
 
@@ -148,6 +137,7 @@ jj-release validate # confirms everything is ready
 - Forge CLI available (`gh`, `glab`)
 - `cargo-semver-checks` detects breaking API changes & warns if bump should be
   major version
+- Runs `cargo publish --dry-run`
 - Manifest readable, version parseable, and in sync with crates.io
 - Version tag exists (needed as a baseline)
 - Trigger commit present
@@ -189,7 +179,7 @@ it after the release.
 ## Local usage
 
 `jj-release` doesn't require CI. If you have `jj` on your PATH and are logged in
-to crates.io (`cargo login`), you can run it directly:
+to crates.io (`cargo login`), you can run it directly (Recommended over CI):
 
 ```sh
 jj new -m "Release: please"
@@ -200,21 +190,23 @@ Running `jj-release` locally does the full pipeline:
 
 1. Scans for the trigger commit since the last version tag
 2. Walks commits and computes the semver bump from conventional commit types
-3. Writes a new section to `CHANGELOG.md`
-4. Bumps the version in manifest
-5. Creates a `chore: release vX.Y.Z` commit containing both changes
-6. Tags the commit with `vX.Y.Z`
-7. Advances the bookmark and pushes to origin
-8. Runs `cargo publish`
+3. Runs pre-flight checks (including `cargo-publish --dry-run`) to ensure the
+   release won't fail midway
+4. Writes a new section to `CHANGELOG.md`
+5. Bumps the version in manifest
+6. Creates a `chore: release vX.Y.Z` commit and tags it `vX.Y.Z` locally
+7. Runs the actual `cargo publish`
+8. Advances the bookmark and pushes to origin
 9. Creates a GitHub release (if `create_release = true`)
 
 The `CARGO_REGISTRY_TOKEN` environment variable is only needed in CI where
 there's no credentials file.
 
-Steps are executed in order. If a later step fails (e.g. `cargo publish` after a
-successful push), `jj-release` reports the error but does not attempt to undo
-completed steps. A pushed tag or published crate cannot be rolled back
-automatically.
+Fail-Safe Design: `jj-release` delays irreversible remote actions (like
+`git push`) until the very end. If a step like `cargo publish` fails, your
+remote git repository remains completely untouched. Because you are using
+Jujutsu, you can simply `jj abandon` the failed local release commit, fix the
+underlying issue, and run `jj-release` again.
 
 ---
 
