@@ -37,8 +37,7 @@ changes are detected via
 [cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks) and can
 automatically upgrade the bump to major. The version baseline comes from
 crates.io rather than the local manifest, ensuring the correct bump even when
-versions have drifted. `jj-release` then bumps the version manifest, writes a
-`CHANGELOG.md` entry, creates a tag, and pushes, all in one step.
+versions have drifted. `jj-release`
 
 A trigger is recognized when any commit reachable from `release.bookmark` has a
 description containing `release.trigger` (case-sensitive substring match) since
@@ -169,7 +168,9 @@ force = "minor"
 Remove `force` after the first release so subsequent versions are computed
 automatically from conventional commits.
 
-If a tag doesn't already exist, `jj-release` will create one for you.
+If no version tag exists, `jj-release` automatically creates one from your
+current `Cargo.toml` version as a baseline before releasing. You don't need to
+create it manually.
 
 ### Releasing 1.0.0
 
@@ -266,7 +267,7 @@ semver_checks_upgrade_major = false  # auto-upgrade to major (default: only post
 [changelog]
 enabled = true                       # write a CHANGELOG.md entry on each release
 file = "CHANGELOG.md"                # path to the changelog file
-require_tag = true                   # require a version tag baseline before releasing
+require_tag = true                   # require a version tag baseline; auto-creates one if missing
 
 manifest_backend = "cargo"           # manifest format: cargo, npm, go
 ```
