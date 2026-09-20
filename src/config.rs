@@ -143,7 +143,7 @@ impl Default for ReleaseConfig {
 impl Default for PublishConfig {
     fn default() -> Self {
         Self {
-            cargo: true,
+            cargo: false,
             cargo_flags: vec![],
             semver_checks: true,
             semver_checks_upgrade_major: false,
