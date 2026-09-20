@@ -45,14 +45,13 @@ forge = "{forge}"
 create_release = false
 
 [publish]
-cargo = {}
+cargo = false
 
 [changelog]
 enabled = true
 
 manifest_backend = "{language}"
 "#,
-        language == "cargo"
     );
 
     // Detect workspace members from Cargo.toml.
