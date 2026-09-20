@@ -244,8 +244,10 @@ fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::bail;
     use std::cell::RefCell;
+
+    use anyhow::bail;
+    use semver::Version;
 
     use jj_release::{
         commits::CommitInfo, forge::NoForge, jj::JjBackend, manifest::ManifestBackend,

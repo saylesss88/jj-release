@@ -175,6 +175,7 @@ impl ForgeBackend for NoForge {
     }
 }
 
+#[must_use]
 pub fn github_release_args(tag: &str) -> Vec<String> {
     vec![
         "release".to_owned(),
@@ -184,6 +185,7 @@ pub fn github_release_args(tag: &str) -> Vec<String> {
     ]
 }
 
+#[must_use]
 pub fn github_pr_args(pr: &PrRequest<'_>) -> Vec<String> {
     vec![
         "pr".to_owned(),
@@ -199,6 +201,7 @@ pub fn github_pr_args(pr: &PrRequest<'_>) -> Vec<String> {
     ]
 }
 
+#[must_use]
 pub fn gitlab_release_args(tag: &str) -> Vec<String> {
     vec![
         "release".to_owned(),
@@ -208,6 +211,7 @@ pub fn gitlab_release_args(tag: &str) -> Vec<String> {
     ]
 }
 
+#[must_use]
 pub fn gitlab_pr_args(pr: &PrRequest<'_>) -> Vec<String> {
     vec![
         "mr".to_owned(),
@@ -223,6 +227,7 @@ pub fn gitlab_pr_args(pr: &PrRequest<'_>) -> Vec<String> {
     ]
 }
 
+#[must_use]
 pub fn forgejo_release_payload(tag: &str) -> Value {
     serde_json::json!({
         "tag_name": tag,
@@ -232,6 +237,7 @@ pub fn forgejo_release_payload(tag: &str) -> Value {
     })
 }
 
+#[must_use]
 pub fn forgejo_pr_payload(pr: &PrRequest<'_>) -> Value {
     serde_json::json!({
         "title": format!("chore: release {}", pr.tag),
