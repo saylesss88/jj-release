@@ -121,10 +121,11 @@ pub fn detect_versioning(workspace_toml: &Path) -> &'static str {
 /// Handles both HTTPS and SSH formats.
 #[must_use]
 pub fn parse_remote_owner_repo(url: &str) -> Option<(String, String)> {
-    // HTTPS: https://codeberg.org/owner/repo.git
-    // SSH:   git@codeberg.org:owner/repo.git
-    let path = if url.contains("://") {
-        // HTTPS format
+    let path = if url.contains("ssh://") {
+        // ssh://git@host/owner/repo.git
+        url.splitn(4, '/').skip(3).next()?
+    } else if url.contains("://") {
+        // https://host/owner/repo.git
         url.splitn(4, '/').nth(3)?
     } else {
         // SSH format: git@host:owner/repo.git
@@ -327,5 +328,14 @@ edition = "2024"
     #[test]
     fn returns_none_for_invalid_url() {
         assert!(parse_remote_owner_repo("not-a-url").is_none());
+    }
+
+    #[test]
+    fn parses_ssh_url_scheme() {
+        let (owner, repo) =
+            parse_remote_owner_repo("ssh://git@codeberg.org/sayless88/test-jj-release.git")
+                .unwrap();
+        assert_eq!(owner, "sayless88");
+        assert_eq!(repo, "test-jj-release");
     }
 }
