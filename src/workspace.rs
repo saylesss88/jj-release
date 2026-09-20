@@ -68,17 +68,25 @@ pub fn ordered_members(members: &[WorkspaceMember]) -> Result<Vec<&WorkspaceMemb
 
         let mut progress = false;
         remaining.retain(|member| {
-            let deps_satisfied = member
-                .depends_on
-                .iter()
-                .all(|dep| ordered.iter().any(|m| &m.name == dep));
+            let deps_satisfied = member.depends_on.iter().all(|dep| {
+                // We only care if the dep is scheduled to be published
+                let is_publishable = publish.iter().any(|m| &m.name == dep);
+
+                if is_publishable {
+                    // If it is, it must have already been processed into `ordered`.
+                    ordered.iter().any(|m| &m.name == dep)
+                } else {
+                    // Not scheduled for publish, so it doesn't block this member.
+                    true
+                }
+            });
 
             if deps_satisfied {
                 ordered.push(member);
                 progress = true;
-                false
+                false // Remove from remaining
             } else {
-                true
+                true // Keep in remaining
             }
         });
 
@@ -432,5 +440,31 @@ edition = "2024"
         };
         let v = Version::parse("0.8.0").unwrap();
         assert_eq!(member_tag_name(&member, &v, "v"), "v0.8.0");
+    }
+
+    #[test]
+    fn ordered_members_ignores_unpublished_dependencies() {
+        let members = vec![
+            WorkspaceMember {
+                name: "mycli".into(),
+                path: "cli".into(),
+                publish: true,
+                depends_on: vec!["internal-core".into()], // Depends on unpublished crate
+                tag_prefix: None,
+            },
+            WorkspaceMember {
+                name: "internal-core".into(),
+                path: "core".into(),
+                publish: false, // NOT published
+                depends_on: vec![],
+                tag_prefix: None,
+            },
+        ];
+
+        // This will currently panic with a fake "circular dependency" error
+        let ordered = ordered_members(&members).unwrap();
+
+        assert_eq!(ordered.len(), 1);
+        assert_eq!(ordered[0].name, "mycli");
     }
 }
