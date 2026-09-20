@@ -5,6 +5,56 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-09-20
+
+### Added
+- **(pipeline)**implement zero-config first release mode
+- **(cli)**add contextual hint when release trigger is missing
+- **(pipeline)**wire publish pre-flight into validate command
+- **(publish)**add dry-run check method to backends
+- add latest_version_on_crates_io for registry-based version baseline
+- add cargo-semver-check to validate command
+- run cargo-semver-checks to auto-upgrade bump to Major on API breaking changes
+- add semver_checks config option and validate check
+- add crates.io version check to validate subcommand
+- add crates.io preflight check to prevent duplicate version publishing
+- add registry module with version_exists_on_crates_io check
+- add read_name to manifest for reading crate name from Cargo.toml
+
+### Changed
+- **(release)**extract workspace publishing logic
+- **(forge)**separate argument generation from execution
+- **(pipeline)**stream validation results sequentially
+- **(publish)**capture dry-run output and clarify validate logs
+- **(pipeline)**slim down validate with helper functions
+- **(forge)**create PrRequest struct to reduce arguments to create_pr in all locations & change call sites to match
+- **(forge)**create 'post' helper method to simplify create_release & create_pr in impl ForgeBackend for ForgejoForge
+
+### Fixed
+- default cargo publish to false in init and config
+- **(config)**set default to false for publishing to crates.io and make it opt-in
+- **(detect)**add correct format for codeberg ssh
+- **(validate)**treat missing version tag as success for first releases
+- **(workspace)**ignore unpublished dependencies during topological sort
+- **(cli)**re-enable clap help menu generation
+- **(pipeline)**prevent remote git push if publish fails
+- **(release)**crates.io already doesn't allow you to publish duplicate versions, remove check for it in run_publish
+- **(lib)**make test_helpers module pub(crate)
+- suppress cargo-semver-checks output on --dry-run
+- add v1.0.0 message before bumping to major in validate
+- add non_exhaustive to public structs that may change
+- default to false for semver_checks_major_upgrade
+- add v1.0.0 check before bumping to major
+- add non_exhaustive to struct PublishConfig
+- format Cargo.toml
+- use statements, levels of function & Type calls
+- use statements
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.4.0] - 2026-09-16
 
 ### Added
