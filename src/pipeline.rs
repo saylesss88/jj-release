@@ -371,6 +371,14 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
             .and_then(|s| check_trigger(ctx, config, s)),
     );
 
+    run_check(
+        "version bump",
+        since
+            .as_ref()
+            .map_err(Clone::clone)
+            .and_then(|s| check_bump(ctx, config, s)),
+    );
+
     if config.publish.cargo {
         run_check("CARGO_REGISTRY_TOKEN", check_cargo_token());
     }
@@ -441,7 +449,7 @@ fn check_manifest(ctx: &ReleaseContext<'_>, root: &Path) -> CheckResult {
 fn check_version_tag(tag: &Result<Option<Tag>, String>) -> CheckResult {
     match tag {
         Ok(Some(t)) => Ok(format!("found {}", t.name)),
-        Ok(None) => Err("no version tag found".to_owned()),
+        Ok(None) => Ok("none (first release mode)".to_owned()),
         Err(e) => Err(e.clone()),
     }
 }
@@ -488,6 +496,31 @@ fn check_publish(publisher: &dyn PublishBackend, root: &Path) -> CheckResult {
         .check(root)
         .map(|()| "dry-run passed".to_owned())
         .map_err(|e| e.to_string())
+}
+
+fn check_bump(
+    ctx: &crate::pipeline::ReleaseContext<'_>,
+    config: &crate::config::Config,
+    since: &str,
+) -> Result<String, String> {
+    // If it's a first release, we bypass the bump check completely!
+    if since == "root()" {
+        return Ok("first release mode (version frozen)".to_owned());
+    }
+
+    let commits = ctx
+        .backend
+        .log_commits(&format!("{since}..@"))
+        .map_err(|e| e.to_string())?;
+
+    let bump = crate::commits::resolve_bump(config.bump.force.as_ref(), &commits)
+        .map_err(|e| e.to_string())?;
+
+    if bump == crate::commits::BumpKind::None {
+        Err("no releasable commits (feat/fix/BREAKING) found since last tag".to_owned())
+    } else {
+        Ok("releasable commits found".to_owned())
+    }
 }
 
 #[cfg(test)]
