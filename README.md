@@ -146,21 +146,16 @@ jj-release validate # confirms everything is ready
 
 ## First release
 
-For a first release, set your `Cargo.toml` version to `0.0.0` and let
-`jj-release` compute the initial version from your commit history. If you want
-to guarantee `0.1.0`, add a force override in `release.toml`:
+`jj-release` requires zero configuration for your first release.
 
-```toml
-[bump]
-force = "minor"
-```
+If your repository has no existing version tags, `jj-release` automatically
+enters **First Release Mode**. It will:
 
-Remove `force` after the first release so subsequent versions are computed
-automatically from conventional commits.
+1. Freeze your `Cargo.toml` version exactly as it is (e.g., `0.1.0`).
+2. Generate a changelog from the very first commit in your repository.
+3. Publish the release and create your initial version tag.
 
-If no version tag exists, `jj-release` automatically creates one from your
-current `Cargo.toml` version as a baseline before releasing. You don't need to
-create it manually.
+You do not need to configure `force` overrides or manually create baseline.
 
 ### Releasing 1.0.0
 
@@ -292,7 +287,7 @@ modes:
 | Forge            | `forge =`   | CLI required | Release | PR/MR  | Status                |
 | ---------------- | ----------- | ------------ | ------- | ------ | --------------------- |
 | GitHub (default) | `"github"`  | `gh`         | ✓       | ✓      | ✓ tested              |
-| GitLab           | `"gitlab"`  | `glab`       | ✓       | ✓ (MR) | implemented, untested |
+| GitLab           | `"gitlab"`  | `glab`       | ✓       | ✓ (MR) | ✓ tested              |
 | Forgejo/Codeberg | `"forgejo"` | none (REST)  | ✓       | ✓      | implemented, untested |
 | None             | `"none"`    | –            | –       | –      | –                     |
 
