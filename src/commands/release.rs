@@ -1,15 +1,12 @@
 use std::{fs, path::Path};
 
 use anyhow::Result;
-use semver::Version;
 
 use jj_release::{
     changelog,
-    commits::{self, BumpKind},
     config::{Config, Versioning},
-    manifest,
     pipeline::{self, PreparedRelease, ReleaseContext},
-    registry, workspace,
+    workspace,
 };
 
 pub fn release_pipeline(
@@ -98,7 +95,7 @@ pub fn release_pipeline(
     }
 
     // Publish to registry
-    run_publish(ctx, config, root, &prepared, quiet)?;
+    run_publish(ctx, config, root, &prepared)?;
 
     // Push to remote
     if is_independent {
@@ -129,76 +126,55 @@ fn run_publish(
     config: &Config,
     root: &Path,
     prepared: &PreparedRelease,
-    quiet: bool,
 ) -> Result<()> {
-    macro_rules! info {
-        ($($t:tt)*) => { if !quiet { println!($($t)*); } }
+    if !config.publish.cargo {
+        return Ok(());
     }
 
-    let Some(ws) = &config.workspace else {
-        info!("→ Publishing…");
-        return ctx.publisher.publish(root, &config.publish.cargo_flags);
-    };
+    let is_independent = config
+        .workspace
+        .as_ref()
+        .is_some_and(|ws| matches!(ws.versioning, Versioning::Independent));
 
-    if !ws.enabled {
-        info!("→ Publishing…");
-        return ctx.publisher.publish(root, &config.publish.cargo_flags);
+    if is_independent {
+        publish_independent(ctx, config, prepared, root)
+    } else {
+        publish_unified(ctx, config, root)
     }
+}
 
-    let ordered = workspace::ordered_members(&ws.members)?;
+fn publish_independent(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    prepared: &PreparedRelease,
+    root: &Path,
+) -> Result<()> {
+    let ws = config
+        .workspace
+        .as_ref()
+        .expect("workspace config required for independent publishing");
+    let bumps = prepared
+        .member_bumps
+        .as_ref()
+        .expect("member bumps required for independent publishing");
 
-    match ws.versioning {
-        Versioning::Unified => {
-            for member in &ordered {
-                info!("→ Publishing {}…", member.name);
+    for member in workspace::ordered_members(&ws.members)? {
+        if let Some((current, next)) = bumps.get(&member.name) {
+            // Only publish if the topological member actually received a bump
+            if current != next {
+                let member_root = root.join(&member.path);
                 ctx.publisher
-                    .publish(&root.join(&member.path), &config.publish.cargo_flags)?;
-            }
-        }
-        Versioning::Independent => {
-            let since = prepared.since.clone();
-            let bumps = workspace::member_bumps(
-                ctx.backend,
-                &ws.members,
-                &since,
-                config.bump.force.as_ref(),
-                &config.release.tag_prefix,
-            )?;
-            let versions = workspace::member_versions(root)?;
-            for member in &ordered {
-                let bump = bumps.get(&member.name).copied().unwrap_or(BumpKind::None);
-                if bump == BumpKind::None {
-                    info!("→ Skipping {} (no releasable commits)…", member.name);
-                    continue;
-                }
-                let current = versions
-                    .get(&member.name)
-                    .cloned()
-                    .unwrap_or_else(|| Version::new(0, 0, 0));
-                let next = commits::apply_bump(&current, bump);
-                // Check this member's version before publishing.
-                let member_cargo_toml = root.join(&member.path).join("Cargo.toml");
-                if let Ok(name) = manifest::read_name(&member_cargo_toml)
-                    && registry::version_exists_on_crates_io(&name, &next)?
-                {
-                    info!("→ Skipping {} : v{next} already published", member.name);
-                    continue;
-                }
-                let tag = workspace::member_tag_name(member, &next, &config.release.tag_prefix);
-                info!("→ Bumping {} to {next}…", member.name);
-                workspace::bump_member_version(root, &member.name, &next)?;
-                info!("→ Creating commit for {}…", member.name);
-                ctx.backend.new_commit(&format!("chore: release {tag}"))?;
-                info!("→ Creating tag {tag}...");
-                ctx.backend.create_tag(&tag, "@")?;
-                info!("→ Publishing {}…", member.name);
-                ctx.publisher
-                    .publish(&root.join(&member.path), &config.publish.cargo_flags)?;
-                info!("→ Pushing tag {tag}...");
-                ctx.backend.git_push(None, Some(&tag))?;
+                    .publish(&member_root, &config.publish.cargo_flags)?;
             }
         }
     }
+
+    Ok(())
+}
+
+fn publish_unified(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Result<()> {
+    // For single crates or unified workspaces, we just publish from the project root
+    ctx.publisher.publish(root, &config.publish.cargo_flags)?;
     Ok(())
 }
 
