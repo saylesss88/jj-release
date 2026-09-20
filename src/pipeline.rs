@@ -53,13 +53,13 @@ impl<'a> ReleaseContext<'a> {
     }
 }
 
-enum MissingTagBehavior {
-    /// For commands that must not alter the repository. Mirrors the range a
-    /// newly-created baseline tag would produce.
-    AssumeBaseline,
-    /// For the actual release command. Creates and pushes the baseline tag.
-    CreateBaseline,
-}
+// enum MissingTagBehavior {
+//     /// For commands that must not alter the repository. Mirrors the range a
+//     /// newly-created baseline tag would produce.
+//     AssumeBaseline,
+//     /// For the actual release command. Creates and pushes the baseline tag.
+//     CreateBaseline,
+// }
 
 /// Prepares a new release by evaluating recent commits, checking for release triggers,
 /// and calculating the next version bump based on configuration and the project manifest.
@@ -90,13 +90,8 @@ pub fn prepare_release(
 ) -> Result<Option<PreparedRelease>> {
     backend.check_identity()?;
 
-    let since = resolve_since(
-        backend,
-        manifest,
-        config,
-        root,
-        &MissingTagBehavior::CreateBaseline,
-    )?;
+    let since = resolve_since(backend, config)?;
+    let is_first_release = since == "root()";
 
     // Check for trigger commit.
     if commits::find_trigger(backend, &config.release.trigger, &since)?.is_none() {
@@ -108,7 +103,7 @@ pub fn prepare_release(
         .context("reading current version")?;
 
     // Use crates.io version as baseline if available, more reliable than manifest.
-    let baseline_version = if config.publish.cargo {
+    let baseline_version = if config.publish.cargo && !is_first_release {
         let cargo_toml = root.join("Cargo.toml");
         manifest::read_name(&cargo_toml)
             .ok()
@@ -122,7 +117,7 @@ pub fn prepare_release(
 
     let mut bump = commits::resolve_bump(config.bump.force.as_ref(), &commits)?;
 
-    if bump == BumpKind::None {
+    if bump == BumpKind::None && !is_first_release {
         return Ok(None);
     }
 
@@ -139,6 +134,7 @@ pub fn prepare_release(
                     &config.release.tag_prefix,
                 )
                 .ok();
+
                 if let (Some(versions), Some(bumps)) = (versions, bumps) {
                     let mut map = HashMap::new();
                     for member in &ws.members {
@@ -146,8 +142,13 @@ pub fn prepare_release(
                             .get(&member.name)
                             .cloned()
                             .unwrap_or_else(|| Version::new(0, 0, 0));
-                        let bump = bumps.get(&member.name).copied().unwrap_or(BumpKind::None);
-                        let next = commits::apply_bump(&current, bump);
+                        let member_bump =
+                            bumps.get(&member.name).copied().unwrap_or(BumpKind::None);
+                        let next = if is_first_release {
+                            current.clone()
+                        } else {
+                            commits::apply_bump(&current, member_bump)
+                        };
                         map.insert(member.name.clone(), (current, next));
                     }
                     Some(map)
@@ -161,7 +162,8 @@ pub fn prepare_release(
     );
 
     // Upgrade bump to Major if cargo-semver-checks detects breaking changes.
-    if config.publish.cargo
+    if !is_first_release
+        && config.publish.cargo
         && config.publish.semver_checks
         && detect::tool_available("cargo-semver-checks")
     {
@@ -180,8 +182,13 @@ pub fn prepare_release(
         }
     }
 
-    // Compute next_version AFTER potential bump upgrade.
-    let next_version = commits::apply_bump(&baseline_version, bump);
+    // Compute next_version. If it's the first release, freeze the current version.
+    let next_version = if is_first_release {
+        current_version.clone()
+    } else {
+        commits::apply_bump(&baseline_version, bump)
+    };
+
     let tag_name = config.tag_name(&next_version);
 
     Ok(Some(PreparedRelease {
@@ -205,13 +212,7 @@ pub fn prepare_release(
 pub fn print_next_version(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Result<()> {
     let current = ctx.manifest.read_version(root)?;
 
-    let since = resolve_since(
-        ctx.backend,
-        ctx.manifest,
-        config,
-        root,
-        &MissingTagBehavior::AssumeBaseline,
-    )?;
+    let since = resolve_since(ctx.backend, config)?;
     let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
     let bump = commits::resolve_bump(config.bump.force.as_ref(), &commits)?;
     let next = commits::apply_bump(&current, bump);
@@ -360,14 +361,7 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
         run_check("crates.io", result);
     }
 
-    let since = resolve_since(
-        ctx.backend,
-        ctx.manifest,
-        config,
-        root,
-        &MissingTagBehavior::AssumeBaseline,
-    )
-    .map_err(|e| e.to_string());
+    let since = resolve_since(ctx.backend, config).map_err(|e| e.to_string());
 
     run_check(
         "trigger commit",
@@ -388,36 +382,14 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
     Ok(())
 }
 
-fn resolve_since(
-    backend: &dyn JjBackend,
-    manifest: &dyn ManifestBackend,
-    config: &Config,
-    root: &Path,
-    behavior: &MissingTagBehavior,
-) -> Result<String> {
+fn resolve_since(backend: &dyn JjBackend, config: &Config) -> Result<String> {
+    // 1. If we have a previous release tag, start from there.
     if let Some(tag) = commits::latest_version_tag(backend, &config.release.tag_prefix)? {
         return Ok(tag.name);
     }
 
-    if !config.changelog.require_tag {
-        return Ok("root()".to_owned());
-    }
-
-    match behavior {
-        MissingTagBehavior::AssumeBaseline => Ok("@-".to_owned()),
-
-        MissingTagBehavior::CreateBaseline => {
-            let current = manifest.read_version(root)?;
-            let tag_name = format!("{}{current}", config.release.tag_prefix);
-
-            eprintln!("hint: no version tag found, tagging current version {tag_name} as baseline");
-
-            backend.create_tag(&tag_name, "@-")?;
-            backend.git_push(None, Some(&tag_name))?;
-
-            Ok(tag_name)
-        }
-    }
+    eprintln!("hint: no version tag found. Entering First Release mode (starting from root).");
+    Ok("root()".to_owned())
 }
 
 fn check_jj_identity(ctx: &ReleaseContext<'_>) -> CheckResult {
