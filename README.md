@@ -26,7 +26,7 @@ changes are detected via
 [cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks) and can
 automatically upgrade the bump to major. The version baseline comes from
 crates.io rather than the local manifest, ensuring the correct bump even when
-versions have drifted. `jj-release`
+versions have drifted.
 
 A trigger is recognized when any commit reachable from `release.bookmark` has a
 description containing `release.trigger` (case-sensitive substring match) since
@@ -75,8 +75,12 @@ run the release pipeline.
 cargo install jj-release
 ```
 
-Requires `jj` on your PATH. For GitHub releases, `gh` must also be available in
-CI.
+Requires `jj` on your PATH.
+
+Optional dependencies:
+
+- For forge releases, `gh` or `glab` must also be available.
+- For independent workspace versioning, `cargo-edit` must be installed.
 
 ---
 
@@ -155,7 +159,7 @@ enters **First Release Mode**. It will:
 2. Generate a changelog from the very first commit in your repository.
 3. Publish the release and create your initial version tag.
 
-You do not need to configure `force` overrides or manually create baseline.
+You do not need to manually create a baseline tag.
 
 ### Releasing 1.0.0
 
@@ -246,7 +250,7 @@ forge_url = ""                       # base URL for self-hosted forges
 # force = "minor"                    # override commit analysis: "major", "minor", or "patch"
 
 [publish]
-cargo = true                         # run `cargo publish` after tagging
+cargo = false                        # set to true to publish to crates.io
 cargo_flags = []                     # extra flags forwarded to `cargo publish`
 semver_checks = true                 # run cargo-semver-checks before publishing
 semver_checks_upgrade_major = false  # auto-upgrade to major (default: only post-1.0)
@@ -259,9 +263,14 @@ require_tag = true                   # require a version tag baseline; auto-crea
 manifest_backend = "cargo"           # manifest format: cargo, npm, go
 ```
 
-By default, Cargo projects publish to crates.io after the tag is pushed. Set
-`[publish] cargo = false` to use jj-release only for versioning, changelogs,
-tags, and forge releases.
+By default, `jj-release` only handles versioning, changelogs, tags, and forge
+releases. To automatically publish to crates.io, explicitly enable it in your
+configuration:
+
+```toml
+[publish]
+cargo = true
+```
 
 ---
 
@@ -284,12 +293,12 @@ modes:
 
 `jj-release` supports multiple forges for release creation and PR/MR opening:
 
-| Forge            | `forge =`   | CLI required | Release | PR/MR  | Status                |
-| ---------------- | ----------- | ------------ | ------- | ------ | --------------------- |
-| GitHub (default) | `"github"`  | `gh`         | ✓       | ✓      | ✓ tested              |
-| GitLab           | `"gitlab"`  | `glab`       | ✓       | ✓ (MR) | ✓ tested              |
-| Forgejo/Codeberg | `"forgejo"` | none (REST)  | ✓       | ✓      | implemented, untested |
-| None             | `"none"`    | –            | –       | –      | –                     |
+| Forge            | `forge =`   | CLI required | Release | PR/MR  | Status                                                             |
+| ---------------- | ----------- | ------------ | ------- | ------ | ------------------------------------------------------------------ |
+| GitHub (default) | `"github"`  | `gh`         | ✓       | ✓      | ✓ tested                                                           |
+| GitLab           | `"gitlab"`  | `glab`       | ✓       | ✓ (MR) | ✓ tested                                                           |
+| Forgejo/Codeberg | `"forgejo"` | none (REST)  | ✓       | ✓      | ✓ tested on Codeberg,release creation not yet supported (see note) |
+| None             | `"none"`    | –            | –       | –      | –                                                                  |
 
 For GitLab, set `forge_url` if using a self-hosted instance:
 
@@ -310,6 +319,13 @@ forge_url = "https://codeberg.org"
 ```sh
 export FORGEJO_TOKEN=your-token
 ```
+
+<!-- prettier-ignore -->
+> [!NOTE]
+> Forgejo/Codeberg: tagging, pushing, and PR creation all work correctly.
+> `create_release = true` is not yet supported. Forgejo's releases API requires
+> annotated git tags but `jj` creates lightweight tags. Keep `create_release =
+> false` for Forgejo repos.
 
 The token needs `repository` scope, create one at
 `https://codeberg.org/user/settings/applications`.
@@ -505,6 +521,17 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - name: Install jj
         run: cargo install jj-cli --locked
