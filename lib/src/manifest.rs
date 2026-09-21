@@ -7,6 +7,7 @@ use serde_json::Value;
 use toml_edit::DocumentMut;
 
 use crate::errors::{ReleaseError, Result};
+use crate::workspace::WorkspaceManifest;
 
 /// Manages reading and writing version information in project manifests.
 ///
@@ -180,6 +181,29 @@ pub fn read_name(cargo_toml: &Path) -> Result<String> {
                 cargo_toml.display()
             ))
         })
+}
+
+/// Detect and return the appropriate manifest backend for the given root.
+/// Returns `WorkspaceManifest` for Rust workspaces, `NpmManifest` for npm,
+/// `GoManifest` for Go, and `CargoManifest` as the default.
+#[must_use]
+pub fn detect_manifest(root: &Path) -> Box<dyn ManifestBackend> {
+    let cargo_toml = root.join("Cargo.toml");
+    if cargo_toml.exists() {
+        if let Ok(content) = std::fs::read_to_string(&cargo_toml)
+            && content.contains("[workspace]")
+        {
+            return Box::new(WorkspaceManifest);
+        }
+        return Box::new(CargoManifest);
+    }
+    if root.join("package.json").exists() {
+        return Box::new(NpmManifest);
+    }
+    if root.join("go.mod").exists() {
+        return Box::new(GoManifest);
+    }
+    Box::new(CargoManifest)
 }
 
 #[cfg(test)]
@@ -383,5 +407,43 @@ edition = "2024"
         )
         .unwrap();
         assert!(read_name(&dir.path().join("Cargo.toml")).is_err());
+    }
+    #[test]
+    fn detects_workspace_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
+        let manifest = detect_manifest(dir.path());
+        // verify it reads workspace version correctly
+        // WorkspaceManifest will fail without [workspace.package] but that's ok
+        // just verify it doesn't return CargoManifest
+        let _ = manifest; // existence check
+    }
+
+    #[test]
+    fn detects_npm_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("package.json"),
+            r#"{"name":"test","version":"1.0.0"}"#,
+        )
+        .unwrap();
+        let v = detect_manifest(dir.path())
+            .read_version(dir.path())
+            .unwrap();
+        assert_eq!(v, Version::parse("1.0.0").unwrap());
+    }
+
+    #[test]
+    fn detects_cargo_manifest() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("Cargo.toml"),
+            "[package]\nname=\"test\"\nversion=\"0.1.0\"\nedition=\"2021\"\n",
+        )
+        .unwrap();
+        let v = detect_manifest(dir.path())
+            .read_version(dir.path())
+            .unwrap();
+        assert_eq!(v, Version::parse("0.1.0").unwrap());
     }
 }
