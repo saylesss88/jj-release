@@ -9,9 +9,10 @@ use std::{
     process::Command,
 };
 
-use anyhow::{Context, Result, bail};
+// use anyhow::{Context, Result, bail};
 
 use crate::commits::CommitInfo;
+use crate::errors::{ReleaseError, Result};
 
 /// Everything jj-release needs from the VCS layer.
 pub trait JjBackend {
@@ -109,8 +110,7 @@ impl ShellBackend {
     ///
     /// Returns an error if the jj executable is not found on the system PATH.
     pub fn new(root: impl AsRef<Path>) -> Result<Self> {
-        let jj_bin =
-            which::which("jj").context("jj binary not found on PATH: is Jujutsu installed?")?;
+        let jj_bin = which::which("jj").map_err(|_| ReleaseError::MissingTool("jj".into()))?;
         Ok(Self {
             root: root.as_ref().to_path_buf(),
             jj_bin,
@@ -124,11 +124,16 @@ impl ShellBackend {
             .arg("--no-pager")
             .current_dir(&self.root)
             .output()
-            .with_context(|| format!("failed to spawn jj {}", args.join(" ")))?;
+            .map_err(|e| {
+                ReleaseError::Message(format!("failed to spawn jj {}: {e}", args.join(" ")))
+            })?;
 
         if !out.status.success() {
             let stderr = String::from_utf8_lossy(&out.stderr);
-            bail!("jj {} failed:\n{stderr}", args.join(" "));
+            return Err(ReleaseError::Message(format!(
+                "jj {} failed:\n{stderr}",
+                args.join(" ")
+            )));
         }
 
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
@@ -159,9 +164,9 @@ impl JjBackend for ShellBackend {
             if record.is_empty() {
                 continue;
             }
-            let (change_id, description) = record
-                .split_once('\x1f')
-                .with_context(|| format!("unexpected log format: {record:?}"))?;
+            let (change_id, description) = record.split_once('\x1f').ok_or_else(|| {
+                ReleaseError::Message(format!("unexpected log format: {record:?}"))
+            })?;
             commits.push(CommitInfo {
                 change_id: change_id.trim().to_owned(),
                 description: description.trim().to_owned(),
@@ -214,11 +219,19 @@ impl JjBackend for ShellBackend {
             .collect())
     }
     fn check_identity(&self) -> Result<()> {
-        self.run(&["config", "get", "user.email"]).context(
-            "jj user.email not set, run: jj config set --user user.email 'you@example.com'",
-        )?;
-        self.run(&["config", "get", "user.name"])
-            .context("jj user.name not set, run: jj config set --user user.name 'Your Name'")?;
+        self.run(&["config", "get", "user.email"]).map_err(|_| {
+            ReleaseError::Message(
+                "jj user.email not set, run: jj config set --user user.email 'you@example.com'"
+                    .into(),
+            )
+        })?;
+
+        self.run(&["config", "get", "user.name"]).map_err(|_| {
+            ReleaseError::Message(
+                "jj user.name not set, run: jj config set --user user.name 'Your Name'".into(),
+            )
+        })?;
+
         Ok(())
     }
 
@@ -239,9 +252,9 @@ impl JjBackend for ShellBackend {
             if record.is_empty() {
                 continue;
             }
-            let (change_id, description) = record
-                .split_once('\x1f')
-                .with_context(|| format!("unexpected log format: {record:?}"))?;
+            let (change_id, description) = record.split_once('\x1f').ok_or_else(|| {
+                ReleaseError::Message(format!("unexpected log format: {record:?}"))
+            })?;
             commits.push(CommitInfo {
                 change_id: change_id.trim().to_owned(),
                 description: description.trim().to_owned(),
@@ -265,10 +278,10 @@ pub fn find_repo_root(start: &Path) -> Result<PathBuf> {
             return Ok(dir);
         }
         if !dir.pop() {
-            bail!(
+            return Err(ReleaseError::Message(format!(
                 "not inside a jj repository (no .jj/ found from {})",
                 start.display()
-            );
+            )));
         }
     }
 }

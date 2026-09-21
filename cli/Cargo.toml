@@ -1,0 +1,23 @@
+[package]
+name = "jj-release"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description.workspace = true
+repository.workspace = true
+documentation.workspace = true
+exclude.workspace = true
+
+[[bin]]
+name = "jj-release"
+path = "src/main.rs"
+
+[dependencies]
+jj_release = { path = "../lib" }
+toml_edit = "0.25.15"
+anyhow = { version = "1.0.104", default-features = false }
+clap.workspace = true
+
+[lints]
+workspace = true
