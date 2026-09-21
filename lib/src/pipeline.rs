@@ -1,6 +1,6 @@
 //! Release pipeline orchestration.
 
-use std::{collections::HashMap, env, fs, path::Path, process};
+use std::{collections::HashMap, env, fs, path::Path};
 
 use semver::Version;
 
@@ -377,7 +377,7 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
 
     println!("\n{passed} passed, {failed} failed");
     if failed > 0 {
-        process::exit(1)
+        return Err(ReleaseError::Message(format!("{failed} check(s) failed")));
     }
     Ok(())
 }
