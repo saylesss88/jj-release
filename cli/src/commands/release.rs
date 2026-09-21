@@ -270,9 +270,7 @@ mod tests {
             Ok(()) // Pre-flight succeeds
         }
         fn publish(&self, _root: &Path, _flags: &[String]) -> Result<()> {
-            Err(ReleaseError::Message(
-                "simulated crates.io outage".to_string(),
-            ))
+            Err(ReleaseError::Message("simulated crates.io outage".into()))
         }
     }
 
@@ -339,6 +337,8 @@ mod tests {
 
         let mut config = Config::default();
         config.changelog.enabled = false; // Disable FS I/O for the test
+
+        config.publish.cargo = true;
 
         // Run the pipeline
         let result = release_pipeline(&ctx, &config, Path::new("/tmp"), false, true);

@@ -187,7 +187,7 @@ mod tests {
         assert_eq!(cfg.release.trigger, "Release: please");
         assert_eq!(cfg.release.tag_prefix, "v");
         assert_eq!(cfg.release.bookmark, "main");
-        assert!(cfg.publish.cargo);
+        assert!(!cfg.publish.cargo);
     }
 
     #[test]
