@@ -482,7 +482,7 @@ dependencies = [
 
 [[package]]
 name = "jj-release"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "clap",
  "jj_release_core",
@@ -492,7 +492,7 @@ dependencies = [
 
 [[package]]
 name = "jj_release_core"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "cargo_metadata",
  "dirs",

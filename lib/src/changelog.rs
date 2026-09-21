@@ -62,10 +62,8 @@ pub fn prepend_to_file(existing: &str, new_section: &str) -> String {
         return format!("{header}{new_section}");
     }
 
-    existing.strip_prefix("# Changelog\n\n").map_or_else(
-        || format!("{header}{new_section}\n{existing}"),
-        |rest| format!("{header}{new_section}\n{rest}"),
-    )
+    let body = existing.strip_prefix(header).unwrap_or(existing);
+    format!("{header}{new_section}\n{body}")
 }
 
 /// Render a full changelog from all tag ranges, newest first.
@@ -156,6 +154,16 @@ mod tests {
         assert!(result.contains("Keep a Changelog"));
     }
 
+    #[test]
+    fn prepend_does_not_duplicate_header() {
+        let existing = format!(
+            "{header}## [0.1.0] - 2024-01-01\n\n### Added\n- initial release\n",
+            header = "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\nand this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n"
+        );
+        let new_section = "## [0.2.0] - 2024-06-01\n\n### Added\n- new thing\n";
+        let result = prepend_to_file(&existing, new_section);
+        assert_eq!(result.matches("# Changelog").count(), 1);
+    }
     #[test]
     fn full_changelog_generates_all_sections() {
         let sections = vec![
