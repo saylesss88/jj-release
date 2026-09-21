@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-09-21
+
+### Changed
+- **(pipeline)**move into pipeline/ with sub-modules
+- error handling to use thiserror for the lib
+- separate into lib and cli workspaces
+
+### Fixed
+- **(jj)**remove doc hiddden from useful public types
+- **(pipeline)**lib code shouldn't call process::exit
+- **(forge)**move helper functions only used in tests into the test module and drop unused ones
+- tests to use new default of not publishing to cargo
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.5.0] - 2026-09-20
 
 ### Added
