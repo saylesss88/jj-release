@@ -2,10 +2,11 @@
 
 use std::{borrow::ToOwned, fs, path::Path};
 
-use anyhow::{Context, Result, bail};
 use semver::Version;
 use serde_json::Value;
 use toml_edit::DocumentMut;
+
+use crate::errors::{ReleaseError, Result};
 
 /// Manages reading and writing version information in project manifests.
 ///
@@ -72,26 +73,30 @@ impl ManifestBackend for GoManifest {
 impl ManifestBackend for NpmManifest {
     fn read_version(&self, root: &Path) -> Result<Version> {
         let path = root.join("package.json");
-        let raw =
-            fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-        let json: Value =
-            serde_json::from_str(&raw).with_context(|| format!("parsing {}", path.display()))?;
+        let raw = fs::read_to_string(&path)
+            .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", path.display())))?;
+        let json: Value = serde_json::from_str(&raw)
+            .map_err(|e| ReleaseError::Message(format!("parsing {}: {e}", path.display())))?;
         let version_str = json["version"]
             .as_str()
-            .with_context(|| "missing version field in package.json")?;
-        Version::parse(version_str)
-            .with_context(|| format!("invalid semver {version_str:?} in package.json"))
+            .ok_or_else(|| ReleaseError::Message("missing version field in package.json".into()))?;
+        Version::parse(version_str).map_err(|_| {
+            ReleaseError::Message(format!("invalid semver {version_str:?} in package.json"))
+        })
     }
 
     fn write_version(&self, root: &Path, version: &Version) -> Result<()> {
         let path = root.join("package.json");
-        let raw =
-            fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-        let mut json: Value =
-            serde_json::from_str(&raw).with_context(|| format!("parsing {}", path.display()))?;
+        let raw = fs::read_to_string(&path)
+            .map_err(|e| ReleaseError::Message(format!("writing {}: {e}", path.display())))?;
+
+        let mut json: Value = serde_json::from_str(&raw)
+            .map_err(|e| ReleaseError::Message(format!("parsing {}: {e}", path.display())))?;
+
         json["version"] = Value::String(version.to_string());
         fs::write(&path, serde_json::to_string_pretty(&json)?)
-            .with_context(|| format!("writing {}", path.display()))?;
+            .map_err(|e| ReleaseError::Message(format!("writing {}: {e}", path.display())))?;
+
         Ok(())
     }
 }
@@ -99,41 +104,53 @@ impl ManifestBackend for NpmManifest {
 /// Read the current `[package].version` from `Cargo.toml`.
 pub(crate) fn read_version(cargo_toml: &Path) -> Result<Version> {
     let raw = fs::read_to_string(cargo_toml)
-        .with_context(|| format!("reading {}", cargo_toml.display()))?;
+        .map_err(|_| ReleaseError::Message(format!("reading {}", cargo_toml.display())))?;
 
     let doc: DocumentMut = raw
         .parse()
-        .with_context(|| format!("parsing {}", cargo_toml.display()))?;
+        .map_err(|_| ReleaseError::Message(format!("parsing {}", cargo_toml.display())))?;
 
     let version_str = doc
         .get("package")
         .and_then(|p| p.get("version"))
         .and_then(|v| v.as_str())
-        .with_context(|| format!("missing [package].version in {}", cargo_toml.display()))?;
+        .ok_or_else(|| {
+            ReleaseError::Message(format!(
+                "missing [package].version in {}",
+                cargo_toml.display()
+            ))
+        })?;
 
-    Version::parse(version_str)
-        .with_context(|| format!("invalid semver {version_str:?} in {}", cargo_toml.display()))
+    Version::parse(version_str).map_err(|_| {
+        ReleaseError::Message(format!(
+            "invalid semver {version_str} in {}",
+            cargo_toml.display()
+        ))
+    })
 }
 
 /// Write `new_version` into `[package].version` in `Cargo.toml`, preserving
 /// all comments and formatting.
 pub(crate) fn write_version(cargo_toml: &Path, new_version: &Version) -> Result<()> {
     let raw = fs::read_to_string(cargo_toml)
-        .with_context(|| format!("reading {}", cargo_toml.display()))?;
+        .map_err(|_| ReleaseError::Message(format!("reading {}", cargo_toml.display())))?;
 
     let mut doc: DocumentMut = raw
         .parse()
-        .with_context(|| format!("parsing {}", cargo_toml.display()))?;
+        .map_err(|_| ReleaseError::Message(format!("parsing {}", cargo_toml.display())))?;
 
     // Validate the key exists before mutating.
     if doc["package"]["version"].is_none() {
-        bail!("[package].version not found in {}", cargo_toml.display());
+        return Err(ReleaseError::Message(format!(
+            "[package].version not found in {}",
+            cargo_toml.display()
+        )));
     }
 
     doc["package"]["version"] = toml_edit::value(new_version.to_string());
 
     fs::write(cargo_toml, doc.to_string())
-        .with_context(|| format!("writing {}", cargo_toml.display()))?;
+        .map_err(|_| ReleaseError::Message(format!("writing {}", cargo_toml.display())))?;
 
     Ok(())
 }
@@ -147,15 +164,22 @@ pub(crate) fn write_version(cargo_toml: &Path, new_version: &Version) -> Result<
 /// - The `[package].name` field is missing or not a string
 pub fn read_name(cargo_toml: &Path) -> Result<String> {
     let raw = fs::read_to_string(cargo_toml)
-        .with_context(|| format!("reading {}", cargo_toml.display()))?;
+        .map_err(|_| ReleaseError::Message(format!("reading {}", cargo_toml.display())))?;
+
     let doc: DocumentMut = raw
         .parse()
-        .with_context(|| format!("parsing {}", cargo_toml.display()))?;
+        .map_err(|_| ReleaseError::Message(format!("parsing {}", cargo_toml.display())))?;
+
     doc.get("package")
         .and_then(|p| p.get("name"))
         .and_then(|n| n.as_str())
         .map(ToOwned::to_owned)
-        .with_context(|| format!("missing [package].name in {}", cargo_toml.display()))
+        .ok_or_else(|| {
+            ReleaseError::Message(format!(
+                "missing [package].name in {}",
+                cargo_toml.display()
+            ))
+        })
 }
 
 #[cfg(test)]

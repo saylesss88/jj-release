@@ -1,9 +1,9 @@
 use std::path::Path;
 
-use anyhow::Result;
 use jj_release::{
     changelog,
     config::Config,
+    errors::Result,
     forge::PrRequest,
     pipeline::{self, ReleaseContext},
 };

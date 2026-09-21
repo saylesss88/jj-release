@@ -2,7 +2,8 @@
 
 use std::{path::Path, process::Command};
 
-use anyhow::{Context, Result, bail};
+use crate::errors::{ReleaseError, Result};
+// use anyhow::{Context, Result, bail};
 
 pub trait PublishBackend {
     /// Runs pre-flight checks (like a dry-run) to ensure the package can be published.
@@ -40,11 +41,13 @@ impl PublishBackend for CargoPublish {
             .args(["publish", "--dry-run", "--allow-dirty"])
             .current_dir(root)
             .output()
-            .context("spawning cargo publish --dry-run")?;
+            .map_err(|_| ReleaseError::Message("spawning cargo publish --dry-run".into()))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("cargo publish --dry-run failed:\n{stderr}");
+            return Err(ReleaseError::Message(format!(
+                "cargo publish --dry-run failed:\n{stderr}"
+            )));
         }
         Ok(())
     }
@@ -56,9 +59,10 @@ impl PublishBackend for CargoPublish {
             .args(extra_flags)
             .current_dir(root)
             .status()
-            .context("spawning cargo publish")?;
+            .map_err(|_| ReleaseError::Message("spawning cargo publish".into()))?;
+        // .context("spawning cargo publish")?;
         if !status.success() {
-            bail!("cargo publish failed");
+            return Err(ReleaseError::Message("cargo publish failed".to_string()));
         }
         Ok(())
     }
@@ -72,10 +76,12 @@ impl PublishBackend for NpmPublish {
             .args(["publish", "--dry-run"])
             .current_dir(root)
             .output()
-            .context("spawning npm publish --dry-run")?;
+            .map_err(|_| ReleaseError::Message("spawning npm publish --dry-run".into()))?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("npm publish --dry-run failed:\n{stderr}");
+            return Err(ReleaseError::Message(format!(
+                "npm publish --dry-run failed:\n{stderr}"
+            )));
         }
         Ok(())
     }
@@ -85,9 +91,9 @@ impl PublishBackend for NpmPublish {
             .args(extra_flags)
             .current_dir(root)
             .status()
-            .context("spawning npm publish")?;
+            .map_err(|_| ReleaseError::Message("spawning npm publish".into()))?;
         if !status.success() {
-            bail!("npm publish failed");
+            return Err(ReleaseError::Message("npm publish failed".to_string()));
         }
         Ok(())
     }
@@ -106,7 +112,11 @@ pub fn run_semver_checks(root: &Path) -> Result<bool> {
         .args(["semver-checks"])
         .current_dir(root)
         .output()
-        .context("spawning cargo semver-checks, is cargo-semver-checks installed?")?;
+        .map_err(|_| {
+            ReleaseError::Message(
+                "spawning cargo semver-checks, is cargo-semver-checks installed?".into(),
+            )
+        })?;
     // Exit code 0 = no breaking changes, non-zero = breaking changes detected
     Ok(!output.status.success())
 }

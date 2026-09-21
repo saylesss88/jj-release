@@ -1,10 +1,9 @@
 use std::{fs, path::Path};
 
-use anyhow::Result;
-
 use jj_release::{
     changelog,
     config::{Config, Versioning},
+    errors::Result,
     pipeline::{self, PreparedRelease, ReleaseContext},
     workspace,
 };
@@ -246,12 +245,11 @@ mod tests {
     use super::*;
     use std::cell::RefCell;
 
-    use anyhow::bail;
     use semver::Version;
 
     use jj_release::{
-        commits::CommitInfo, forge::NoForge, jj::JjBackend, manifest::ManifestBackend,
-        publish::PublishBackend,
+        commits::CommitInfo, errors::ReleaseError, forge::NoForge, jj::JjBackend,
+        manifest::ManifestBackend, publish::PublishBackend,
     };
 
     struct DummyManifest;
@@ -272,7 +270,9 @@ mod tests {
             Ok(()) // Pre-flight succeeds
         }
         fn publish(&self, _root: &Path, _flags: &[String]) -> Result<()> {
-            bail!("simulated crates.io outage") // Publish fails
+            Err(ReleaseError::Message(
+                "simulated crates.io outage".to_string(),
+            ))
         }
     }
 

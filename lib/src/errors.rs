@@ -18,7 +18,30 @@ pub enum ReleaseError {
     /// Used when a wrapped underlying IO/Parse error occurs.
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    // Add other transparent wrappers here as needed (e.g., toml::de::Error)
+
+    // Automatically absorbs TOML parsing errors
+    #[error(transparent)]
+    Toml(#[from] toml::de::Error),
+
+    // Automatically absorbs SemVer parsing errors
+    #[error(transparent)]
+    SemVer(#[from] semver::Error),
+
+    // Automatically absorbs ureq network errors
+    #[error(transparent)]
+    Ureq(#[from] ureq::Error),
+
+    // Automatically absorbs cargo_metadata errors
+    #[error(transparent)]
+    CargoMetadata(#[from] cargo_metadata::Error),
+
+    // Automatically absorbs serde_json errors
+    #[error(transparent)]
+    SerdeJson(#[from] serde_json::Error),
+
+    // Automatically absorbs UTF-8 conversion errors
+    #[error(transparent)]
+    Utf8(#[from] std::string::FromUtf8Error),
 }
 
 /// A wrapper for exit states that aren't strictly "failures" (like `NoTrigger`),
@@ -44,13 +67,15 @@ impl ExitState {
         Self::NoTrigger
     }
 
-    pub fn missing_config() -> Self {
+    #[must_use]
+    pub const fn missing_config() -> Self {
         Self::Error {
             error: ReleaseError::MissingConfig,
             code: 2,
         }
     }
 
+    #[must_use]
     pub fn missing_tool(name: &str) -> Self {
         Self::Error {
             error: ReleaseError::MissingTool(name.to_string()),

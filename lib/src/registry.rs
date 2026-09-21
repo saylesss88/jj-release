@@ -1,9 +1,10 @@
 //! Cargo registry checks.
 
-use anyhow::{Result, anyhow};
 use semver::Version;
 use serde_json::Value;
 use ureq::{Agent, Error};
+
+use crate::errors::{ReleaseError, Result};
 
 /// Check if a specific version of a crate is already published on crates.io
 ///
@@ -23,7 +24,7 @@ pub fn version_exists_on_crates_io(name: &str, version: &Version) -> Result<bool
     match response {
         Ok(r) => Ok(r.status().is_success()),
         Err(Error::StatusCode(404)) => Ok(false),
-        Err(e) => Err(anyhow!("crates.io API error: {e}")),
+        Err(e) => Err(ReleaseError::Message(format!("crates.io API error: {e}"))),
     }
 }
 
@@ -49,7 +50,7 @@ pub fn latest_version_on_crates_io(name: &str) -> Result<Option<Version>> {
             Ok(version_str.and_then(|v| Version::parse(v).ok()))
         }
         Err(Error::StatusCode(404)) => Ok(None),
-        Err(e) => Err(anyhow!("crates.io API error: {e}")),
+        Err(e) => Err(ReleaseError::Message(format!("crates.io API error: {e}"))),
     }
 }
 
@@ -61,19 +62,19 @@ mod tests {
     fn published_version_exists() {
         // anyhow 1.0.0 definitely exists on crates.io
         let v = Version::parse("1.0.0").unwrap();
-        assert!(version_exists_on_crates_io("anyhow", &v).unwrap());
+        assert!(version_exists_on_crates_io("thiserror", &v).unwrap());
     }
 
     #[test]
     fn unpublished_version_does_not_exist() {
         // This version should never exist
         let v = Version::parse("99.99.99").unwrap();
-        assert!(!version_exists_on_crates_io("anyhow", &v).unwrap());
+        assert!(!version_exists_on_crates_io("thiserror", &v).unwrap());
     }
     #[test]
     fn gets_latest_version_from_crates_io() {
-        // anyhow is stable and will always have a version
-        let v = latest_version_on_crates_io("anyhow").unwrap();
+        // thiserror is stable and will always have a version
+        let v = latest_version_on_crates_io("thiserror").unwrap();
         assert!(v.is_some());
         assert!(v.unwrap().major >= 1);
     }

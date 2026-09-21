@@ -16,8 +16,13 @@ path = "src/main.rs"
 [dependencies]
 jj_release = { path = "../lib" }
 toml_edit = "0.25.15"
-anyhow = { version = "1.0.104", default-features = false }
-clap.workspace = true
+clap = { version = "4.6.7", default-features = false, features = [
+  "derive",
+  "std",
+  "help",
+  "usage",
+] }
+semver = "1.0.28"
 
 [lints]
 workspace = true

@@ -2,10 +2,10 @@
 
 use std::{collections::HashMap, env, fs, path::Path, process};
 
-use anyhow::{Context, Result};
 use semver::Version;
 
 use crate::changelog;
+use crate::errors::{ReleaseError, Result};
 use crate::{
     commits::{self, BumpKind, CommitInfo, Tag},
     config::{Config, Versioning},
@@ -53,14 +53,6 @@ impl<'a> ReleaseContext<'a> {
     }
 }
 
-// enum MissingTagBehavior {
-//     /// For commands that must not alter the repository. Mirrors the range a
-//     /// newly-created baseline tag would produce.
-//     AssumeBaseline,
-//     /// For the actual release command. Creates and pushes the baseline tag.
-//     CreateBaseline,
-// }
-
 /// Prepares a new release by evaluating recent commits, checking for release triggers,
 /// and calculating the next version bump based on configuration and the project manifest.
 ///
@@ -100,7 +92,8 @@ pub fn prepare_release(
 
     let current_version = manifest
         .read_version(root)
-        .context("reading current version")?;
+        .map_err(|_| ReleaseError::Message("reading current version".into()))?;
+    // .context("reading current version")?;
 
     // Use crates.io version as baseline if available, more reliable than manifest.
     let baseline_version = if config.publish.cargo && !is_first_release {
@@ -528,10 +521,17 @@ mod tests {
     use super::*;
     use std::{cell::RefCell, path::Path};
 
-    use anyhow::{Result, bail};
+    // use anyhow::{Result, bail};
+
     use semver::Version;
 
-    use crate::{commits::CommitInfo, config, manifest, test_helpers::mock::MockBackend};
+    use crate::{
+        commits::CommitInfo,
+        config,
+        errors::{ReleaseError, Result},
+        manifest,
+        test_helpers::mock::MockBackend,
+    };
 
     struct MockManifest {
         version: Version,
@@ -551,7 +551,7 @@ mod tests {
     impl PublishBackend for MockPublisher {
         fn check(&self, _root: &Path) -> Result<()> {
             if self.0 {
-                bail!("mock failure");
+                return Err(ReleaseError::Message("mock failure".to_string()));
             }
             Ok(())
         }

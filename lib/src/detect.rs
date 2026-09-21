@@ -123,7 +123,8 @@ pub fn detect_versioning(workspace_toml: &Path) -> &'static str {
 pub fn parse_remote_owner_repo(url: &str) -> Option<(String, String)> {
     let path = if url.contains("ssh://") {
         // ssh://git@host/owner/repo.git
-        url.splitn(4, '/').skip(3).next()?
+        url.splitn(4, '/').nth(3)?
+        // url.splitn(4, '/').skip(3).next()?
     } else if url.contains("://") {
         // https://host/owner/repo.git
         url.splitn(4, '/').nth(3)?

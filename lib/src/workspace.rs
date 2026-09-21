@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, fs, path::Path, process::Command};
 
-use anyhow::{Context, Result, bail};
+use crate::errors::{ReleaseError, Result};
 use cargo_metadata::MetadataCommand;
 use semver::Version;
 use toml_edit::DocumentMut;
@@ -19,29 +19,37 @@ pub struct WorkspaceManifest;
 impl ManifestBackend for WorkspaceManifest {
     fn read_version(&self, root: &Path) -> Result<Version> {
         let path = root.join("Cargo.toml");
-        let raw =
-            fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+        let raw = fs::read_to_string(&path)
+            .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", path.display())))?;
+        // .with_context(|| format!("reading {}", path.display()))?;
         let doc: DocumentMut = raw
             .parse()
-            .with_context(|| format!("parsing {}", path.display()))?;
+            .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", path.display())))?;
         let version_str = doc
             .get("workspace")
             .and_then(|w| w.get("package"))
             .and_then(|p| p.get("version"))
             .and_then(|v| v.as_str())
-            .with_context(|| "missing [workspace.package].version")?;
-        Version::parse(version_str).with_context(|| format!("invalid semver {version_str:?}"))
+            .ok_or_else(|| ReleaseError::Message("missing [workspace.package].version".into()))?;
+        Version::parse(version_str)
+            .map_err(|e| ReleaseError::Message(format!("invalid semver {version_str:?}: {e}")))
+        // .with_context(|| format!("invalid semver {version_str:?}"))
     }
 
     fn write_version(&self, root: &Path, version: &Version) -> Result<()> {
         let path = root.join("Cargo.toml");
-        let raw =
-            fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+        let raw = fs::read_to_string(&path)
+            .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", path.display())))?;
+        // .with_context(|| format!("reading {}", path.display()))?;
         let mut doc: DocumentMut = raw
             .parse()
-            .with_context(|| format!("parsing {}", path.display()))?;
+            .map_err(|e| ReleaseError::Message(format!("parsing {}: {e}", path.display())))?;
+
+        // .with_context(|| format!("parsing {}", path.display()))?;
         doc["workspace"]["package"]["version"] = toml_edit::value(version.to_string());
-        fs::write(&path, doc.to_string()).with_context(|| format!("writing {}", path.display()))?;
+        fs::write(&path, doc.to_string())
+            .map_err(|e| ReleaseError::Message(format!("writing {}: {e}", path.display())))?;
+        // .with_context(|| format!("writing {}", path.display()))?;
         Ok(())
     }
 }
@@ -63,7 +71,9 @@ pub fn ordered_members(members: &[WorkspaceMember]) -> Result<Vec<&WorkspaceMemb
     while !remaining.is_empty() {
         iterations += 1;
         if iterations > max {
-            bail!("circular dependency detected in workspace members");
+            return Err(ReleaseError::Message(
+                "circular dependency detected in workspace members".to_string(),
+            ));
         }
 
         let mut progress = false;
@@ -91,7 +101,9 @@ pub fn ordered_members(members: &[WorkspaceMember]) -> Result<Vec<&WorkspaceMemb
         });
 
         if !progress {
-            bail!("circular dependency detected in workspace members");
+            return Err(ReleaseError::Message(
+                "circular dependency detected in workspace members".to_string(),
+            ));
         }
     }
 
@@ -134,9 +146,17 @@ pub fn bump_member_version(root: &Path, member_name: &str, version: &Version) ->
         .args(["set-version", "-p", member_name, &version.to_string()])
         .current_dir(root)
         .status()
-        .context("spawning cargo set-version, is cargo-edit installed?")?;
+        .map_err(|_| {
+            ReleaseError::Message(
+                "spawning cargo set-version, is cargo-edit installed?".to_string(),
+            )
+        })?;
+    // .context("spawning cargo set-version, is cargo-edit installed?")?;
     if !status.success() {
-        bail!("cargo set-version failed for {member_name}");
+        return Err(ReleaseError::Message(format!(
+            "cargo set-version failed for {member_name}"
+        )));
+        // bail!("cargo set-version failed for {member_name}");
     }
     Ok(())
 }

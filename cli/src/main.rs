@@ -4,12 +4,11 @@ mod commands;
 
 use std::{env, path::PathBuf, process};
 
-use anyhow::{Context, Result};
 use clap::Parser;
 
 use jj_release::{config, detect, errors, jj, pipeline};
 use jj_release::{
-    errors::CliError,
+    errors::{ReleaseError, Result},
     forge::{ForgeBackend, ForgejoForge, GitHubForge, GitLabForge, NoForge},
     jj::ShellBackend,
     manifest::{CargoManifest, GoManifest, ManifestBackend, NpmManifest},
@@ -67,15 +66,26 @@ enum Subcommand {
 }
 
 fn main() {
-    let code = errors::report(run());
+    let code = match run() {
+        Ok(()) => 0,
+        Err(e) => {
+            eprintln!("error: {e}");
+            match e {
+                ReleaseError::MissingConfig => 2,
+                ReleaseError::MissingTool(_) => 3,
+                _ => 101,
+            }
+        }
+    };
     process::exit(code);
 }
 
-fn run() -> Result<(), errors::CliError> {
+fn run() -> Result<(), errors::ReleaseError> {
     let cli = Cli::parse();
 
     // Resolve repo root.
-    let cwd = env::current_dir().context("getting current directory")?;
+    let cwd = env::current_dir()
+        .map_err(|e| ReleaseError::Message(format!("getting current directory: {e}")))?;
     let root = match &cli.repo {
         Some(p) => p.clone(),
         None => jj::find_repo_root(&cwd)?,
@@ -112,13 +122,13 @@ fn run() -> Result<(), errors::CliError> {
     let forge: Box<dyn ForgeBackend> = match config.release.forge.as_str() {
         "github" => {
             if !detect::tool_available("gh") {
-                return Err(CliError::missing_tool("gh"));
+                return Err(ReleaseError::MissingTool("gh".to_owned()));
             }
             Box::new(GitHubForge)
         }
         "gitlab" => {
             if !detect::tool_available("glab") {
-                return Err(CliError::missing_tool("glab"));
+                return Err(ReleaseError::MissingTool("glab".to_owned()));
             }
 
             Box::new(GitLabForge)

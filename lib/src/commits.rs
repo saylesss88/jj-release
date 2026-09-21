@@ -1,9 +1,9 @@
 //! Commit walking and conventional commit parsing.
 
-use anyhow::{Context, Result, bail};
 use git_conventional::Commit;
 use semver::{BuildMetadata, Prerelease, Version};
 
+use crate::errors::{ReleaseError, Result};
 use crate::jj::JjBackend;
 
 // -- Types --
@@ -40,7 +40,8 @@ pub(crate) fn find_trigger(
     // We don't want to scan the whole repo; the trigger should be recent.
     let commits = backend
         .log_commits(&format!("{since}..@"))
-        .context("scanning for trigger commit")?;
+        .map_err(|_| ReleaseError::Message("scanning for trigger commit".into()))?;
+    // .context("scanning for trigger commit")?;
 
     for c in commits {
         if c.description.contains(trigger) {
@@ -103,7 +104,11 @@ pub fn resolve_bump(force: Option<&String>, commits: &[CommitInfo]) -> Result<Bu
             "major" => Ok(BumpKind::Major),
             "minor" => Ok(BumpKind::Minor),
             "patch" => Ok(BumpKind::Patch),
-            other => bail!("unknown bump.force value {other:?}: must be major/minor/patch"),
+            other => {
+                return Err(ReleaseError::Message(format!(
+                    "unknown bump.force value {other:?}: must be major/minor/patch"
+                )));
+            }
         };
     }
     Ok(compute_bump(commits))

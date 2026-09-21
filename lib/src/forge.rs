@@ -2,7 +2,7 @@
 
 use std::{borrow::ToOwned, process::Command};
 
-use anyhow::{Context, Result, bail};
+use crate::errors::{ReleaseError, Result};
 use serde_json::Value;
 
 pub struct GitHubForge;
@@ -12,9 +12,11 @@ impl ForgeBackend for GitHubForge {
         let status = Command::new("gh")
             .args(["release", "create", tag, "--generate-notes"])
             .status()
-            .context("spawning gh release create")?;
+            .map_err(|_| ReleaseError::Message("spawning gh release create".into()))?;
         if !status.success() {
-            bail!("gh release create failed for tag {tag}");
+            return Err(ReleaseError::Message(format!(
+                "gh release create failed for tag {tag}"
+            )));
         }
         Ok(())
     }
@@ -34,10 +36,10 @@ impl ForgeBackend for GitHubForge {
                 pr.base,
             ])
             .output()
-            .context("spawning gh pr create")?;
+            .map_err(|_| ReleaseError::Message("spawning gh pr create".into()))?;
 
         if !output.status.success() {
-            bail!("gh pr create failed");
+            return Err(ReleaseError::Message("gh pr create failed".to_string()));
         }
         Ok(())
     }
@@ -50,9 +52,11 @@ impl ForgeBackend for GitLabForge {
         let status = Command::new("glab")
             .args(["release", "create", tag, "--generate-notes"])
             .status()
-            .context("spawning glab release create")?;
+            .map_err(|_| ReleaseError::Message("spawning glab release create".into()))?;
         if !status.success() {
-            bail!("glab release create failed for tag {tag}");
+            return Err(ReleaseError::Message(format!(
+                "glab release create failed for tag {tag}"
+            )));
         }
         Ok(())
     }
@@ -72,9 +76,9 @@ impl ForgeBackend for GitLabForge {
                 pr.base,
             ])
             .status()
-            .context("spawning glab mr create")?;
+            .map_err(|_| ReleaseError::Message("spawning glab mr create".into()))?;
         if !status.success() {
-            bail!("glab mr create failed");
+            return Err(ReleaseError::Message("glab mr create failed".to_string()));
         }
         Ok(())
     }
@@ -97,9 +101,13 @@ impl ForgejoForge {
             .header("Authorization", &format!("token {}", self.token))
             .header("Content-Type", "application/json")
             .send_json(payload)
-            .with_context(|| format!("POST {url}"))?;
+            .map_err(|_| ReleaseError::Message(format!("POST {url}")))?;
+        // .with_context(|| format!("POST {url}"))?;
         if !response.status().is_success() {
-            bail!("Forgejo API error: {}", response.status());
+            return Err(ReleaseError::Message(format!(
+                "forgejo API error: {}",
+                response.status()
+            )));
         }
         Ok(response.into_body().read_to_string()?)
     }

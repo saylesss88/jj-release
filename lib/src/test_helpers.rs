@@ -2,8 +2,7 @@
 pub mod mock {
     use std::cell::RefCell;
 
-    use anyhow::Result;
-
+    use crate::errors::Result;
     use crate::{commits::CommitInfo, jj::JjBackend};
 
     #[derive(Default)]

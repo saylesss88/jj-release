@@ -1,6 +1,6 @@
 use std::{borrow, fmt::Write, fs, path::Path};
 
-use anyhow::Result;
+use jj_release::errors::Result;
 
 pub fn init(root: &Path) -> Result<()> {
     use jj_release::detect;

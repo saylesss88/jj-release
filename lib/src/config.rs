@@ -2,7 +2,7 @@
 
 use std::{fs, path::Path};
 
-use anyhow::{Context, Result};
+use crate::errors::{ReleaseError, Result};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 
@@ -163,8 +163,10 @@ pub fn load(root: &Path) -> Result<Config> {
     if !path.exists() {
         return Ok(Config::default());
     }
-    let raw = fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
-    toml::from_str(&raw).with_context(|| format!("parsing {}", path.display()))
+    let raw = fs::read_to_string(&path)
+        .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", path.display())))?;
+    toml::from_str(&raw)
+        .map_err(|e| ReleaseError::Message(format!("parsing {}: {e}", path.display())))
 }
 
 impl Config {
