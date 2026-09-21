@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use jj_release::{
+use jj_release_core::{
     changelog,
     config::Config,
     errors::Result,

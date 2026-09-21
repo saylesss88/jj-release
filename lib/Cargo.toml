@@ -1,5 +1,5 @@
 [package]
-name = "jj_release"
+name = "jj_release_core"
 version.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -12,7 +12,7 @@ edition.workspace = true
 exclude.workspace = true
 
 [lib]
-name = "jj_release"
+name = "jj_release_core"
 path = "src/lib.rs"
 doctest = false
 

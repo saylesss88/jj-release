@@ -5,7 +5,6 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description.workspace = true
-readme.workspace = true
 repository.workspace = true
 documentation.workspace = true
 exclude.workspace = true
@@ -15,7 +14,7 @@ name = "jj-release"
 path = "src/main.rs"
 
 [dependencies]
-jj_release = { path = "../lib" }
+jj_release_core = { path = "../lib", version = "0.5.0" }
 toml_edit = "0.25.15"
 clap = { version = "4.6.7", default-features = false, features = [
   "derive",

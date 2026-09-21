@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use jj_release::{
+use jj_release_core::{
     changelog,
     config::{Config, Versioning},
     errors::Result,
@@ -247,7 +247,7 @@ mod tests {
 
     use semver::Version;
 
-    use jj_release::{
+    use jj_release_core::{
         commits::CommitInfo, errors::ReleaseError, forge::NoForge, jj::JjBackend,
         manifest::ManifestBackend, publish::PublishBackend,
     };

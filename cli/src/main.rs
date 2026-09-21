@@ -6,8 +6,8 @@ use std::{env, path::PathBuf, process};
 
 use clap::Parser;
 
-use jj_release::{config, detect, errors, jj, pipeline};
-use jj_release::{
+use jj_release_core::{config, detect, errors, jj, pipeline};
+use jj_release_core::{
     errors::{ReleaseError, Result},
     forge::{ForgeBackend, ForgejoForge, GitHubForge, GitLabForge, NoForge},
     jj::ShellBackend,
@@ -180,7 +180,7 @@ fn run() -> Result<(), errors::ReleaseError> {
 
 #[cfg(test)]
 mod tests {
-    use jj_release::config::Config;
+    use jj_release_core::config::Config;
     use semver::Version;
 
     #[test]

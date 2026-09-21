@@ -1,9 +1,9 @@
 use std::{borrow, fmt::Write, fs, path::Path};
 
-use jj_release::errors::Result;
+use jj_release_core::errors::Result;
 
 pub fn init(root: &Path) -> Result<()> {
-    use jj_release::detect;
+    use jj_release_core::detect;
 
     let release_toml = root.join("release.toml");
     if release_toml.exists() {

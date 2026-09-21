@@ -5,7 +5,7 @@ forge = "github"
 create_release = false
 
 [publish]
-cargo = false
+cargo = true
 
 [changelog]
 enabled = true

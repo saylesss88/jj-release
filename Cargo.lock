@@ -485,13 +485,13 @@ name = "jj-release"
 version = "0.5.0"
 dependencies = [
  "clap",
- "jj_release",
+ "jj_release_core",
  "semver",
  "toml_edit",
 ]
 
 [[package]]
-name = "jj_release"
+name = "jj_release_core"
 version = "0.5.0"
 dependencies = [
  "cargo_metadata",

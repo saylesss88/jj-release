@@ -551,6 +551,39 @@ jobs:
 
 ---
 
+## Recovering from a Failed Release
+
+If a release fails midway through (e.g., `cargo publish` fails due to registry
+validation), you can cleanly revert the entire pipeline using Jujutsu's
+operation log:
+
+1. Find the operation right before you ran `jj-release`:
+
+```bash
+jj op log
+```
+
+2. Restore the repo to that operation:
+
+```bash
+jj op restore <operation_hash>
+```
+
+3. Discard the mutated files (like `Cargo.toml` bumps) from your working copy:
+
+```bash
+jj restore
+```
+
+<!-- prettier-ignore -->
+> [!NOTE]
+> `jj-release` runs `cargo publish --dry-run` as a pre-flight check, but this
+> only validates local compilation. Server-side registry rejections (like
+> invalid URLs or missing permissions) will still cause the pipeline to fail
+> during the final push.
+
+---
+
 ## Requirements
 
 - Rust 1.80+
@@ -568,8 +601,7 @@ Parts of the codebase are adapted from these great projects:
   changes with `cargo-semver-checks`:
   [release-plz](https://github.com/release-plz/release-plz)
 
-- Error handling approach:
-  [cargo-release](https://github.com/crate-ci/cargo-release)
+- [cargo-release](https://github.com/crate-ci/cargo-release)
 
 ## License
 

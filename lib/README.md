@@ -1,4 +1,4 @@
-# jj_release (Library)
+# jj_release_core (Library)
 
 The core automation engine behind `jj-release`. This crate provides a
 programmatic, trait-driven Rust API for interacting with Jujutsu (`jj`), parsing
@@ -22,11 +22,11 @@ implementations for four core traits:
 
 ## Usage
 
-Add `jj_release` to your `Cargo.toml`:
+Add `jj_release_core` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-jj_release = "0.1.0"
+jj_release_core = "0.1.0"
 ```
 
 ## Quick Start
@@ -34,7 +34,7 @@ jj_release = "0.1.0"
 ```rust
 use std::path::Path;
 
-use jj_release::{
+use jj_release_core::{
     config::Config,
     forge::NoForge,
     jj::ShellBackend,
@@ -73,8 +73,8 @@ pattern-match against specific failure states in your own applications.
 Implement any of the core traits to customize behavior:
 
 ```rust
-use jj_release::manifest::ManifestBackend;
-use jj_release::errors::Result;
+use jj_release_core::manifest::ManifestBackend;
+use jj_release_core::errors::Result;
 use semver::Version;
 
 struct MyManifest;

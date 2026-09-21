@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use jj_release::{
+use jj_release_core::{
     config::Config,
     errors::Result,
     forge::NoForge,
