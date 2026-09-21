@@ -184,82 +184,48 @@ impl ForgeBackend for NoForge {
     }
 }
 
-#[must_use]
-pub fn github_release_args(tag: &str) -> Vec<String> {
-    vec![
-        "release".to_owned(),
-        "create".to_owned(),
-        tag.to_owned(),
-        "--generate-notes".to_owned(),
-    ]
-}
-
-#[must_use]
-pub fn github_pr_args(pr: &PrRequest<'_>) -> Vec<String> {
-    vec![
-        "pr".to_owned(),
-        "create".to_owned(),
-        "--title".to_owned(),
-        format!("chore: release {}", pr.tag),
-        "--body".to_owned(),
-        pr.body.to_owned(),
-        "--head".to_owned(),
-        pr.head.to_owned(),
-        "--base".to_owned(),
-        pr.base.to_owned(),
-    ]
-}
-
-#[must_use]
-pub fn gitlab_release_args(tag: &str) -> Vec<String> {
-    vec![
-        "release".to_owned(),
-        "create".to_owned(),
-        tag.to_owned(),
-        "--generate-notes".to_owned(),
-    ]
-}
-
-#[must_use]
-pub fn gitlab_pr_args(pr: &PrRequest<'_>) -> Vec<String> {
-    vec![
-        "mr".to_owned(),
-        "create".to_owned(),
-        "--title".to_owned(),
-        format!("chore: release {}", pr.tag),
-        "--description".to_owned(),
-        pr.body.to_owned(),
-        "--source-branch".to_owned(),
-        pr.head.to_owned(),
-        "--target-branch".to_owned(),
-        pr.base.to_owned(),
-    ]
-}
-
-#[must_use]
-pub fn forgejo_release_payload(tag: &str) -> Value {
-    serde_json::json!({
-        "tag_name": tag,
-        "name": tag,
-        "draft": false,
-        "prerelease": false
-    })
-}
-
-#[must_use]
-pub fn forgejo_pr_payload(pr: &PrRequest<'_>) -> Value {
-    serde_json::json!({
-        "title": format!("chore: release {}", pr.tag),
-        "body": pr.body,
-        "head": pr.head,
-        "base": pr.base,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn github_pr_args(pr: &PrRequest<'_>) -> Vec<String> {
+        vec![
+            "pr".to_owned(),
+            "create".to_owned(),
+            "--title".to_owned(),
+            format!("chore: release {}", pr.tag),
+            "--body".to_owned(),
+            pr.body.to_owned(),
+            "--head".to_owned(),
+            pr.head.to_owned(),
+            "--base".to_owned(),
+            pr.base.to_owned(),
+        ]
+    }
+
+    fn gitlab_pr_args(pr: &PrRequest<'_>) -> Vec<String> {
+        vec![
+            "mr".to_owned(),
+            "create".to_owned(),
+            "--title".to_owned(),
+            format!("chore: release {}", pr.tag),
+            "--description".to_owned(),
+            pr.body.to_owned(),
+            "--source-branch".to_owned(),
+            pr.head.to_owned(),
+            "--target-branch".to_owned(),
+            pr.base.to_owned(),
+        ]
+    }
+
+    fn forgejo_pr_payload(pr: &PrRequest<'_>) -> Value {
+        serde_json::json!({
+            "title": format!("chore: release {}", pr.tag),
+            "body": pr.body,
+            "head": pr.head,
+            "base": pr.base,
+        })
+    }
     #[test]
     fn github_pr_args_maps_correctly() {
         let req = PrRequest {
