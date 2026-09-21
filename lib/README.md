@@ -64,9 +64,9 @@ fn main() -> Result<()> {
 ## Error Handling
 
 All fallible operations return `jj_release::errors::Result<T>`, an alias for
-`Result<T, ReleaseError>`. The `ReleaseError` enum covers IO, parsing, network,
-and release-specific failures. The CLI layer wraps these in `ExitState` to map
-errors to process exit codes.
+`Result<T, ReleaseError>`. The `ReleaseError` enum is powered by `thiserror` and
+covers IO, parsing, network, and release-specific failures, making it easy to
+pattern-match against specific failure states in your own applications.
 
 ## Extending
 
