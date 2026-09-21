@@ -96,7 +96,6 @@ impl ExitState {
 pub fn report(result: Result<(), ExitState>) -> i32 {
     match result {
         Ok(()) | Err(ExitState::NoTrigger) => 0,
-        // Err(ExitState::NoTrigger) => 0,
         Err(ExitState::Silent(code)) => code,
         Err(ExitState::Error { error, code }) => {
             eprintln!("error: {error}");
