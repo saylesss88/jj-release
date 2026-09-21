@@ -281,3 +281,43 @@ pub fn find_repo_root(start: &Path) -> Result<PathBuf> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn find_repo_root_finds_jj_dir() {
+        let dir = tempdir().unwrap();
+        fs::create_dir(dir.path().join(".jj")).unwrap();
+        let found = find_repo_root(dir.path()).unwrap();
+        assert_eq!(found, dir.path());
+    }
+
+    #[test]
+    fn find_repo_root_walks_up() {
+        let dir = tempdir().unwrap();
+        fs::create_dir(dir.path().join(".jj")).unwrap();
+        let subdir = dir.path().join("a").join("b").join("c");
+        fs::create_dir_all(&subdir).unwrap();
+        let found = find_repo_root(&subdir).unwrap();
+        assert_eq!(found, dir.path());
+    }
+
+    #[test]
+    fn find_repo_root_errors_when_not_found() {
+        let dir = tempdir().unwrap();
+        // No .jj directory, should error
+        assert!(find_repo_root(dir.path()).is_err());
+    }
+
+    #[test]
+    fn shell_backend_errors_without_jj() {
+        if which::which("jj").is_ok() {
+            let dir = tempdir().unwrap();
+            assert!(ShellBackend::new(dir.path()).is_ok());
+        }
+    }
+}
