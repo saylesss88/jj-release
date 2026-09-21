@@ -93,7 +93,6 @@ pub fn prepare_release(
     let current_version = manifest
         .read_version(root)
         .map_err(|_| ReleaseError::Message("reading current version".into()))?;
-    // .context("reading current version")?;
 
     // Use crates.io version as baseline if available, more reliable than manifest.
     let baseline_version = if config.publish.cargo && !is_first_release {
@@ -262,7 +261,7 @@ fn print_full_changelog(
     root: &Path,
     output: Option<&Path>,
 ) -> Result<()> {
-    // Actually get all tags.
+    // Get all tags.
     let raw_tags = ctx.backend.list_tags()?;
     let mut all_tags: Vec<Tag> = raw_tags
         .into_iter()
@@ -384,7 +383,7 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
 }
 
 fn resolve_since(backend: &dyn JjBackend, config: &Config) -> Result<String> {
-    // 1. If we have a previous release tag, start from there.
+    // If we have a previous release tag, start from there.
     if let Some(tag) = commits::latest_version_tag(backend, &config.release.tag_prefix)? {
         return Ok(tag.name);
     }
@@ -520,8 +519,6 @@ fn check_bump(
 mod tests {
     use super::*;
     use std::{cell::RefCell, path::Path};
-
-    // use anyhow::{Result, bail};
 
     use semver::Version;
 

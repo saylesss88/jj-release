@@ -60,7 +60,6 @@ impl PublishBackend for CargoPublish {
             .current_dir(root)
             .status()
             .map_err(|_| ReleaseError::Message("spawning cargo publish".into()))?;
-        // .context("spawning cargo publish")?;
         if !status.success() {
             return Err(ReleaseError::Message("cargo publish failed".to_string()));
         }

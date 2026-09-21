@@ -41,7 +41,6 @@ pub(crate) fn find_trigger(
     let commits = backend
         .log_commits(&format!("{since}..@"))
         .map_err(|_| ReleaseError::Message("scanning for trigger commit".into()))?;
-    // .context("scanning for trigger commit")?;
 
     for c in commits {
         if c.description.contains(trigger) {

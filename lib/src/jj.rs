@@ -9,8 +9,6 @@ use std::{
     process::Command,
 };
 
-// use anyhow::{Context, Result, bail};
-
 use crate::commits::CommitInfo;
 use crate::errors::{ReleaseError, Result};
 

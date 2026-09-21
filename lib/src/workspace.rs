@@ -21,7 +21,6 @@ impl ManifestBackend for WorkspaceManifest {
         let path = root.join("Cargo.toml");
         let raw = fs::read_to_string(&path)
             .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", path.display())))?;
-        // .with_context(|| format!("reading {}", path.display()))?;
         let doc: DocumentMut = raw
             .parse()
             .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", path.display())))?;
@@ -33,23 +32,22 @@ impl ManifestBackend for WorkspaceManifest {
             .ok_or_else(|| ReleaseError::Message("missing [workspace.package].version".into()))?;
         Version::parse(version_str)
             .map_err(|e| ReleaseError::Message(format!("invalid semver {version_str:?}: {e}")))
-        // .with_context(|| format!("invalid semver {version_str:?}"))
     }
 
     fn write_version(&self, root: &Path, version: &Version) -> Result<()> {
         let path = root.join("Cargo.toml");
+
         let raw = fs::read_to_string(&path)
             .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", path.display())))?;
-        // .with_context(|| format!("reading {}", path.display()))?;
+
         let mut doc: DocumentMut = raw
             .parse()
             .map_err(|e| ReleaseError::Message(format!("parsing {}: {e}", path.display())))?;
 
-        // .with_context(|| format!("parsing {}", path.display()))?;
         doc["workspace"]["package"]["version"] = toml_edit::value(version.to_string());
         fs::write(&path, doc.to_string())
             .map_err(|e| ReleaseError::Message(format!("writing {}: {e}", path.display())))?;
-        // .with_context(|| format!("writing {}", path.display()))?;
+
         Ok(())
     }
 }
@@ -151,12 +149,10 @@ pub fn bump_member_version(root: &Path, member_name: &str, version: &Version) ->
                 "spawning cargo set-version, is cargo-edit installed?".to_string(),
             )
         })?;
-    // .context("spawning cargo set-version, is cargo-edit installed?")?;
     if !status.success() {
         return Err(ReleaseError::Message(format!(
             "cargo set-version failed for {member_name}"
         )));
-        // bail!("cargo set-version failed for {member_name}");
     }
     Ok(())
 }

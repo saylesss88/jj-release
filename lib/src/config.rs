@@ -2,9 +2,10 @@
 
 use std::{fs, path::Path};
 
-use crate::errors::{ReleaseError, Result};
 use semver::Version;
 use serde::{Deserialize, Serialize};
+
+use crate::errors::{ReleaseError, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]

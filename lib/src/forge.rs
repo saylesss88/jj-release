@@ -97,12 +97,13 @@ impl ForgejoForge {
             "{}/api/v1/repos/{}/{}/{}",
             self.host, self.owner, self.repo, endpoint
         );
+
         let response = ureq::post(&url)
             .header("Authorization", &format!("token {}", self.token))
             .header("Content-Type", "application/json")
             .send_json(payload)
             .map_err(|_| ReleaseError::Message(format!("POST {url}")))?;
-        // .with_context(|| format!("POST {url}"))?;
+
         if !response.status().is_success() {
             return Err(ReleaseError::Message(format!(
                 "forgejo API error: {}",
