@@ -1,3 +1,10 @@
+//! Pre-release validation checks for the release environment.
+//!
+//! Runs a suite of preflight checks: identity, forge CLI, manifest,
+//! version tags, semver compatibility, crates.io sync, trigger commit,
+//! and publish tokens, and reports pass/fail for each before any
+//! mutations occur.
+
 use std::{env, path::Path};
 
 use crate::{

@@ -5,9 +5,25 @@ forge = "github"
 create_release = false
 
 [publish]
-cargo = true
+cargo = false
 
 [changelog]
 enabled = true
 
 manifest_backend = "cargo"
+
+[workspace]
+enabled = true
+versioning = "unified"
+
+[[workspace.members]]
+name = "jj_release"
+path = "lib"
+publish = true
+# depends_on = [] # add names of members this depends on
+
+[[workspace.members]]
+name = "jj-release"
+path = "cli"
+publish = true
+# depends_on = [] # add names of members this depends on
