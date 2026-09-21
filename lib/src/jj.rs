@@ -92,7 +92,6 @@ pub trait JjBackend {
 // Shell implementation
 
 /// Shells out to the `jj` binary found on `$PATH`.
-#[doc(hidden)]
 pub struct ShellBackend {
     /// Repo root (where `.jj/` lives).
     root: PathBuf,
@@ -268,7 +267,6 @@ impl JjBackend for ShellBackend {
 ///
 /// Returns an error if no .jj/ directory is found between the starting path
 /// and the filesystem root.
-#[doc(hidden)]
 pub fn find_repo_root(start: &Path) -> Result<PathBuf> {
     let mut dir = start.to_path_buf();
     loop {
