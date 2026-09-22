@@ -46,7 +46,7 @@ pub fn render_changelog_section(commits: &[CommitInfo], version: &Version) -> St
         if entries.is_empty() {
             continue;
         }
-        let _ = write!(out, "\n### {heading}\n");
+        let _ = write!(out, "\n### {heading}\n\n");
         for entry in entries {
             let _ = writeln!(out, "- {entry}");
         }
