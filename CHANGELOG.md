@@ -5,12 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.3] - 2026-09-22
+## [0.6.0] - 2026-09-22
+
+## [0.6.0] - 2026-09-22
+
+### Added
+- add Gitea forge support via shared GiteaCompatClient with Forgejo
+
+### Changed
+- extract helper functions to slim down release_pipeline
 
 ### Fixed
+- add --no-verify to preflight check
+- doc comment in lib.rs to use jj_release_core
 - **(README)**correct version and exit codes
-
-## [0.5.2] - 2026-09-22
 
 ## [0.5.2] - 2026-09-22
 
