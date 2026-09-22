@@ -1,9 +1,48 @@
-//! Forge backends for GitHub, GitLab, and Forgejo
+//! Forge backends for GitHub, GitLab, Forgejo, and Gitea
 
 use std::{borrow::ToOwned, process::Command};
 
 use crate::errors::{ReleaseError, Result};
 use serde_json::Value;
+
+// -- Types --
+
+pub struct PrRequest<'a> {
+    pub tag: &'a str,
+    pub head: &'a str,
+    pub base: &'a str,
+    pub body: &'a str,
+}
+
+pub trait ForgeBackend {
+    /// Creates a new release associated with the specified tag.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails due to network issues, invalid
+    /// authentication, or if the release cannot be created on the remote forge.
+    fn create_release(&self, tag: &str) -> Result<()>;
+
+    /// Opens a pull request from a head branch into a base branch for a given tag.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails due to network issues, invalid
+    /// authentication, or if the target branches are invalid or already have a conflicting PR.
+    fn create_pr(&self, pr: &PrRequest<'_>) -> Result<()>;
+}
+
+pub struct NoForge;
+
+impl ForgeBackend for NoForge {
+    fn create_release(&self, _tag: &str) -> Result<()> {
+        Ok(())
+    }
+
+    fn create_pr(&self, _pr: &PrRequest<'_>) -> Result<()> {
+        Ok(())
+    }
+}
 
 pub struct GitHubForge;
 
@@ -84,37 +123,36 @@ impl ForgeBackend for GitLabForge {
     }
 }
 
-pub struct ForgejoForge {
-    pub host: String,
-    pub token: String,
-    pub owner: String,
-    pub repo: String,
+/// Shared REST API client for Gitea-compatible forges (Forgejo, Gitea, Codeberg).
+struct GiteaCompatClient {
+    host: String,
+    token: String,
+    owner: String,
+    repo: String,
+    name: &'static str,
 }
 
-impl ForgejoForge {
+impl GiteaCompatClient {
     fn post(&self, endpoint: &str, payload: Value) -> Result<String> {
         let url = format!(
             "{}/api/v1/repos/{}/{}/{}",
             self.host, self.owner, self.repo, endpoint
         );
-
         let response = ureq::post(&url)
             .header("Authorization", &format!("token {}", self.token))
             .header("Content-Type", "application/json")
             .send_json(payload)
             .map_err(|_| ReleaseError::Message(format!("POST {url}")))?;
-
         if !response.status().is_success() {
             return Err(ReleaseError::Message(format!(
-                "forgejo API error: {}",
+                "{} API error: {}",
+                self.name,
                 response.status()
             )));
         }
         Ok(response.into_body().read_to_string()?)
     }
-}
 
-impl ForgeBackend for ForgejoForge {
     fn create_release(&self, tag: &str) -> Result<()> {
         self.post(
             "releases",
@@ -127,6 +165,7 @@ impl ForgeBackend for ForgejoForge {
         )?;
         Ok(())
     }
+
     fn create_pr(&self, pr: &PrRequest<'_>) -> Result<()> {
         let response_body = self.post(
             "pulls",
@@ -147,40 +186,59 @@ impl ForgeBackend for ForgejoForge {
     }
 }
 
-pub struct PrRequest<'a> {
-    pub tag: &'a str,
-    pub head: &'a str,
-    pub base: &'a str,
-    pub body: &'a str,
+pub struct GiteaForge {
+    pub host: String,
+    pub token: String,
+    pub owner: String,
+    pub repo: String,
 }
 
-pub trait ForgeBackend {
-    /// Creates a new release associated with the specified tag.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the request fails due to network issues, invalid
-    /// authentication, or if the release cannot be created on the remote forge.
-    fn create_release(&self, tag: &str) -> Result<()>;
-
-    /// Opens a pull request from a head branch into a base branch for a given tag.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the request fails due to network issues, invalid
-    /// authentication, or if the target branches are invalid or already have a conflicting PR.
-    fn create_pr(&self, pr: &PrRequest<'_>) -> Result<()>;
-}
-
-pub struct NoForge;
-
-impl ForgeBackend for NoForge {
-    fn create_release(&self, _tag: &str) -> Result<()> {
-        Ok(())
+impl GiteaForge {
+    fn client(&self) -> GiteaCompatClient {
+        GiteaCompatClient {
+            host: self.host.clone(),
+            token: self.token.clone(),
+            owner: self.owner.clone(),
+            repo: self.repo.clone(),
+            name: "gitea",
+        }
     }
+}
 
-    fn create_pr(&self, _pr: &PrRequest<'_>) -> Result<()> {
-        Ok(())
+impl ForgeBackend for GiteaForge {
+    fn create_release(&self, tag: &str) -> Result<()> {
+        self.client().create_release(tag)
+    }
+    fn create_pr(&self, pr: &PrRequest<'_>) -> Result<()> {
+        self.client().create_pr(pr)
+    }
+}
+
+pub struct ForgejoForge {
+    pub host: String,
+    pub token: String,
+    pub owner: String,
+    pub repo: String,
+}
+
+impl ForgejoForge {
+    fn client(&self) -> GiteaCompatClient {
+        GiteaCompatClient {
+            host: self.host.clone(),
+            token: self.token.clone(),
+            owner: self.owner.clone(),
+            repo: self.repo.clone(),
+            name: "forgejo",
+        }
+    }
+}
+
+impl ForgeBackend for ForgejoForge {
+    fn create_release(&self, tag: &str) -> Result<()> {
+        self.client().create_release(tag)
+    }
+    fn create_pr(&self, pr: &PrRequest<'_>) -> Result<()> {
+        self.client().create_pr(pr)
     }
 }
 

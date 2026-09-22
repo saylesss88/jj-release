@@ -13,6 +13,8 @@ pub fn forge_from_url(url: &str) -> Option<&'static str> {
         Some("gitlab")
     } else if url.contains("codeberg.org") {
         Some("forgejo")
+    } else if url.contains("gitea.com") {
+        Some("gitea")
     } else {
         None
     }
@@ -174,6 +176,14 @@ mod tests {
         assert_eq!(
             forge_from_url("git@codeberg.org:user/repo.git"),
             Some("forgejo")
+        );
+    }
+
+    #[test]
+    fn detect_forge_from_gitea_url() {
+        assert_eq!(
+            forge_from_url("https://gitea.com/user/repo.git"),
+            Some("gitea")
         );
     }
 

@@ -9,7 +9,7 @@ use clap::Parser;
 use jj_release_core::{config, detect, errors, jj, pipeline};
 use jj_release_core::{
     errors::{ReleaseError, Result},
-    forge::{ForgeBackend, ForgejoForge, GitHubForge, GitLabForge, NoForge},
+    forge::{ForgeBackend, ForgejoForge, GitHubForge, GitLabForge, GiteaForge, NoForge},
     jj::ShellBackend,
     manifest::{CargoManifest, GoManifest, ManifestBackend, NpmManifest},
     pipeline::ReleaseContext,
@@ -141,6 +141,18 @@ fn run() -> Result<(), errors::ReleaseError> {
             Box::new(ForgejoForge {
                 host: config.release.forge_url.clone(),
                 token: env::var("FORGEJO_TOKEN").unwrap_or_default(),
+                owner,
+                repo,
+            })
+        }
+        "gitea" => {
+            let (owner, repo) = detect::remote_url(&root)
+                .as_deref()
+                .and_then(detect::parse_remote_owner_repo)
+                .unwrap_or_else(|| (String::new(), String::new()));
+            Box::new(GiteaForge {
+                host: config.release.forge_url.clone(),
+                token: env::var("GITEA_TOKEN").unwrap_or_default(),
                 owner,
                 repo,
             })
