@@ -107,9 +107,13 @@ impl ManifestBackend for MyManifest {
 
 See the [`examples/`](examples/) directory for runnable demos:
 
-- `generate_changelog`: generate a changelog section for any repo
-- `next_version`: compute the next release version
-- `validate_repo`: run preflight checks before releasing
+- `generate_changelog`: preview the next changelog section for commits since the
+  last tag
+- `full_changelog`: regenerate the complete changelog from all tags in history
+- `next_version`: compute and print the next semantic version based on commits
+- `validate_repo`: run preflight checks to confirm a repo is ready to release
+- `detect_env`: detect forge, language, and workspace versioning strategy
+- `init`: preview the generated `release.toml` for a repository
 
 ---
 
