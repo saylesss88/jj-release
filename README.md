@@ -423,6 +423,10 @@ publish = true
 depends_on = ["mylib"]   # publish lib before cli
 ```
 
+Cross-member dependency versions are updated automatically during the release.
+You do not need to manually update `Cargo.toml` dependency versions between
+workspace members before releasing.
+
 ### Independent Versioning
 
 Each member has its own version and only bumps when commits touched its path.
@@ -466,6 +470,10 @@ jj-release --dry-run
   - mylib (lib) 0.4.0 (no changes, skipping)
   - mycli (cli) 0.7.0 → 0.8.0 (tag: mycli-v0.8.0)
 ```
+
+Cross-member dependency versions are updated automatically during the release.
+You do not need to manually update `Cargo.toml` dependency versions between
+workspace members before releasing.
 
 ---
 
