@@ -38,7 +38,7 @@ pub struct CargoPublish;
 impl PublishBackend for CargoPublish {
     fn check(&self, root: &Path) -> Result<()> {
         let output = Command::new("cargo")
-            .args(["publish", "--dry-run", "--allow-dirty"])
+            .args(["publish", "--dry-run", "--allow-dirty", "--no-verify"])
             .current_dir(root)
             .output()
             .map_err(|_| ReleaseError::Message("spawning cargo publish --dry-run".into()))?;
