@@ -1,8 +1,12 @@
 # jj_release_core (Library)
 
-The core automation engine behind `jj-release`. This crate provides a
+The core automation engine behind
+[`jj-release`](https://github.com/saylesss88/jj-release). Provides a
 programmatic, trait-driven Rust API for interacting with Jujutsu (`jj`), parsing
-commits, resolving Semantic Versions, and orchestrating release pipelines.
+commits, resolving Semantic Versions, and orchestrating release pipelines. Can
+also be used directly to build custom release automation on top of Jujutsu.
+
+---
 
 ## Architecture
 
@@ -19,6 +23,8 @@ implementations for four core traits:
 - **`PublishBackend`**: Handles pushing artifacts to package registries.
 - **`ForgeBackend`**: Interacts with remote Git forges like GitHub, GitLab, or
   Forgejo.
+
+---
 
 ## Usage
 
@@ -61,12 +67,16 @@ fn main() -> Result<()> {
 > [!NOTE]
 > `ShellBackend` requires `jj` on PATH.
 
+---
+
 ## Error Handling
 
 All fallible operations return `jj_release::errors::Result<T>`, an alias for
 `Result<T, ReleaseError>`. The `ReleaseError` enum is powered by `thiserror` and
 covers IO, parsing, network, and release-specific failures, making it easy to
 pattern-match against specific failure states in your own applications.
+
+---
 
 ## Extending
 
@@ -100,3 +110,9 @@ See the [`examples/`](examples/) directory for runnable demos:
 - `generate_changelog`: generate a changelog section for any repo
 - `next_version`: compute the next release version
 - `validate_repo`: run preflight checks before releasing
+
+---
+
+## License
+
+- [Apache-2.0](https://github.com/saylesss88/jj-release/blob/main/LICENSE)

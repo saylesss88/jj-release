@@ -10,6 +10,28 @@ a commit-message trigger that fits naturally into the `jj` workflow.
 
 ---
 
+## Table of Contents
+
+- [Workspace](#workspace)
+- [How it works](#how-it-works)
+- [Quick Start](#quick-start)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Getting Started](#getting-started)
+- [First release](#first-release)
+- [Local usage](#local-usage)
+
+---
+
+## Workspace
+
+This repository contains two crates:
+
+- [`jj-release`](cli/): the CLI tool (`cargo install jj-release`)
+- [`jj_release`](lib/): the library for programmatic use
+
+---
+
 ## How it works
 
 Add a trigger commit when you're ready to ship:
@@ -523,24 +545,25 @@ rm CHANGELOG.md
 jj-release changelog --full -o CHANGELOG.md
 ```
 
-5. Force-push the corrected history. Since you altered public history, force-
+5. Push/Force-push the corrected history. Since you altered public history, force-
    push the updated branch and tag back to your remote.
 
 ```bash
-# Force-push the corrected bookmark
-jj git push --force
+# Push the corrected bookmark (no force need if jj handles the move)
+jj git push
 
-# Force-push each re-anchored tag
-jj git push --tag vX.Y.Z --force
+# Force-push each re-anchored tag via git directly
+# (jj git push doesn't support --force)
+git push origin vX.Y.Z --force
 ```
 
 Or if you have multiple tags to re-anchor, push them all:
 
 ```bash
-jj git push --force  # pushes the bookmark
+jj git push # pushes the bookmark
 # then for each re-anchored tag:
-jj git push --tag v0.1.0 --force
-jj git push --tag v0.2.0 --force
+git push origin v0.1.0 --force
+git push origin v0.2.0 --force
 # etc.
 ```
 
