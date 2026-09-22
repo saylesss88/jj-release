@@ -26,7 +26,7 @@ Add `jj_release_core` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-jj_release_core = "0.1.0"
+jj_release_core = "0.5.3"
 ```
 
 ## Quick Start
