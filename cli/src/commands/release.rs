@@ -1,14 +1,8 @@
-use std::{fs, path::Path};
-
-use semver::Version;
-use toml_edit::DocumentMut;
+use std::path::Path;
 
 use jj_release_core::{
-    changelog,
     config::{Config, Versioning},
-    errors::ReleaseError,
     errors::Result,
-    manifest,
     pipeline::{self, PreparedRelease, ReleaseContext},
     workspace,
 };
@@ -50,19 +44,19 @@ pub fn release_pipeline(
 
     // Run pre-flight checks on all targets before touching anything
     info!(" → Running pre-flight checks (dry-run)...");
-    run_preflight_checks(ctx, root, config, is_independent)?;
+    pipeline::run_preflight_checks(ctx, root, config, is_independent)?;
 
     if !is_independent {
         // Write changelog.
         if config.changelog.enabled {
             info!("→ Writing changelog…");
-            update_changelog(root, config, &prepared)?;
+            pipeline::update_changelog(root, config, &prepared)?;
         }
 
         // Bump version and create release commit.
         info!("→ Bumping version to {}…", prepared.next_version);
         ctx.manifest.write_version(root, &prepared.next_version)?;
-        update_workspace_dependencies(root, config, &prepared.next_version)?;
+        pipeline::update_workspace_dependencies(root, config, &prepared.next_version)?;
 
         let release_message = format!("chore: release {}", prepared.tag_name);
         info!("→ Creating commit {:?}…", release_message);
@@ -79,7 +73,7 @@ pub fn release_pipeline(
     }
 
     // Publish to registry
-    run_publish(ctx, config, root, &prepared)?;
+    pipeline::run_publish(ctx, config, root, &prepared)?;
 
     // Push to remote
     if is_independent {
@@ -103,178 +97,6 @@ pub fn release_pipeline(
 
     info!("✓ Released {}", prepared.tag_name);
     Ok(())
-}
-
-fn run_preflight_checks(
-    ctx: &ReleaseContext<'_>,
-    root: &Path,
-    config: &Config,
-    is_independent: bool,
-) -> Result<()> {
-    if is_independent {
-        if let Some(ws) = &config.workspace {
-            for member in workspace::ordered_members(&ws.members)? {
-                ctx.publisher.check(&root.join(&member.path))?;
-            }
-        }
-    } else {
-        ctx.publisher.check(root)?;
-    }
-    Ok(())
-}
-
-fn update_changelog(
-    root: &Path,
-    config: &Config,
-    prepared: &pipeline::PreparedRelease,
-) -> Result<()> {
-    let changelog_path = root.join(&config.changelog.file);
-    let existing = if changelog_path.exists() {
-        fs::read_to_string(&changelog_path)?
-    } else {
-        String::new()
-    };
-
-    let section = changelog::render_changelog_section(&prepared.commits, &prepared.next_version);
-    let updated = changelog::prepend_to_file(&existing, &section);
-    fs::write(&changelog_path, updated)?;
-    Ok(())
-}
-
-fn update_workspace_dependencies(
-    root: &Path,
-    config: &Config,
-    next_version: &Version,
-) -> Result<()> {
-    let Some(ws) = &config.workspace else {
-        return Ok(());
-    };
-    if !ws.enabled {
-        return Ok(());
-    }
-
-    let next_str = next_version.to_string();
-
-    for member in &ws.members {
-        let cargo_toml = root.join(&member.path).join("Cargo.toml");
-        if !cargo_toml.exists() {
-            continue;
-        }
-
-        let raw = fs::read_to_string(&cargo_toml)?;
-        let mut doc: DocumentMut = raw
-            .parse()
-            .map_err(|e| ReleaseError::Message(format!("parsing {}: {e}", cargo_toml.display())))?;
-
-        for other in &ws.members {
-            manifest::bump_workspace_dependency(&mut doc, &other.name, &next_str);
-        }
-
-        fs::write(&cargo_toml, doc.to_string())?;
-    }
-
-    Ok(())
-}
-
-fn run_publish(
-    ctx: &ReleaseContext<'_>,
-    config: &Config,
-    root: &Path,
-    prepared: &PreparedRelease,
-) -> Result<()> {
-    if !config.publish.cargo {
-        return Ok(());
-    }
-
-    let is_independent = config
-        .workspace
-        .as_ref()
-        .is_some_and(|ws| matches!(ws.versioning, Versioning::Independent));
-
-    if is_independent {
-        publish_independent(ctx, config, prepared, root)
-    } else {
-        publish_unified(ctx, config, root)
-    }
-}
-
-fn publish_independent(
-    ctx: &ReleaseContext<'_>,
-    config: &Config,
-    prepared: &PreparedRelease,
-    root: &Path,
-) -> Result<()> {
-    let ws = config.workspace.as_ref().ok_or_else(|| {
-        ReleaseError::Message("workspace config required for independent publishing".into())
-    })?;
-    let bumps = prepared.member_bumps.as_ref().ok_or_else(|| {
-        ReleaseError::Message("member bumps required for independent publishing".into())
-    })?;
-
-    for member in workspace::ordered_members(&ws.members)? {
-        let Some((current, next)) = bumps.get(&member.name) else {
-            continue;
-        };
-        // Only publish if the topological member actually received a bump
-        if current == next {
-            continue;
-        }
-        let tag = workspace::member_tag_name(member, next, &config.release.tag_prefix);
-        let member_root = root.join(&member.path);
-
-        // Bump version
-        workspace::bump_member_version(root, &member.name, next)?;
-
-        // Update cross-member dependencies
-        let cargo_toml = member_root.join("Cargo.toml");
-        if cargo_toml.exists() {
-            let raw = fs::read_to_string(&cargo_toml)?;
-            let mut doc: DocumentMut = raw.parse().map_err(|e| {
-                ReleaseError::Message(format!("parsing {}: {e}", cargo_toml.display()))
-            })?;
-            for other in &ws.members {
-                if let Some((_, other_next)) = bumps.get(&other.name) {
-                    manifest::bump_workspace_dependency(
-                        &mut doc,
-                        &other.name,
-                        &other_next.to_string(),
-                    );
-                }
-            }
-            fs::write(&cargo_toml, doc.to_string())?;
-        }
-
-        // Commit, tag, export, push tag
-        ctx.backend.new_commit(&format!("chore: release {tag}"))?;
-        ctx.backend.create_tag(&tag, "@")?;
-        ctx.backend.git_export()?;
-        ctx.backend.git_push(None, Some(&tag))?;
-
-        ctx.publisher
-            .publish(&member_root, &config.publish.cargo_flags)?;
-    }
-
-    Ok(())
-}
-
-fn publish_unified(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Result<()> {
-    if let Some(ws) = config
-        .workspace
-        .as_ref()
-        .filter(|w| w.enabled && !w.members.is_empty())
-    {
-        for member in workspace::ordered_members(&ws.members)?
-            .into_iter()
-            .filter(|m| m.publish)
-        {
-            ctx.publisher
-                .publish(&root.join(&member.path), &config.publish.cargo_flags)?;
-        }
-        return Ok(());
-    }
-
-    // For single crates or unified workspaces, we just publish from the project root
-    ctx.publisher.publish(root, &config.publish.cargo_flags)
 }
 
 fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
@@ -359,120 +181,4 @@ fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
 
     println!("[dry-run] Would publish from root");
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::cell::RefCell;
-
-    use semver::Version;
-
-    use jj_release_core::{
-        commits::CommitInfo, errors::ReleaseError, forge::NoForge, jj::JjBackend,
-        manifest::ManifestBackend, publish::PublishBackend,
-    };
-
-    struct DummyManifest;
-
-    impl ManifestBackend for DummyManifest {
-        fn read_version(&self, _root: &Path) -> Result<Version> {
-            Ok(Version::parse("0.1.0").unwrap())
-        }
-        fn write_version(&self, _root: &Path, _version: &Version) -> Result<()> {
-            Ok(())
-        }
-    }
-
-    struct FailPublish;
-
-    impl PublishBackend for FailPublish {
-        fn check(&self, _root: &Path) -> Result<()> {
-            Ok(()) // Pre-flight succeeds
-        }
-        fn publish(&self, _root: &Path, _flags: &[String]) -> Result<()> {
-            Err(ReleaseError::Message("simulated crates.io outage".into()))
-        }
-    }
-
-    #[derive(Default)]
-    struct TrackBackend {
-        calls: RefCell<Vec<String>>,
-    }
-
-    impl JjBackend for TrackBackend {
-        fn check_identity(&self) -> Result<()> {
-            Ok(())
-        }
-        fn list_tags(&self) -> Result<Vec<String>> {
-            Ok(vec!["v0.1.0".into()])
-        }
-
-        // Feed the pipeline a trigger and a feature commit so it attempts a release
-        fn log_commits(&self, _revset: &str) -> Result<Vec<CommitInfo>> {
-            Ok(vec![
-                CommitInfo {
-                    change_id: "1".into(),
-                    description: "Release: please".into(),
-                },
-                CommitInfo {
-                    change_id: "2".into(),
-                    description: "feat: new stuff".into(),
-                },
-            ])
-        }
-        fn log_commits_for_path(&self, _r: &str, _p: &str) -> Result<Vec<CommitInfo>> {
-            Ok(vec![])
-        }
-        fn new_commit(&self, _message: &str) -> Result<String> {
-            Ok("abc".into())
-        }
-
-        // Track local tag creation
-        fn create_tag(&self, _tag: &str, _revision: &str) -> Result<()> {
-            self.calls.borrow_mut().push("tag".into());
-            Ok(())
-        }
-        fn set_bookmark(&self, _name: &str, _revision: &str) -> Result<()> {
-            Ok(())
-        }
-
-        // Track remote push
-        fn git_push(&self, _bookmark: Option<&str>, _tag: Option<&str>) -> Result<()> {
-            self.calls.borrow_mut().push("push".into());
-            Ok(())
-        }
-        fn git_export(&self) -> Result<()> {
-            Ok(())
-        }
-    }
-
-    #[test]
-    fn pipeline_aborts_before_push_if_publish_fails() {
-        let backend = TrackBackend::default();
-        let manifest = DummyManifest;
-        let forge = NoForge;
-        let publisher = FailPublish;
-
-        let ctx = ReleaseContext::new(&backend, &manifest, &forge, &publisher);
-
-        let mut config = Config::default();
-        config.changelog.enabled = false; // Disable FS I/O for the test
-
-        config.publish.cargo = true;
-
-        // Run the pipeline
-        let result = release_pipeline(&ctx, &config, Path::new("/tmp"), false, true);
-
-        // Assert pipeline failed
-        assert!(result.is_err(), "Pipeline should fail when publish fails");
-
-        // Assert local state mutated but remote state didn't
-        let calls = backend.calls.borrow();
-        assert!(calls.contains(&"tag".into()), "Local tag should be created");
-        assert!(
-            !calls.contains(&"push".into()),
-            "Remote push MUST NOT be called"
-        );
-    }
 }

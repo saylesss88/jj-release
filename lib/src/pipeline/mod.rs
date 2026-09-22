@@ -13,11 +13,15 @@ use crate::publish::PublishBackend;
 pub use changelog::{print_changelog, print_full_changelog};
 pub use next_version::print_next_version;
 pub use prepare::prepare_release;
+pub use release::{
+    run_preflight_checks, run_publish, update_changelog, update_workspace_dependencies,
+};
 pub use validate::validate;
 
 mod changelog;
 mod next_version;
 mod prepare;
+mod release;
 mod validate;
 
 #[non_exhaustive]
