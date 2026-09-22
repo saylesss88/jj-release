@@ -48,8 +48,15 @@ pub fn print_changelog(
     }
     Ok(())
 }
-
-pub(super) fn print_full_changelog(
+/// Generates and outputs a comprehensive changelog from the repository's entire history.
+///
+///# Errors
+///
+/// Returns an error if:
+/// - The VCS backend fails to list tags or log commits.
+/// - The local manifest version cannot be read.
+/// - Writing to the provided `output` file fails.
+pub fn print_full_changelog(
     ctx: &ReleaseContext<'_>,
     config: &Config,
     root: &Path,

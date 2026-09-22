@@ -3,7 +3,6 @@
 use std::{path::Path, process::Command};
 
 use crate::errors::{ReleaseError, Result};
-// use anyhow::{Context, Result, bail};
 
 pub trait PublishBackend {
     /// Runs pre-flight checks (like a dry-run) to ensure the package can be published.

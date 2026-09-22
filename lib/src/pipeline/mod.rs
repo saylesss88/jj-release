@@ -10,7 +10,7 @@ use crate::jj::JjBackend;
 use crate::manifest::ManifestBackend;
 use crate::publish::PublishBackend;
 
-pub use changelog::print_changelog;
+pub use changelog::{print_changelog, print_full_changelog};
 pub use next_version::print_next_version;
 pub use prepare::prepare_release;
 pub use validate::validate;

@@ -14,7 +14,7 @@ use crate::workspace::WorkspaceManifest;
 /// # Example
 ///
 /// ```no_run
-/// use jj_release::manifest::{ManifestBackend, CargoManifest};
+/// use jj_release_core::manifest::{ManifestBackend, CargoManifest};
 /// use semver::Version;
 /// use std::path::Path;
 ///
