@@ -5,35 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.2] - 2026-09-21
+## [0.5.3] - 2026-09-22
+
+### Fixed
+- **(README)**correct version and exit codes
+
+## [0.5.2] - 2026-09-22
+
+## [0.5.2] - 2026-09-22
 
 ### Fixed
 - explicitly define readme path for crates.io
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [0.5.1] - 2026-09-21
+## [0.5.1] - 2026-09-22
 
 ### Changed
 - **(pipeline)**move into pipeline/ with sub-modules
-- error handling to use thiserror for the lib
-- separate into lib and cli workspaces
+- migrate error handling from anyhow to thiserror
+- split into jj_release library crate and jj-release CLI crate
 
 ### Fixed
-- **(jj)**remove doc hiddden from useful public types
+- **(jj)**remove `#[doc(hidden)]` from useful public types
 - **(pipeline)**lib code shouldn't call process::exit
 - **(forge)**move helper functions only used in tests into the test module and drop unused ones
 - tests to use new default of not publishing to cargo
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [0.5.0] - 2026-09-20
+## [0.5.0] - 2026-09-22
 
 ### Added
 - **(pipeline)**implement zero-config first release mode
@@ -78,12 +75,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - use statements, levels of function & Type calls
 - use statements
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [0.4.0] - 2026-09-16
+## [0.4.0] - 2026-09-22
 
 ### Added
 - **(pipeline)**create first tag if one doesn't exist rather than warning user
@@ -98,12 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - create per-member release commits and tags in independent workspace mode
 - **(release)**skip workspace-level tag and version bump in independent mode
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [0.3.0] - 2026-09-15
+## [0.3.0] - 2026-09-22
 
 ### Added
 - **(init)**use crate name for independent tags
@@ -129,7 +116,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - remove unused dependencies
 - **(changelog)**use Keep a Changelog header
 
-## [0.2.0] - 2026-09-13
+## [0.2.0] - 2026-09-22
 
 ### Added
 - add validate subcommand
@@ -182,15 +169,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **(jj)**remove JJ_CONFIG= line in ShellBackend::run
 - private/public items in crate
 
-## [0.1.0] - 2026-09-08
+## [0.1.0] - 2026-09-22
 
 ### Added
-- add new [changelog] section
+- **(config)**add new [changelog] section
 - add prepend_to_file for changelog generation
 - add render_changelog_section with keep-a-changelog format
 - layout changelog module with tests
 - add list_tags to JjBackend trait and implement latest_version_tag
-- add Tag struct and highest_semver_tag function
+- **(commits)**add Tag struct and highest_semver_tag function
 - initial project scaffolding
 
 ### Changed
@@ -198,5 +185,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - friction of failed publish
-- wire in changelog generation
+- **(main)**wire in changelog generation
 - compute bump from last version tag instead of root
+
