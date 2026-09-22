@@ -15,11 +15,6 @@ keywords = ["jujutsu", "release", "semantic-release", "changelog", "ci"]
 categories = ["command-line-utilities", "development-tools"]
 exclude = [".github", "tests/"]
 
-[workspace.dependencies]
-
-# [workspace.dev-dependencies]
-# tempfile = { version = "3", default-features = false }
-
 [profile.release]
 opt-level = 3
 lto = true

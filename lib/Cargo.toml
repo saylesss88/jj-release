@@ -22,22 +22,27 @@ dirs = "7.0.0"
 git-conventional = "1.1.0"
 jiff = { version = "0.2.37", features = ["std"], default-features = false }
 semver = { version = "1.0.28", default-features = false }
-serde = { version = "1.0.229", features = ["derive"], default-features = false }
+serde = { version = "1.0.229", default-features = false }
 serde_json = "1.0.151"
-thiserror = "2.0.20"
+thiserror = { version = "2.0.20", default-features = false }
 toml = { version = "1.1.6", features = [
   "parse",
   "serde",
 ], default-features = false }
-toml_edit = "0.25.15"
+toml_edit = { version = "0.25.15", default-features = false, features = [
+  "parse",
+  "display",
+] }
 ureq = { version = "3.4.2", features = [
+  "_ring",
   "json",
-  "rustls",
+  "rustls-no-provider",
+  "rustls-webpki-roots",
 ], default-features = false }
 which = "8.0.6"
 
 [dev-dependencies]
-tempfile = "3.27.0"
+tempfile = { version = "3.27.0", default-features = false }
 
 [lints]
 workspace = true
