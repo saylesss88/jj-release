@@ -1,6 +1,6 @@
 //! Workspace support for multi-crate projects.
 
-use std::{collections::HashMap, fs, path::Path, process::Command};
+use std::{borrow::ToOwned, collections::HashMap, fs, path::Path, process::Command};
 
 use crate::errors::{ReleaseError, Result};
 use cargo_metadata::MetadataCommand;
@@ -9,7 +9,8 @@ use toml_edit::DocumentMut;
 
 use crate::{
     commits::{self, BumpKind},
-    config::WorkspaceMember,
+    config::{Versioning, WorkspaceMember},
+    detect,
     jj::JjBackend,
     manifest::ManifestBackend,
 };
@@ -50,6 +51,98 @@ impl ManifestBackend for WorkspaceManifest {
 
         Ok(())
     }
+}
+
+pub struct DetectedWorkspace {
+    pub members: Vec<WorkspaceMember>,
+    pub versioning: Versioning,
+}
+
+/// Detects if the given directory is the root of a Cargo workspace.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The root `Cargo.toml` exists but cannot be read (e.g., missing permissions).
+/// - The workspace members cannot be successfully parsed from the TOML document.
+///
+/// # Returns
+///
+/// Returns `Ok(Some(DetectedWorkspace))` if a workspace is found, or `Ok(None)`
+/// if the file is missing or does not contain a workspace definition.
+pub fn detect_workspace(root: &Path) -> Result<Option<DetectedWorkspace>> {
+    let workspace_toml = root.join("Cargo.toml");
+    if !workspace_toml.exists() {
+        return Ok(None);
+    }
+    let content = fs::read_to_string(&workspace_toml)?;
+    if !content.contains("[workspace]") {
+        return Ok(None);
+    }
+    let versioning_str = detect::detect_versioning(&workspace_toml);
+    let versioning = if versioning_str == "independent" {
+        Versioning::Independent
+    } else {
+        Versioning::Unified
+    };
+    let members = parse_workspace_members(&workspace_toml)?;
+    Ok(Some(DetectedWorkspace {
+        members,
+        versioning,
+    }))
+}
+/// Parses the `workspace.members` array from a root `Cargo.toml` and resolves their package names.
+///
+/// # Errors
+///
+/// Returns an error if the root `Cargo.toml` cannot be read or contains invalid TOML.
+pub fn parse_workspace_members(cargo_toml: &Path) -> Result<Vec<WorkspaceMember>> {
+    let raw = fs::read_to_string(cargo_toml)
+        .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", cargo_toml.display())))?;
+
+    let doc = raw
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| ReleaseError::Message(format!("parsing {}: {e}", cargo_toml.display())))?;
+
+    let Some(members) = doc
+        .get("workspace")
+        .and_then(|w| w.get("members"))
+        .and_then(|m| m.as_array())
+    else {
+        return Ok(vec![]);
+    };
+
+    let parent_dir = cargo_toml.parent().unwrap_or_else(|| Path::new(""));
+
+    Ok(members
+        .iter()
+        .filter_map(|m| m.as_str())
+        .map(|path| {
+            let member_toml = parent_dir.join(path).join("Cargo.toml");
+            let raw = fs::read_to_string(&member_toml).ok();
+            let doc = raw
+                .as_deref()
+                .and_then(|r| r.parse::<toml_edit::DocumentMut>().ok());
+
+            let name = doc
+                .as_ref()
+                .and_then(|d: &toml_edit::DocumentMut| {
+                    d.get("package")
+                        .and_then(|p| p.get("name"))
+                        .and_then(|n| n.as_str())
+                        .map(ToOwned::to_owned)
+                })
+                .unwrap_or_else(|| path.split('/').next_back().unwrap_or(path).to_owned());
+
+            WorkspaceMember {
+                name,
+                path: path.to_owned(),
+                publish: true,
+                depends_on: vec![],
+                tag_prefix: None,
+            }
+        })
+        .collect())
 }
 
 /// Orders publishable workspace members topologically based on their dependencies
