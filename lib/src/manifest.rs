@@ -4,7 +4,7 @@ use std::{borrow::ToOwned, fs, path::Path};
 
 use semver::Version;
 use serde_json::Value;
-use toml_edit::DocumentMut;
+use toml_edit::{DocumentMut, Item, Value as TomlValue};
 
 use crate::errors::{ReleaseError, Result};
 use crate::workspace::WorkspaceManifest;
@@ -204,6 +204,48 @@ pub fn detect_manifest(root: &Path) -> Box<dyn ManifestBackend> {
         return Box::new(GoManifest);
     }
     Box::new(CargoManifest)
+}
+
+/// Updates the version string for a specific dependency across all dependency tables.
+pub fn bump_workspace_dependency(doc: &mut DocumentMut, crate_name: &str, new_version: &str) {
+    let tables = ["dependencies", "dev-dependencies", "build-dependencies"];
+
+    // Check standard crate-level dependency tables.
+    for table_name in tables {
+        if let Some(Item::Table(table)) = doc.get_mut(table_name) {
+            update_dep_in_table(table, crate_name, new_version);
+        }
+    }
+
+    // Check [workspace.dependencies].
+    if let Some(Item::Table(workspace)) = doc.get_mut("workspace")
+        && let Some(Item::Table(workspace_deps)) = workspace.get_mut("dependencies")
+    {
+        update_dep_in_table(workspace_deps, crate_name, new_version);
+    }
+    // Note: target-specific dependencies (target.'cfg(...)'.dependencies) not handled.
+}
+
+fn update_dep_in_table(table: &mut toml_edit::Table, crate_name: &str, new_version: &str) {
+    if let Some(dep) = table.get_mut(crate_name) {
+        match dep {
+            // Shape 1: my_crate = "0.1.0"
+            Item::Value(TomlValue::String(_)) => {
+                *dep = toml_edit::value(new_version);
+            }
+            // Shape 2: my_crate = { path = "../lib", version = "0.1.0" }
+            Item::Value(TomlValue::InlineTable(inline_table)) => {
+                if inline_table.contains_key("version") {
+                    inline_table.insert("version", new_version.into());
+                }
+            }
+            // Shape 3: [dependencies.my_crate] \n version = "0.1.0"
+            Item::Table(dep_table) if dep_table.contains_key("version") => {
+                dep_table.insert("version", toml_edit::value(new_version));
+            }
+            _ => {}
+        }
+    }
 }
 
 #[cfg(test)]
@@ -445,5 +487,16 @@ edition = "2024"
             .read_version(dir.path())
             .unwrap();
         assert_eq!(v, Version::parse("0.1.0").unwrap());
+    }
+    #[test]
+    fn bumps_inline_table_dependency() {
+        let toml = r#"
+[dependencies]
+jj_release_core = { path = "../lib", version = "0.5.2" }
+"#;
+        let mut doc: DocumentMut = toml.parse().unwrap();
+        bump_workspace_dependency(&mut doc, "jj_release_core", "0.6.0");
+        assert!(doc.to_string().contains("\"0.6.0\""));
+        assert!(!doc.to_string().contains("\"0.5.2\""));
     }
 }
