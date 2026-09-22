@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.6.1] - 2026-09-22
 
+### Changed
+
+- **(binary)**move what can be moved into the lib
+- add detect_workspace to lib and simplify init using it
+
 ### Fixed
 
 - add blank line after changelog headers
