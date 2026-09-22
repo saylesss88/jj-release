@@ -9,10 +9,10 @@
 //!
 //! ```no_run
 //! use std::path::Path;
-//! use jj_release::pipeline::{prepare_release, ReleaseContext};
-//! use jj_release::manifest::CargoManifest;
-//! use jj_release::config::Config;
-//! use jj_release::jj::ShellBackend;
+//! use jj_release_core::pipeline::{prepare_release, ReleaseContext};
+//! use jj_release_core::manifest::CargoManifest;
+//! use jj_release_core::config::Config;
+//! use jj_release_core::jj::ShellBackend;
 //!
 //! let root = Path::new(".");
 //! let backend = ShellBackend::new(root).unwrap();
