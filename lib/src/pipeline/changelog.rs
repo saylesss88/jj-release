@@ -87,10 +87,12 @@ pub(super) fn print_full_changelog(
         .last()
         .map_or_else(|| "root()".to_owned(), |t| t.name.clone());
     let tip_commits = ctx.backend.log_commits(&format!("{since}..@"))?;
-    let bump = commits::compute_bump(&tip_commits);
-    let next = commits::apply_bump(&current, bump);
-    sections.push(("unreleased".to_owned(), tip_commits));
-    versions.push(next);
+    if !tip_commits.is_empty() {
+        let bump = commits::compute_bump(&tip_commits);
+        let next = commits::apply_bump(&current, bump);
+        sections.push(("unreleased".to_owned(), tip_commits));
+        versions.push(next);
+    }
 
     let result = changelog::render_full_changelog(&sections, &versions);
 
