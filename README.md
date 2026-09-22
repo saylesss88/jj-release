@@ -109,6 +109,8 @@ Optional dependencies:
 ## Usage
 
 ```sh
+# Show usage and help menu
+jj-release --help
 # Auto-detect environment and generate a release.toml
 jj-release init
 
