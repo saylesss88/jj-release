@@ -314,10 +314,31 @@ fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
                                 next,
                                 &config.release.tag_prefix,
                             );
-                            println!(
-                                "  - {} ({}) {} → {} (tag: {})",
-                                member.name, member.path, current, next, tag
-                            );
+                            // Find which siblings also bumped and will have deps updated
+                            let updated_deps: Vec<&str> = ws
+                                .members
+                                .iter()
+                                .filter(|other| other.name != member.name)
+                                .filter(|other| mb.get(&other.name).is_some_and(|(c, n)| c != n))
+                                .map(|other| other.name.as_str())
+                                .collect();
+
+                            if updated_deps.is_empty() {
+                                println!(
+                                    "  - {} ({}) {} → {} (tag: {})",
+                                    member.name, member.path, current, next, tag
+                                );
+                            } else {
+                                println!(
+                                    "  - {} ({}) {} → {} (tag: {}, deps updated: {})",
+                                    member.name,
+                                    member.path,
+                                    current,
+                                    next,
+                                    tag,
+                                    updated_deps.join(", ")
+                                );
+                            }
                         }
                         continue;
                     }
@@ -327,7 +348,7 @@ fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
             Versioning::Unified => {
                 for member in ordered {
                     println!(
-                        "  - {} ({}) → {}",
+                        "  - {} ({}) → {} (deps updated)",
                         member.name, member.path, prepared.next_version
                     );
                 }
