@@ -21,8 +21,8 @@ implementations for four core traits:
 - **`ManifestBackend`**: Reads and writes project versions (e.g.,
   `CargoManifest`, `NpmManifest`).
 - **`PublishBackend`**: Handles pushing artifacts to package registries.
-- **`ForgeBackend`**: Interacts with remote Git forges like GitHub, GitLab, or
-  Forgejo.
+- **`ForgeBackend`**: Interacts with remote Git forges like GitHub, GitLab,
+  Forgejo, and Gitea.
 
 ---
 
@@ -32,7 +32,7 @@ Add `jj_release_core` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-jj_release_core = "0.5.3"
+jj_release_core = "0.6.0"
 ```
 
 ## Quick Start

@@ -151,7 +151,7 @@ jj-release validate # confirms everything is ready
 `init` detects:
 
 - Forge: from the git remote URL (`github.com` → github, `gitlab.com` → gitlab,
-  `codeberg.org` → forgejo)
+  `codeberg.org` → forgejo, `gitea.com` → gitea)
 - Language: from files present (`Cargo.toml` → cargo, `package.json` → npm,
   `go.mod` → go)
 - Workspace: reads [workspace.members] from `Cargo.toml` and auto-populates
@@ -318,12 +318,13 @@ the error was already reported upstream.
 
 `jj-release` supports multiple forges for release creation and PR/MR opening:
 
-| Forge            | `forge =`   | CLI required | Release | PR/MR  | Status                                                             |
-| ---------------- | ----------- | ------------ | ------- | ------ | ------------------------------------------------------------------ |
-| GitHub (default) | `"github"`  | `gh`         | ✓       | ✓      | ✓ tested                                                           |
-| GitLab           | `"gitlab"`  | `glab`       | ✓       | ✓ (MR) | ✓ tested                                                           |
-| Forgejo/Codeberg | `"forgejo"` | none (REST)  | ✓       | ✓      | ✓ tested on Codeberg,release creation not yet supported (see note) |
-| None             | `"none"`    | –            | –       | –      | –                                                                  |
+| Forge            | `forge =`   | CLI required | Release | PR/MR  | Status                                                              |
+| ---------------- | ----------- | ------------ | ------- | ------ | ------------------------------------------------------------------- |
+| GitHub (default) | `"github"`  | `gh`         | ✓       | ✓      | ✓ tested                                                            |
+| GitLab           | `"gitlab"`  | `glab`       | ✓       | ✓ (MR) | ✓ tested                                                            |
+| Forgejo/Codeberg | `"forgejo"` | none (REST)  | ✓       | ✓      | ✓ tested on Codeberg, release creation not yet supported (see note) |
+| Gitea            | `"gitea"`   | none (REST)  | ✓       | ✓      | implemented, untested                                               |
+| None             | `"none"`    | –            | –       | –      | –                                                                   |
 
 For GitLab, set `forge_url` if using a self-hosted instance:
 
@@ -345,12 +346,24 @@ forge_url = "https://codeberg.org"
 export FORGEJO_TOKEN=your-token
 ```
 
+For Gitea, set `forge_url` to your instance and provide a token:
+
+```toml
+[release]
+forge = "gitea"
+forge_url = "https://gitea.com"
+```
+
+```sh
+export GITEA_TOKEN=your-token
+```
+
 <!-- prettier-ignore -->
 > [!NOTE]
-> Forgejo/Codeberg: tagging, pushing, and PR creation all work correctly.
-> `create_release = true` is not yet supported. Forgejo's releases API requires
+> Forgejo/Codeberg and Gitea: tagging, pushing, and PR creation all work correctly.
+> `create_release = true` is not yet supported. The release API requires
 > annotated git tags but `jj` creates lightweight tags. Keep `create_release =
-> false` for Forgejo repos.
+>  false`.
 
 The token needs `repository` scope, create one at
 `https://codeberg.org/user/settings/applications`.
@@ -360,6 +373,7 @@ The token needs `repository` scope, create one at
 | GitHub  | `gh auth login` locally or `GITHUB_TOKEN` in GitHub Actions         |
 | GitLab  | `glab auth login` locally or the token/env mechanism used by `glab` |
 | Forgejo | `FORGEJO_TOKEN` and `forge_url`                                     |
+| Gitea   | `GITEA_TOKEN` and `forge_url`                                       |
 
 ---
 
@@ -545,8 +559,8 @@ rm CHANGELOG.md
 jj-release changelog --full -o CHANGELOG.md
 ```
 
-5. Push/Force-push the corrected history. Since you altered public history, force-
-   push the updated branch and tag back to your remote.
+5. Push/Force-push the corrected history. Since you altered public history,
+   force- push the updated branch and tag back to your remote.
 
 ```bash
 # Push the corrected bookmark (no force need if jj handles the move)
