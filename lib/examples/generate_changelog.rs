@@ -30,6 +30,9 @@ fn main() -> Result<()> {
 
     println!("Generating changelog for commits since the last tag...\n---\n");
     pipeline::print_changelog(&ctx, &config, root, None, false)?;
+    // Actually create the CHANGELOG.md from the latest tag in /path/to/repo
+    // pipeline::print_changelog(&ctx, &config, root, Some(&root.join("CHANGELOG.md")), false)?;
+
     println!("\n---\nDone.");
 
     Ok(())

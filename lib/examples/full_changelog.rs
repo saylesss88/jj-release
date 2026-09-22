@@ -28,7 +28,10 @@ fn main() -> Result<()> {
     let config = Config::default();
 
     println!("Generating full changelog from all tags...\n");
+    // Print the full changelog to stdout
     pipeline::print_full_changelog(&ctx, &config, root, None)?;
+    // Actually create the CHANGELOG.md in the /path/to/repo
+    // pipeline::print_full_changelog(&ctx, &config, root, Some(&root.join("CHANGELOG.md")))?;
 
     Ok(())
 }
