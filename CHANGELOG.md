@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-09-23
+
+### Added
+
+- add generate_release_toml to lib for programmatic config generation
+
+### Changed
+
+- **(init)**use the new `generate_release_toml` in the init command to reduce duplication
+- **(binary)**move what can be moved into the lib
+- add detect_workspace to lib and simplify init using it
+
+### Fixed
+
+- **(examples)**add warning to `run_release` example
+- add blank line after changelog headers
+- **(changelog)**add check to prevent duplicate headers
+
 ## [0.6.1] - 2026-09-22
 
 ### Changed
