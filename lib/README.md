@@ -114,6 +114,8 @@ See the [`examples/`](examples/) directory for runnable demos:
 - `validate_repo`: run preflight checks to confirm a repo is ready to release
 - `detect_env`: detect forge, language, and workspace versioning strategy
 - `init`: preview the generated `release.toml` for a repository
+- `run_release`: demonstrates how to run the full pipeliine. Warning, this
+  example makes real changes!
 
 ---
 
