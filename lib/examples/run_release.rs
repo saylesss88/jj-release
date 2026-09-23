@@ -1,7 +1,13 @@
 //! Demonstrates how to run the full release pipeline programmatically.
 //!
-//! This example shows how to use jj_release as a library to orchestrate
+//! This example shows how to use `jj_release_core` as a library to orchestrate
 //! a complete release without invoking the CLI.
+//!
+//! # Warning
+//!
+//! **This example makes real changes**: it writes files, creates commits,
+//! creates tags, and pushes to the remote. Run it only in a repo where you
+//! intend to make a release. Use `jj-release --dry-run` to preview first.
 //!
 //! Run with: `cargo run --example run_release -- /path/to/repo`
 
@@ -30,6 +36,7 @@ fn main() -> Result<()> {
     let ctx = ReleaseContext::new(&backend, manifest.as_ref(), &forge, &publisher);
     // let config = Config::default();
     let mut config = Config::default();
+    // Set to true to publish on crates.io after tagging
     config.publish.cargo = false;
 
     let Some(prepared) = pipeline::prepare_release(&backend, manifest.as_ref(), &config, root)?
@@ -42,38 +49,38 @@ fn main() -> Result<()> {
     println!("  Next version:    {}", prepared.next_version);
     println!("  Tag:             {}", prepared.tag_name);
 
-    // 1. Preflight checks
+    // Preflight checks
     println!("→ Running preflight checks...");
     pipeline::run_preflight_checks(&ctx, root, &config, false)?;
 
-    // 2. Write changelog
+    // Write changelog
     if config.changelog.enabled {
         println!("→ Writing changelog...");
         pipeline::update_changelog(root, &config, &prepared)?;
     }
 
-    // 3. Bump version
+    // Bump version
     println!("→ Bumping version to {}...", prepared.next_version);
     ctx.manifest.write_version(root, &prepared.next_version)?;
     pipeline::update_workspace_dependencies(root, &config, &prepared.next_version)?;
 
-    // 4. Commit and tag
+    // Commit and tag
     ctx.backend
         .new_commit(&format!("chore: release {}", prepared.tag_name))?;
     ctx.backend.create_tag(&prepared.tag_name, "@")?;
     ctx.backend.set_bookmark(&config.release.bookmark, "@")?;
     ctx.backend.git_export()?;
 
-    // 5. Publish
+    // Publish
     println!("→ Publishing...");
     pipeline::run_publish(&ctx, &config, root, &prepared)?;
 
-    // 6. Push
+    // Push: this is irreversible
     println!("→ Pushing...");
     ctx.backend
         .git_push(Some(&config.release.bookmark), Some(&prepared.tag_name))?;
 
-    // 7. Forge release
+    // Forge release
     if config.release.create_release {
         println!("→ Creating forge release...");
         ctx.forge.create_release(&prepared.tag_name)?;
