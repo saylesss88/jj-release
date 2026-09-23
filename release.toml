@@ -5,7 +5,7 @@ forge = "github"
 create_release = false
 
 [publish]
-cargo = true
+cargo = false
 
 [changelog]
 enabled = true
@@ -17,7 +17,7 @@ enabled = true
 versioning = "unified"
 
 [[workspace.members]]
-name = "jj_release"
+name = "jj_release_core"
 path = "lib"
 publish = true
 # depends_on = [] # add names of members this depends on
