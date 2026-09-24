@@ -164,8 +164,8 @@ fn format_header(header: &str, config: &ChangelogConfig) -> String {
     let emoji = match header {
         "Added" => "✨",
         "Changed" => "♻️",
-        "Fixed" => "✅️ ",
-        "Bug" => "🪲 ", // Added emoji mapping for your new header
+        "Fixed" => "🛠️ ",
+        "Bug" => "🪲 ",
         "Documentation" => "📚",
         "Deprecated" => "⚠️",
         "Removed" => "🗑️",
