@@ -1,5 +1,4 @@
-use std::io::IsTerminal;
-use std::path::Path;
+use std::{io::IsTerminal, path::Path};
 
 use jj_release_core::{
     config::{Config, Versioning},
@@ -41,10 +40,6 @@ pub fn release_pipeline(
 
     if dry_run {
         return print_dry_run(&prepared, config);
-    }
-
-    if cli.no_publish {
-        config.publish.cargo = false;
     }
 
     // Run pre-flight checks on all targets before touching anything

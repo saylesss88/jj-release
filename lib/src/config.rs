@@ -62,7 +62,6 @@ pub struct PublishConfig {
 pub struct ChangelogConfig {
     pub enabled: bool,
     pub file: String,
-    pub require_tag: bool,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -123,7 +122,6 @@ impl Default for ChangelogConfig {
         Self {
             enabled: true,
             file: "CHANGELOG.md".to_owned(),
-            require_tag: true,
         }
     }
 }

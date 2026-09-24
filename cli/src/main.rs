@@ -96,7 +96,7 @@ fn run() -> Result<(), errors::ReleaseError> {
     };
 
     // Load config (falls back to defaults if release.toml absent).
-    let config = config::load(&root)?;
+    let mut config = config::load(&root)?;
 
     // Override publish if --no-publish flag is set.
     if cli.no_publish {
