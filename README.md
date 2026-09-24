@@ -103,6 +103,9 @@ Optional dependencies:
 
 - For forge releases, `gh` or `glab` must also be available.
 - For independent workspace versioning, `cargo-edit` must be installed.
+- `cargo-semver-checks` (Required by default to prevent accidental breaking
+  changes. Can be disabled by setting `semver_checks = false` in
+  `release.toml`).
 
 ---
 
@@ -285,6 +288,7 @@ semver_checks_upgrade_major = false  # auto-upgrade to major (default: only post
 [changelog]
 enabled = true                       # write a CHANGELOG.md entry on each release
 file = "CHANGELOG.md"                # path to the changelog file
+strict = true                        # drop unmapped/unformatted commits (false = "Other Changes")
 
 manifest_backend = "cargo"           # manifest format: cargo, npm, go
 ```
@@ -301,6 +305,36 @@ cargo = true
 Publishing can also be skipped per-run with `--no-publish` without editing
 `release.toml`, useful for testing the release pipeline or in scripts that
 handle publishing separately.
+
+### Changelog Configuration
+
+You can customize how `jj-release` parses your commits and maps them to the Keep
+a Changelog format. By default, only `feat`, `fix`, `perf`, and `refactor`
+commits are included.
+
+Add these options to your `release.toml` to customize the behavior:
+
+```toml
+[changelog]
+enabled = true
+file = "CHANGELOG.md"
+
+# If true (default), commits that do not strictly match Conventional Commits
+# or your prefix_mapping are silently dropped from the changelog.
+# If false, unformatted commits are collected in an "Other Changes" section.
+strict = false
+
+# An array of commit types or prefixes to silently exclude from the changelog.
+# Matches against the parsed conventional type or the raw string.
+exclude_prefixes = ["chore", "ci", "test", "WIP:"]
+
+# Map conventional commit types to custom Keep a Changelog headers.
+# Standard types (feat -> Added, fix -> Fixed, etc.) are handled automatically.
+[changelog.prefix_mapping]
+security = "Security"
+doc = "Documentation"
+revert = "Reverted"
+```
 
 ---
 
