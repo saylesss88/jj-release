@@ -68,6 +68,7 @@ pub struct ChangelogConfig {
     pub prefix_mapping: HashMap<String, String>,
     pub exclude_prefixes: Vec<String>,
     pub emoji_headers: bool,
+    pub emoji_mapping: std::collections::HashMap<String, String>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -132,6 +133,7 @@ impl Default for ChangelogConfig {
             prefix_mapping: HashMap::new(),
             exclude_prefixes: vec![],
             emoji_headers: false,
+            emoji_mapping: HashMap::new(),
         }
     }
 }

@@ -94,7 +94,7 @@ pub fn render_changelog_section(
 
     for header in standard_headers {
         if let Some(entries) = groups.get(header) {
-            let display_header = changelog::format_header(header, config.emoji_headers);
+            let display_header = changelog::format_header(header, config);
             let _ = write!(out, "\n### {display_header}\n\n");
             for entry in entries {
                 let _ = writeln!(out, "- {entry}");
@@ -110,7 +110,7 @@ pub fn render_changelog_section(
 
     for header in custom_headers {
         if let Some(entries) = groups.get(header) {
-            let display_header = changelog::format_header(header, config.emoji_headers);
+            let display_header = changelog::format_header(header, config);
             let _ = write!(out, "\n### {display_header}\n\n");
             for entry in entries {
                 let _ = writeln!(out, "- {entry}");
@@ -152,11 +152,15 @@ pub fn render_full_changelog(
     out
 }
 
-fn format_header(header: &str, use_emoji: bool) -> String {
-    if !use_emoji {
+fn format_header(header: &str, config: &ChangelogConfig) -> String {
+    if !config.emoji_headers {
         return header.to_owned();
     }
-
+    // Check if the user provided a custom emoji for this header
+    if let Some(custom_emoji) = config.emoji_mapping.get(header) {
+        return format!("{custom_emoji} {header}");
+    }
+    // Fallback to defaults
     let emoji = match header {
         "Added" => "✨",
         "Changed" => "♻️",
