@@ -27,7 +27,7 @@ pub fn render_changelog_section(commits: &[CommitInfo], version: &Version) -> St
         let breaking = conv.breaking();
         let scope = conv
             .scope()
-            .map(|s| format!("**({s})**"))
+            .map(|s| format!("**({s})** "))
             .unwrap_or_default();
         let summary = conv.description().to_owned();
         let entry = if breaking {
