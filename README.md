@@ -123,6 +123,9 @@ jj-release
 # Dry run, see what would happen without changing anything
 jj-release --dry-run
 
+# Run release without publishing to crates.io
+jj-release --no-publish
+
 # Print the next version that would be released
 jj-release next-version
 
@@ -172,7 +175,7 @@ jj-release validate # confirms everything is ready
 - `CARGO_REGISTRY_TOKEN` set/`.cargo/credentials.toml` present (if publishing to
   crates.io)
 
-## First release
+## First Release
 
 `jj-release` requires zero configuration for your first release.
 
@@ -295,6 +298,10 @@ configuration:
 [publish]
 cargo = true
 ```
+
+Publishing can also be skipped per-run with `--no-publish` without editing
+`release.toml`, useful for testing the release pipeline or in scripts that
+handle publishing separately.
 
 ---
 
