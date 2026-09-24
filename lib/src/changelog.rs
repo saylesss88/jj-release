@@ -208,4 +208,23 @@ mod tests {
         assert!(result.contains("### Added"));
         assert!(result.contains("### Fixed"));
     }
+
+    #[test]
+    fn changelog_strict_false_captures_unformatted_commits() {
+        let sections = vec![(
+            "v0.1.0".to_string(),
+            vec![CommitInfo {
+                change_id: "a".into(),
+                description: "random work that forgot conventional format".into(),
+            }],
+        )];
+        let versions = vec![semver::Version::parse("0.1.0").unwrap()];
+
+        // Pass false to disable strict mode
+        let result = render_full_changelog(&sections, &versions, false);
+
+        assert!(result.contains("## [0.1.0]"));
+        assert!(result.contains("### Other Changes"));
+        assert!(result.contains("- random work that forgot conventional format"));
+    }
 }
