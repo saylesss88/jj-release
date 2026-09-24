@@ -160,7 +160,7 @@ mod tests {
     #[test]
     fn prepend_does_not_duplicate_header() {
         let existing =
-            format!("{CHANGELOG_HEADER}## [0.1.0] - 2024-01-01\n\n### Added\n- initial release\n",);
+            format!("{CHANGELOG_HEADER}## [0.1.0] - 2024-01-01\n\n### Added\n- initial release\n");
         let new_section = "## [0.2.0] - 2024-06-01\n\n### Added\n- new thing\n";
         let result = prepend_to_file(&existing, new_section);
         assert_eq!(result.matches("# Changelog").count(), 1);
