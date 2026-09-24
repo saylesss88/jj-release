@@ -17,11 +17,12 @@ use crate::{
 
 type CheckResult = Result<String, String>;
 
-/// Validates the release environment, checking backend identity, forge CLI availability, manifest readability, version tags, trigger commits, and tokens.
+/// Validates the release environment, checking backend identity, forge CLI availability, manifest
+/// readability, version tags, trigger commits, and tokens.
 ///
 /// # Errors
 ///
-/// Returns an error if any backend operations fail, the manifest cannot be read, or a required version tag is missing when `require_tag` is enabled.
+/// Returns an error if any backend operations fail, or ifthe manifest cannot be read.
 pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Result<()> {
     let mut passed = 0;
     let mut failed = 0;
@@ -44,10 +45,18 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
     run_check("forge CLI", check_forge_cli(config));
     run_check("manifest", check_manifest(ctx, root));
     run_check("version tag", check_version_tag(&tag));
-    run_check(
-        "publish pre-flight (dry-run)",
-        check_publish(ctx.publisher, root),
-    );
+
+    if config.publish.cargo {
+        run_check(
+            "publish pre-flight (dry-run)",
+            check_publish(ctx.publisher, root),
+        );
+    } else {
+        run_check(
+            "publish pre-flight (dry-run)",
+            Ok("skipped (publish.cargo = false)".to_owned()),
+        );
+    }
 
     if config.publish.cargo && config.publish.semver_checks {
         run_check("cargo-semver-checks", check_semver(ctx, config, root));
