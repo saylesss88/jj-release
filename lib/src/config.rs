@@ -207,6 +207,11 @@ cargo = false
 [changelog]
 enabled = true
 strict = true
+# exclude_prefixes = ["chore", "ci", "test"]
+
+# [changelog.prefix_mapping]
+# security = "Security"
+# doc = "Documentation"
 
 manifest_backend = "{language}"
 "#
