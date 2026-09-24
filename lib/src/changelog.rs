@@ -8,6 +8,11 @@ use semver::Version;
 
 use crate::commits::CommitInfo;
 
+const CHANGELOG_HEADER: &str = "# Changelog\n\n\
+    All notable changes to this project will be documented in this file.\n\n\
+    The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\n\
+    and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n";
+
 #[must_use]
 pub fn render_changelog_section(commits: &[CommitInfo], version: &Version) -> String {
     let mut added = Vec::new();
@@ -57,13 +62,12 @@ pub fn render_changelog_section(commits: &[CommitInfo], version: &Version) -> St
 
 #[must_use]
 pub fn prepend_to_file(existing: &str, new_section: &str) -> String {
-    let header = "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\nand this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n";
     if existing.is_empty() {
-        return format!("{header}{new_section}");
+        return format!("{CHANGELOG_HEADER}{new_section}");
     }
 
-    let body = existing.strip_prefix(header).unwrap_or(existing);
-    format!("{header}{new_section}\n{body}")
+    let body = existing.strip_prefix(CHANGELOG_HEADER).unwrap_or(existing);
+    format!("{CHANGELOG_HEADER}{new_section}\n{body}")
 }
 
 /// Render a full changelog from all tag ranges, newest first.
@@ -74,9 +78,7 @@ pub fn render_full_changelog(
     sections: &[(String, Vec<CommitInfo>)],
     versions: &[Version],
 ) -> String {
-    let header = "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\nand this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n";
-
-    let mut out = header.to_owned();
+    let mut out = CHANGELOG_HEADER.to_owned();
 
     // Render newest first.
     for (i, (_, commits)) in sections.iter().enumerate().rev() {
@@ -138,9 +140,10 @@ mod tests {
 
     #[test]
     fn prepend_inserts_after_header() {
-        let existing = "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\nand this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n## [0.1.0] - 2024-01-01\n\n### Added\n- initial release\n";
         let new_section = "## [0.2.0] - 2024-06-01\n\n### Added\n- new thing\n";
-        let result = prepend_to_file(existing, new_section);
+        let existing =
+            format!("{CHANGELOG_HEADER}## [0.1.0] - 2024-05-01\n\n### Added\n- old thing\n");
+        let result = prepend_to_file(&existing, new_section);
         assert!(result.contains("## [0.2.0]"));
         assert!(result.contains("## [0.1.0]"));
         // New section should come before old.
@@ -156,10 +159,8 @@ mod tests {
 
     #[test]
     fn prepend_does_not_duplicate_header() {
-        let existing = format!(
-            "{header}## [0.1.0] - 2024-01-01\n\n### Added\n- initial release\n",
-            header = "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\nand this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n"
-        );
+        let existing =
+            format!("{CHANGELOG_HEADER}## [0.1.0] - 2024-01-01\n\n### Added\n- initial release\n",);
         let new_section = "## [0.2.0] - 2024-06-01\n\n### Added\n- new thing\n";
         let result = prepend_to_file(&existing, new_section);
         assert_eq!(result.matches("# Changelog").count(), 1);
