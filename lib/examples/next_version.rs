@@ -2,7 +2,7 @@
 //!
 //! Run with: `cargo run --example next_version -- /path/to/repo`
 
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 use jj_release_core::{
     config::Config,
@@ -15,7 +15,7 @@ use jj_release_core::{
 };
 
 fn main() -> Result<()> {
-    let root = std::env::args()
+    let root = env::args()
         .nth(1)
         .map_or_else(|| PathBuf::from("."), PathBuf::from);
     let root = root.as_path();

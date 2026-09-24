@@ -2,7 +2,11 @@
 // Note: these tests require `jj-release` and `jj` to be installed on PATH.
 // Run `cargo install --path .` before running integration tests.
 
-use std::{fs, path::Path, process::Command};
+use std::{
+    fs,
+    path::Path,
+    process::{Command, Output},
+};
 
 /// Initialize a colocated jj/git repo in `dir`.
 fn init_repo(dir: &Path) {
@@ -37,7 +41,7 @@ fn jj_new(dir: &Path, message: &str) {
         .unwrap();
 }
 
-fn jj_release(dir: &Path, args: &[&str]) -> std::process::Output {
+fn jj_release(dir: &Path, args: &[&str]) -> Output {
     Command::new("jj-release")
         .args(args)
         .current_dir(dir)
@@ -50,7 +54,7 @@ fn write_cargo_toml(dir: &Path, version: &str) {
         dir.join("Cargo.toml"),
         format!(
             r#"[package]
-name = "test-crate"
+            name = "test-crate"
             version = "{version}"
             edition = "2024"
         "#

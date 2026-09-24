@@ -1,4 +1,7 @@
-use std::{io::IsTerminal, path::Path};
+use std::{
+    io::{self, IsTerminal, Write},
+    path::Path,
+};
 
 use jj_release_core::{
     config::{Config, Versioning},
@@ -48,14 +51,14 @@ pub fn release_pipeline(
 
     // Warn if publishing is disabled, prompt interactively, skip in CI.
     if !config.publish.cargo {
-        if std::io::stdin().is_terminal() {
+        if io::stdin().is_terminal() {
             eprint!(
                 "warning: publish.cargo = false. This will still bump versions, tag, and push, \
                  but will NOT publish to crates.io. Continue? [y/N] "
             );
-            let _ = std::io::Write::flush(&mut std::io::stderr());
+            let _ = Write::flush(&mut io::stderr());
             let mut input = String::new();
-            std::io::stdin().read_line(&mut input)?;
+            io::stdin().read_line(&mut input)?;
             if !matches!(input.trim().to_lowercase().as_str(), "y" | "yes") {
                 println!("Aborted.");
                 return Ok(());

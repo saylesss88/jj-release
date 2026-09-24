@@ -284,8 +284,8 @@ mod tests {
             ),
         ];
         let versions = vec![
-            semver::Version::parse("0.1.0").unwrap(),
-            semver::Version::parse("0.2.0").unwrap(),
+            Version::parse("0.1.0").unwrap(),
+            Version::parse("0.2.0").unwrap(),
         ];
         let config = ChangelogConfig::default();
         let result = render_full_changelog(&sections, &versions, &config);
@@ -306,7 +306,7 @@ mod tests {
                 description: "random work that forgot conventional format".into(),
             }],
         )];
-        let versions = vec![semver::Version::parse("0.1.0").unwrap()];
+        let versions = vec![Version::parse("0.1.0").unwrap()];
         let config = ChangelogConfig {
             strict: false,
             ..Default::default()
