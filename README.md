@@ -285,7 +285,6 @@ semver_checks_upgrade_major = false  # auto-upgrade to major (default: only post
 [changelog]
 enabled = true                       # write a CHANGELOG.md entry on each release
 file = "CHANGELOG.md"                # path to the changelog file
-require_tag = true                   # require a version tag baseline; auto-creates one if missing
 
 manifest_backend = "cargo"           # manifest format: cargo, npm, go
 ```
