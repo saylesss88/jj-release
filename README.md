@@ -309,8 +309,8 @@ handle publishing separately.
 ### Changelog Configuration
 
 You can customize how `jj-release` parses your commits and maps them to the Keep
-a Changelog format. By default, only `feat`, `fix`, `perf`, and `refactor`
-commits are included.
+a Changelog format. By default, only `feat`, `fix`, `bug`, `perf`, `refactor`,
+`removed`, `security`, and `docs` commits are included.
 
 Add these options to your `release.toml` to customize the behavior:
 
@@ -318,6 +318,8 @@ Add these options to your `release.toml` to customize the behavior:
 [changelog]
 enabled = true
 file = "CHANGELOG.md"
+# Add emojis to the changelog headers
+emoji_headers = true
 
 # If true (default), commits that do not strictly match Conventional Commits
 # or your prefix_mapping are silently dropped from the changelog.
@@ -327,6 +329,13 @@ strict = false
 # An array of commit types or prefixes to silently exclude from the changelog.
 # Matches against the parsed conventional type or the raw string.
 exclude_prefixes = ["chore", "ci", "test", "WIP:"]
+
+# Override specific default emojis (keys must match the exact Header name)
+[changelog.emoji_mapping]
+Added = "🚀"
+Fixed = "✅️"
+Bug = "🔥"
+Performance = "⚡️"
 
 # Map conventional commit types to custom Keep a Changelog headers.
 # Standard types (feat -> Added, fix -> Fixed, etc.) are handled automatically.
@@ -521,14 +530,21 @@ workspace members before releasing.
 
 `jj-release` follows the
 [Conventional Commits](https://www.conventionalcommits.org) spec to determine
-the version bump:
+the version bump. It natively supports standard Angular types alongside a
+dedicated `bug` type:
 
-| Commit type                          | Bump       |
-| ------------------------------------ | ---------- |
-| `feat:`                              | minor      |
-| `fix:`, `perf:`, `refactor:`         | patch      |
-| `feat!:` or `BREAKING CHANGE` footer | major      |
-| `chore:`, `docs:`, `test:`, etc.     | No release |
+| Commit type                          | Bump       | Changelog Header   |
+| ------------------------------------ | ---------- | ------------------ |
+| `feat:`                              | minor      | Added              |
+| `fix:`                               | patch      | Fixed              |
+| `bug:`                               | patch      | Bug                |
+| `refactor:`                          | patch      | Changed            |
+| `perf:`                              | patch      | Performance        |
+| `docs:`                              | No release | Documentation      |
+| `feat!:` or `BREAKING CHANGE` footer | major      | Breaking           |
+| `chore:`, `docs:`, `test:`, etc.     | No release | Dropped by default |
+| `deprecate:`, `deprecated:`          | No release | Deprecated         |
+| `chore:`, `test:`, `ci:`             | No release | Dropped by default |
 
 The highest bump across all commits since the last tag wins. Scoped commits are
 preserved in the changelog. `feat(cli): add init subcommand` renders as
