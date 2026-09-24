@@ -5,81 +5,100 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.0] - 2026-09-23
+## [0.8.0] - 2026-09-24
 
-### Added
+### 🚀 Added
+
+- **(changelog)** add `emoji_mapping` to allow users to choose the emojis used in changelog headers
+- **(changelog)** add `emoji_headers` option and `format_header` function
+- **(changelog)** add flexible commit mapping, exclusions, and strict mode
+- **(config)** add `strict` field to `ChangelogConfig` to catch non-conventional commits
+- **(main)** add no_publish to the Cli struct & pass into run
+
+### ♻️ Changed
+
+- **(changelog)** add const for keep a changelog header to reduce duplication
+
+### 🛠️ Fixed
+
+- **(changelog)** add a space after **scope** changelog entries
+- **(release)** add a y/n prompt for when cargo.publish = false to warn users and remind them
+
+## [0.7.0] - 2026-09-24
+
+### 🚀 Added
 
 - add generate_release_toml to lib for programmatic config generation
 
-### Changed
+### ♻️ Changed
 
-- **(init)**use the new `generate_release_toml` in the init command to reduce duplication
-- **(binary)**move what can be moved into the lib
+- **(init)** use the new `generate_release_toml` in the init command to reduce duplication
+- **(binary)** move what can be moved into the lib
 - add detect_workspace to lib and simplify init using it
 
-### Fixed
+### 🛠️ Fixed
 
-- **(examples)**add warning to `run_release` example
+- **(examples)** add warning to `run_release` example
 - add blank line after changelog headers
-- **(changelog)**add check to prevent duplicate headers
+- **(changelog)** add check to prevent duplicate headers
 
-## [0.6.1] - 2026-09-22
+### 📚 Documentation
 
-### Changed
+- add `init` example to demonstrate lib functionality
+- add `run_release` full pipeline example
+- add `detect_env` example
+- add `prepare_release` example
+- add `full_changelog` example
 
-- **(binary)**move what can be moved into the lib
-- add detect_workspace to lib and simplify init using it
+## [0.6.0] - 2026-09-24
 
-### Fixed
-
-- add blank line after changelog headers
-- **(changelog)**add check to prevent duplicate headers
-
-## [0.6.0] - 2026-09-22
-
-### Added
+### 🚀 Added
 
 - add Gitea forge support via shared GiteaCompatClient with Forgejo
 
-### Changed
+### ♻️ Changed
 
 - extract helper functions to slim down release_pipeline
 
-### Fixed
+### 🛠️ Fixed
 
 - add --no-verify to preflight check
 - doc comment in lib.rs to use jj_release_core
-- **(README)**correct version and exit codes
+- **(README)** correct version and exit codes
 
-## [0.5.2] - 2026-09-22
+### 🔥 Bug
 
-### Fixed
+- **(changelog)** prepend_to_file was duplicating the header info per release
+
+## [0.5.2] - 2026-09-24
+
+### 🛠️ Fixed
 
 - explicitly define readme path for crates.io
 
-## [0.5.1] - 2026-09-22
+## [0.5.1] - 2026-09-24
 
-### Changed
+### ♻️ Changed
 
-- **(pipeline)**move into pipeline/ with sub-modules
+- **(pipeline)** move into pipeline/ with sub-modules
 - migrate error handling from anyhow to thiserror
 - split into jj_release library crate and jj-release CLI crate
 
-### Fixed
+### 🛠️ Fixed
 
-- **(jj)**remove `#[doc(hidden)]` from useful public types
-- **(pipeline)**lib code shouldn't call process::exit
-- **(forge)**move helper functions only used in tests into the test module and drop unused ones
+- **(jj)** remove `#[doc(hidden)]` from useful public types
+- **(pipeline)** lib code shouldn't call process::exit
+- **(forge)** move helper functions only used in tests into the test module and drop unused ones
 - tests to use new default of not publishing to cargo
 
-## [0.5.0] - 2026-09-22
+## [0.5.0] - 2026-09-24
 
-### Added
+### 🚀 Added
 
-- **(pipeline)**implement zero-config first release mode
-- **(cli)**add contextual hint when release trigger is missing
-- **(pipeline)**wire publish pre-flight into validate command
-- **(publish)**add dry-run check method to backends
+- **(pipeline)** implement zero-config first release mode
+- **(cli)** add contextual hint when release trigger is missing
+- **(pipeline)** wire publish pre-flight into validate command
+- **(publish)** add dry-run check method to backends
 - add latest_version_on_crates_io for registry-based version baseline
 - add cargo-semver-check to validate command
 - run cargo-semver-checks to auto-upgrade bump to Major on API breaking changes
@@ -89,27 +108,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - add registry module with version_exists_on_crates_io check
 - add read_name to manifest for reading crate name from Cargo.toml
 
-### Changed
+### ♻️ Changed
 
-- **(release)**extract workspace publishing logic
-- **(forge)**separate argument generation from execution
-- **(pipeline)**stream validation results sequentially
-- **(publish)**capture dry-run output and clarify validate logs
-- **(pipeline)**slim down validate with helper functions
-- **(forge)**create PrRequest struct to reduce arguments to create_pr in all locations & change call sites to match
-- **(forge)**create 'post' helper method to simplify create_release & create_pr in impl ForgeBackend for ForgejoForge
+- **(release)** extract workspace publishing logic
+- **(forge)** separate argument generation from execution
+- **(pipeline)** stream validation results sequentially
+- **(publish)** capture dry-run output and clarify validate logs
+- **(pipeline)** slim down validate with helper functions
+- **(forge)** create PrRequest struct to reduce arguments to create_pr in all locations & change call sites to match
+- **(forge)** create 'post' helper method to simplify create_release & create_pr in impl ForgeBackend for ForgejoForge
 
-### Fixed
+### 🛠️ Fixed
 
 - default cargo publish to false in init and config
-- **(config)**set default to false for publishing to crates.io and make it opt-in
-- **(detect)**add correct format for codeberg ssh
-- **(validate)**treat missing version tag as success for first releases
-- **(workspace)**ignore unpublished dependencies during topological sort
-- **(cli)**re-enable clap help menu generation
-- **(pipeline)**prevent remote git push if publish fails
-- **(release)**crates.io already doesn't allow you to publish duplicate versions, remove check for it in run_publish
-- **(lib)**make test_helpers module pub(crate)
+- **(config)** set default to false for publishing to crates.io and make it opt-in
+- **(detect)** add correct format for codeberg ssh
+- **(validate)** treat missing version tag as success for first releases
+- **(workspace)** ignore unpublished dependencies during topological sort
+- **(cli)** re-enable clap help menu generation
+- **(pipeline)** prevent remote git push if publish fails
+- **(release)** crates.io already doesn't allow you to publish duplicate versions, remove check for it in run_publish
+- **(lib)** make test_helpers module pub(crate)
 - suppress cargo-semver-checks output on --dry-run
 - add v1.0.0 message before bumping to major in validate
 - add non_exhaustive to public structs that may change
@@ -120,32 +139,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - use statements, levels of function & Type calls
 - use statements
 
-## [0.4.0] - 2026-09-22
+### 📚 Documentation
 
-### Added
+- update README
+- update README
+- refactor README
+- update README
+- update README
+- update README
+- update README
 
-- **(pipeline)**create first tag if one doesn't exist rather than warning user
+## [0.4.0] - 2026-09-24
+
+### 🚀 Added
+
+- **(pipeline)** create first tag if one doesn't exist rather than warning user
 - implement ForgejoForge with REST API for releases and PRs
 - add parse_remote_owner_repo for extracting owner/repo from git remote URLs
 
-### Fixed
+### 🛠️ Fixed
 
-- **(pipeline)**validate check for CARGO_REGISTRY_TOKEN too strict
+- **(pipeline)** validate check for CARGO_REGISTRY_TOKEN too strict
 - call sites of member_bumps
-- **(workspace)**in member_bumps add per-member tag prefixes when computing since on each member
+- **(workspace)** in member_bumps add per-member tag prefixes when computing since on each member
 - suppress unified version info in independent workspace dry-run output
 - create per-member release commits and tags in independent workspace mode
-- **(release)**skip workspace-level tag and version bump in independent mode
+- **(release)** skip workspace-level tag and version bump in independent mode
 
-## [0.3.0] - 2026-09-22
+### 📚 Documentation
 
-### Added
+- README edits
+- update README
+- update README
+- update README
 
-- **(init)**use crate name for independent tags
-- **(release)**wire per-member tagging into independent workspace release pipeline
-- **(workspace)**add member_tag_name helper for per-member tag naming in independent workspaces
+## [0.3.0] - 2026-09-24
+
+### 🚀 Added
+
+- **(init)** use crate name for independent tags
+- **(release)** wire per-member tagging into independent workspace release pipeline
+- **(workspace)** add member_tag_name helper for per-member tag naming in independent workspaces
 - add optional tag_prefix to WorkspaceMember for independent versioning
-- **(init)**tie in detect_versioning
+- **(init)** tie in detect_versioning
 - add detect_versioning to auto-detect unified vs independent workspace versioning
 - show per-member version bumps in dry-run for independent workspace versioning
 - add --full flag to changelog subcommand for generating complete history
@@ -153,36 +189,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - add member_bumps for per-member bump computation in independent workspaces
 - add log_commits_for_path to JjBackend trait for path-filtered commit walking
 - add bump_member_version via cargo set-version for independent workspace versioning
-- **(workspace)**add member_versions using cargo_metadata for independent workspace versioning
+- **(workspace)** add member_versions using cargo_metadata for independent workspace versioning
 
-### Changed
+### ♻️ Changed
 
-- **(main)**create commands module and move functions out of main
+- **(main)** create commands module and move functions out of main
 - extract run_publish helper to slim down release_pipeline
 - extract MockBackend to shared test_helpers module
 
-### Fixed
+### 🛠️ Fixed
 
 - remove unused dependencies
-- **(changelog)**use Keep a Changelog header
+- **(changelog)** use Keep a Changelog header
 
-## [0.2.0] - 2026-09-22
+### 📚 Documentation
 
-### Added
+- update README
+- document behavior when there are only conventional commits that don't warrant a bump
+- remove readme from Cargo.toml, it can be inferred
+
+## [0.2.0] - 2026-09-24
+
+### 🚀 Added
 
 - add validate subcommand
 - require version tag before release with helpful hint, add require_tag config option
 - include conventional commit scopes in changelog output
-- **(changelog)**add -o/--output flag to changelog subcommand for standalone file generation
+- **(changelog)** add -o/--output flag to changelog subcommand for standalone file generation
 - add preflight checks for forge CLI availability with CliError
 - wire CliError into main with proper exit codes
 - add CliError with exit codes and report function
 - add init subcommand with auto-detection of forge, language, and workspace members
-- **(main)**add Init to Subcommand & write init function
+- **(main)** add Init to Subcommand & write init function
 - add IO layer to detect module for forge, language, and tool detection
 - add detect module with forge_from_url and language_from_files
-- **(main)**add trigger detection and current version lines to release_pipeline
-- **(jj)**add check_identity guard to JjBackend to either fail completely or succeed
+- **(main)** add trigger detection and current version lines to release_pipeline
+- **(jj)** add check_identity guard to JjBackend to either fail completely or succeed
 - add to re-exports, add top-level doc comments
 - wire workspace support into release pipeline
 - add WorkspaceManifest implementing ManifestBackend for unified versioning
@@ -193,54 +235,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - extract prepare_release into pipeline module
 - wire PublishBackend through release pipeline
 - add PublishBackend trait with NoPublish, CargoPublish, NpmPublish impls
-- **(main)**tie in NpmManifest
+- **(main)** tie in NpmManifest
 - add NpmManifest for package.json version management
 - add GoManifest and manifest_backend config field
-- **(main)**update run() to construct the forge from config instead of github_release
-- **(config)**add forge & forge_url to ReleaseConfig
-- **(forge)**add GitLab support
+- **(main)** update run() to construct the forge from config instead of github_release
+- **(config)** add forge & forge_url to ReleaseConfig
+- **(forge)** add GitLab support
 - wire ForgeBackend through release pipeline and pr subcommand
 - add GitHubForge implementation using gh CLI
 - add ForgeBackend trait with NoForge noop implementation
 - layout forge module with failing test
 - add pr subcommand for opening release PRs
 
-### Changed
+### ♻️ Changed
 
 - reduce args to print_changelog and print_next_version by using ReleaseContext
 - replace github_release bool, with forge config field
-- **(main)**create a lib and move sub-modules there
+- **(main)** create a lib and move sub-modules there
 - wire ManifestBackend through release pipeline
 - extract ManifestBackend trait with CargoManifest impl
 
-### Fixed
+### 🛠️ Fixed
 
 - use statements and correct level for functions/types
-- **(main)**add workspace description to output of --dry-run
-- **(config)**test now defaults to github
+- **(main)** add workspace description to output of --dry-run
+- **(config)** test now defaults to github
 - don't bump version on Pr's
-- **(jj)**remove JJ_CONFIG= line in ShellBackend::run
+- **(jj)** remove JJ_CONFIG= line in ShellBackend::run
 - private/public items in crate
 
-## [0.1.0] - 2026-09-22
+## [0.1.0] - 2026-09-24
 
-### Added
+### 🚀 Added
 
-- **(config)**add new [changelog] section
+- **(config)** add new [changelog] section
 - add prepend_to_file for changelog generation
 - add render_changelog_section with keep-a-changelog format
 - layout changelog module with tests
 - add list_tags to JjBackend trait and implement latest_version_tag
-- **(commits)**add Tag struct and highest_semver_tag function
+- **(commits)** add Tag struct and highest_semver_tag function
 - initial project scaffolding
 
-### Changed
+### ♻️ Changed
 
 - make compute_bump a pure function taking &[CommitInfo]
 
-### Fixed
+### 🛠️ Fixed
 
 - friction of failed publish
-- **(main)**wire in changelog generation
+- **(main)** wire in changelog generation
 - compute bump from last version tag instead of root
+
+### 📚 Documentation
+
+- add README
 
