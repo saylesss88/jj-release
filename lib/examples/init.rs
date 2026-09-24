@@ -7,6 +7,7 @@ use std::{env, path::PathBuf};
 
 use jj_release_core::{config, errors::Result};
 
+#[allow(clippy::unnecessary_wraps)]
 fn main() -> Result<()> {
     let root = env::args()
         .nth(1)
