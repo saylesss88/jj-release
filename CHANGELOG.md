@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🚀 Added
 
+- **(changelog)** add angular type prefixes to the default headers
 - **(changelog)** add `emoji_mapping` to allow users to choose the emojis used in changelog headers
 - **(changelog)** add `emoji_headers` option and `format_header` function
 - **(changelog)** add flexible commit mapping, exclusions, and strict mode
