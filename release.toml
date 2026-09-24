@@ -5,18 +5,13 @@ forge = "github"
 create_release = false
 
 [publish]
-cargo = false
+cargo = true
 
 [changelog]
 enabled = true
 emoji_headers = true
 
 manifest_backend = "cargo"
-
-[changelog.emoji_mapping]
-Added = "🚀"
-Fixed = "🛠️"
-Bug = "🔥"
 
 [workspace]
 enabled = true
