@@ -62,6 +62,9 @@ pub struct PublishConfig {
 pub struct ChangelogConfig {
     pub enabled: bool,
     pub file: String,
+    /// If true, silently drops commits that don't pass strict Conventional Commits parsing.
+    /// If false, unformatted commits are placed in an "Other Changes" section.
+    pub strict: bool,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -122,6 +125,7 @@ impl Default for ChangelogConfig {
         Self {
             enabled: true,
             file: "CHANGELOG.md".to_owned(),
+            strict: true,
         }
     }
 }
@@ -198,6 +202,7 @@ cargo = false
 
 [changelog]
 enabled = true
+strict = true
 
 manifest_backend = "{language}"
 "#

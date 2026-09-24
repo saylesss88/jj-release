@@ -14,40 +14,52 @@ const CHANGELOG_HEADER: &str = "# Changelog\n\n\
     and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n";
 
 #[must_use]
-pub fn render_changelog_section(commits: &[CommitInfo], version: &Version) -> String {
+pub fn render_changelog_section(commits: &[CommitInfo], version: &Version, strict: bool) -> String {
     let mut added = Vec::new();
     let mut changed = Vec::new();
     let mut fixed = Vec::new();
+    let mut other = Vec::new();
 
     for commit in commits {
-        let Ok(conv) = Commit::parse(&commit.description) else {
-            continue;
-        };
+        if let Ok(conv) = Commit::parse(&commit.description) {
+            let breaking = conv.breaking();
+            let scope = conv
+                .scope()
+                .map(|s| format!("**({s})** "))
+                .unwrap_or_default();
+            let summary = conv.description().to_owned();
+            let entry = if breaking {
+                format!("**BREAKING** {summary}")
+            } else {
+                format!("{scope}{summary}")
+            };
 
-        let breaking = conv.breaking();
-        let scope = conv
-            .scope()
-            .map(|s| format!("**({s})** "))
-            .unwrap_or_default();
-        let summary = conv.description().to_owned();
-        let entry = if breaking {
-            format!("**BREAKING** {summary}")
-        } else {
-            format!("{scope}{summary}")
-        };
-
-        match conv.type_().as_str() {
-            "feat" => added.push(entry),
-            "fix" => fixed.push(entry),
-            "perf" | "refactor" => changed.push(entry),
-            _ => {}
+            match conv.type_().as_str() {
+                "feat" => added.push(entry),
+                "fix" => fixed.push(entry),
+                "perf" | "refactor" => changed.push(entry),
+                // Instead of dropping docs/chore/test, catch them here
+                _ if !strict => other.push(entry),
+                _ => {}
+            }
+        } else if !strict {
+            // If it fails to parse entirely, but strict mode is off,
+            // just dump the raw description into the "other" bucket.
+            other.push(commit.description.to_owned());
         }
     }
 
     let date = Zoned::now().strftime("%Y-%m-%d");
     let mut out = format!("## [{version}] - {date}\n");
 
-    for (heading, entries) in [("Added", &added), ("Changed", &changed), ("Fixed", &fixed)] {
+    let sections = [
+        ("Added", &added),
+        ("Changed", &changed),
+        ("Fixed", &fixed),
+        ("Other Changes", &other),
+    ];
+
+    for (heading, entries) in sections {
         if entries.is_empty() {
             continue;
         }
