@@ -133,6 +133,10 @@ fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
         );
     }
 
+    if !config.publish.cargo {
+        println!("[dry-run] Publishing: disabled (publish.cargo = false)");
+        return Ok(());
+    }
     if let Some(ws) = &config.workspace
         && ws.enabled
     {
