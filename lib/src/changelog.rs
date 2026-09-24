@@ -6,7 +6,7 @@ use git_conventional::Commit;
 use jiff::Zoned;
 use semver::Version;
 
-use crate::{commits::CommitInfo, config::ChangelogConfig};
+use crate::{changelog, commits::CommitInfo, config::ChangelogConfig};
 
 const CHANGELOG_HEADER: &str = "# Changelog\n\n\
     All notable changes to this project will be documented in this file.\n\n\
@@ -55,13 +55,20 @@ pub fn render_changelog_section(
                 match c_type {
                     "feat" => "Added",
                     "fix" => "Fixed",
+                    "bug" => "Bug",
                     "perf" | "refactor" => "Changed",
-                    // Instead of dropping docs/chore/test, catch them here
+                    "docs" => "Documentation", // Native Keep a Changelog adjacent
+                    "style" | "chore" | "build" | "ci" | "test" => {
+                        // Drop these by default if strict is true.
+                        if config.strict {
+                            continue;
+                        }
+                        "Other Changes"
+                    }
                     _ if !config.strict => "Other Changes",
-                    _ => continue,
+                    _ => continue, // Strict drop for completely unknown types
                 }
             };
-
             groups.entry(header.to_string()).or_default().push(entry);
         } else if !config.strict {
             groups
@@ -87,7 +94,8 @@ pub fn render_changelog_section(
 
     for header in standard_headers {
         if let Some(entries) = groups.get(header) {
-            let _ = write!(out, "\n### {header}\n\n");
+            let display_header = changelog::format_header(header, config.emoji_headers);
+            let _ = write!(out, "\n### {display_header}\n\n");
             for entry in entries {
                 let _ = writeln!(out, "- {entry}");
             }
@@ -102,7 +110,8 @@ pub fn render_changelog_section(
 
     for header in custom_headers {
         if let Some(entries) = groups.get(header) {
-            let _ = write!(out, "\n### {header}\n\n");
+            let display_header = changelog::format_header(header, config.emoji_headers);
+            let _ = write!(out, "\n### {display_header}\n\n");
             for entry in entries {
                 let _ = writeln!(out, "- {entry}");
             }
@@ -141,6 +150,27 @@ pub fn render_full_changelog(
     }
 
     out
+}
+
+fn format_header(header: &str, use_emoji: bool) -> String {
+    if !use_emoji {
+        return header.to_owned();
+    }
+
+    let emoji = match header {
+        "Added" => "✨",
+        "Changed" => "♻️",
+        "Fixed" => "✅️ ",
+        "Bug" => "🪲 ", // Added emoji mapping for your new header
+        "Documentation" => "📚",
+        "Deprecated" => "⚠️",
+        "Removed" => "🗑️",
+        "Security" => "🔒",
+        "Other Changes" => "📦",
+        _ => "📌",
+    };
+
+    format!("{emoji} {header}")
 }
 
 #[cfg(test)]

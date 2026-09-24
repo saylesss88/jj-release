@@ -67,6 +67,7 @@ pub struct ChangelogConfig {
     pub strict: bool,
     pub prefix_mapping: HashMap<String, String>,
     pub exclude_prefixes: Vec<String>,
+    pub emoji_headers: bool,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -130,6 +131,7 @@ impl Default for ChangelogConfig {
             strict: true,
             prefix_mapping: HashMap::new(),
             exclude_prefixes: vec![],
+            emoji_headers: false,
         }
     }
 }
@@ -207,6 +209,7 @@ cargo = false
 [changelog]
 enabled = true
 strict = true
+# emoji_headers = true
 # exclude_prefixes = ["chore", "ci", "test"]
 
 # [changelog.prefix_mapping]
