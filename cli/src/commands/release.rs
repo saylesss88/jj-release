@@ -43,6 +43,10 @@ pub fn release_pipeline(
         return print_dry_run(&prepared, config);
     }
 
+    if cli.no_publish {
+        config.publish.cargo = false;
+    }
+
     // Run pre-flight checks on all targets before touching anything
     info!(" → Running pre-flight checks (dry-run)...");
     pipeline::run_preflight_checks(ctx, root, config, is_independent)?;

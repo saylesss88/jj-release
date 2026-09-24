@@ -39,6 +39,10 @@ struct Cli {
 
     #[command(subcommand)]
     command: Option<Subcommand>,
+
+    /// Skip publishing to crates.io even if publish.cargo = true.
+    #[arg(long)]
+    no_publish: bool,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -93,6 +97,12 @@ fn run() -> Result<(), errors::ReleaseError> {
 
     // Load config (falls back to defaults if release.toml absent).
     let config = config::load(&root)?;
+
+    // Override publish if --no-publish flag is set.
+    if cli.no_publish {
+        config.publish.cargo = false;
+    }
+
     if !root.join("release.toml").exists() {
         // Using defaults, mention init for first-time users.
         eprintln!(
