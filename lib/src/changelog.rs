@@ -56,8 +56,10 @@ pub fn render_changelog_section(
                     "feat" => "Added",
                     "fix" => "Fixed",
                     "bug" => "Bug",
-                    "perf" | "refactor" => "Changed",
-                    "docs" => "Documentation", // Native Keep a Changelog adjacent
+                    "refactor" => "Changed",
+                    "perf" => "Performance",
+                    "docs" => "Documentation",
+                    "deprecate" | "deprecated" => "Deprecated",
                     "style" | "chore" | "build" | "ci" | "test" => {
                         // Drop these by default if strict is true.
                         if config.strict {
@@ -85,9 +87,11 @@ pub fn render_changelog_section(
     let standard_headers = [
         "Added",
         "Changed",
+        "Performance",
         "Deprecated",
         "Removed",
         "Fixed",
+        "Bug",
         "Security",
         "Other Changes",
     ];
@@ -164,9 +168,10 @@ fn format_header(header: &str, config: &ChangelogConfig) -> String {
     let emoji = match header {
         "Added" => "✨",
         "Changed" => "♻️",
-        "Fixed" => "🛠️ ",
-        "Bug" => "🪲 ",
+        "Fixed" => "🛠️",
+        "Bug" => "🪲",
         "Documentation" => "📚",
+        "Performance" => "🚀",
         "Deprecated" => "⚠️",
         "Removed" => "🗑️",
         "Security" => "🔒",
