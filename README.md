@@ -33,7 +33,7 @@ a commit-message trigger that fits naturally into the `jj` workflow.
 This repository contains two crates:
 
 - [`jj-release`](cli/): the CLI tool (`cargo install jj-release`)
-- [`jj_release`](lib/): the library for programmatic use
+- [`jj_release_core`](lib/): the library for programmatic use
 
 ---
 
@@ -480,6 +480,14 @@ depends_on = ["mylib"]   # publish lib before cli
 Cross-member dependency versions are updated automatically during the release.
 You do not need to manually update `Cargo.toml` dependency versions between
 workspace members before releasing.
+
+For example, the `version` requirement in this local dependency will
+automatically be kept in sync:
+
+```toml
+[dependencies]
+jj_release_core = { path = "../lib", version = "0.7.0" }
+```
 
 ### Independent Versioning
 
