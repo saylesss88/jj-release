@@ -59,7 +59,11 @@ pub fn update_changelog(
         String::new()
     };
 
-    let section = changelog::render_changelog_section(&prepared.commits, &prepared.next_version);
+    let section = changelog::render_changelog_section(
+        &prepared.commits,
+        &prepared.next_version,
+        config.changelog.strict,
+    );
     let updated = changelog::prepend_to_file(&existing, &section);
     fs::write(&changelog_path, updated)?;
     Ok(())

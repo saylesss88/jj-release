@@ -31,7 +31,7 @@ pub fn print_changelog(
     };
     let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
     let next = commits::apply_bump(&current, commits::compute_bump(&commits));
-    let section = changelog::render_changelog_section(&commits, &next);
+    let section = changelog::render_changelog_section(&commits, &next, true);
 
     match output {
         Some(path) => {
@@ -101,7 +101,7 @@ pub fn print_full_changelog(
         versions.push(next);
     }
 
-    let result = changelog::render_full_changelog(&sections, &versions);
+    let result = changelog::render_full_changelog(&sections, &versions, config.changelog.strict);
 
     match output {
         Some(path) => {

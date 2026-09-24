@@ -89,13 +89,14 @@ pub fn prepend_to_file(existing: &str, new_section: &str) -> String {
 pub fn render_full_changelog(
     sections: &[(String, Vec<CommitInfo>)],
     versions: &[Version],
+    strict: bool,
 ) -> String {
     let mut out = CHANGELOG_HEADER.to_owned();
 
     // Render newest first.
     for (i, (_, commits)) in sections.iter().enumerate().rev() {
         let version = &versions[i];
-        out.push_str(&render_changelog_section(commits, version));
+        out.push_str(&render_changelog_section(commits, version, strict));
         out.push('\n');
     }
 
@@ -112,7 +113,7 @@ mod tests {
             change_id: "abc".into(),
             description: "feat(cli): add init subcommand".into(),
         }];
-        let section = render_changelog_section(&commits, &Version::parse("0.2.0").unwrap());
+        let section = render_changelog_section(&commits, &Version::parse("0.2.0").unwrap(), true);
         assert!(section.contains("**(cli)**"));
         assert!(section.contains("add init subcommand"));
     }
@@ -123,7 +124,7 @@ mod tests {
             change_id: "abc".into(),
             description: "fix: prevent crash on empty dir".into(),
         }];
-        let section = render_changelog_section(&commits, &Version::parse("0.1.1").unwrap());
+        let section = render_changelog_section(&commits, &Version::parse("0.1.1").unwrap(), true);
         assert!(section.contains("### Fixed"));
         assert!(section.contains("- prevent crash on empty dir"));
     }
@@ -134,7 +135,7 @@ mod tests {
             change_id: "abc".into(),
             description: "chore: bump deps".into(),
         }];
-        let section = render_changelog_section(&commits, &Version::parse("0.1.1").unwrap());
+        let section = render_changelog_section(&commits, &Version::parse("0.1.1").unwrap(), true);
         assert!(!section.contains("### Added"));
         assert!(!section.contains("### Fixed"));
     }
@@ -145,7 +146,7 @@ mod tests {
             change_id: "abc".into(),
             description: "feat!: redesign IPC protocol".into(),
         }];
-        let section = render_changelog_section(&commits, &Version::parse("1.0.0").unwrap());
+        let section = render_changelog_section(&commits, &Version::parse("1.0.0").unwrap(), true);
         assert!(section.contains("### Added"));
         assert!(section.contains("**BREAKING**"));
     }
@@ -199,7 +200,7 @@ mod tests {
             semver::Version::parse("0.1.0").unwrap(),
             semver::Version::parse("0.2.0").unwrap(),
         ];
-        let result = render_full_changelog(&sections, &versions);
+        let result = render_full_changelog(&sections, &versions, true);
         assert!(result.contains("## [0.1.0]"));
         assert!(result.contains("## [0.2.0]"));
         // 0.2.0 should come before 0.1.0 (newest first)

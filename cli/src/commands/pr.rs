@@ -35,7 +35,11 @@ pub fn release_pr(
     );
 
     // Generate changelog preview for PR body, no file write.
-    let body = changelog::render_changelog_section(&prepared.commits, &prepared.next_version);
+    let body = changelog::render_changelog_section(
+        &prepared.commits,
+        &prepared.next_version,
+        config.changelog.strict,
+    );
 
     // Push to a release bookmark so PR has something to merge into main.
     let pr_bookmark = format!("release/{}", prepared.tag_name);
