@@ -1,3 +1,4 @@
+use std::io::IsTerminal;
 use std::path::Path;
 
 use jj_release_core::{
@@ -45,6 +46,25 @@ pub fn release_pipeline(
     // Run pre-flight checks on all targets before touching anything
     info!(" → Running pre-flight checks (dry-run)...");
     pipeline::run_preflight_checks(ctx, root, config, is_independent)?;
+
+    // Warn if publishing is disabled, prompt interactively, skip in CI.
+    if !config.publish.cargo {
+        if std::io::stdin().is_terminal() {
+            eprint!(
+                "warning: publish.cargo = false. This will still bump versions, tag, and push, \
+                 but will NOT publish to crates.io. Continue? [y/N] "
+            );
+            let _ = std::io::Write::flush(&mut std::io::stderr());
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input)?;
+            if !matches!(input.trim().to_lowercase().as_str(), "y" | "yes") {
+                println!("Aborted.");
+                return Ok(());
+            }
+        } else {
+            eprintln!("warning: publish.cargo = false, skipping crates.io publish.");
+        }
+    }
 
     if !is_independent {
         // Write changelog.
