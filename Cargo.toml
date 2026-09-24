@@ -13,7 +13,7 @@ license = "Apache-2.0"
 repository = "https://github.com/saylesss88/jj-release"
 keywords = ["jujutsu", "release", "semantic-release", "changelog", "ci"]
 categories = ["command-line-utilities", "development-tools"]
-exclude = [".github", "tests/"]
+exclude = [".github", "tests/", "assets/"]
 
 [profile.release]
 opt-level = 3

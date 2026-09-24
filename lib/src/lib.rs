@@ -1,3 +1,6 @@
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/saylesss88/jj-release/main/assets/jj-release-icon.svg"
+)]
 //! Semantic releases for Jujutsu VCS repositories.
 //!
 //! # Overview

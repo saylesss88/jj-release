@@ -1,5 +1,10 @@
 # jj-release
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/saylesss88/jj-release/main/assets/jj-release-lockup.svg"
+       alt="jj-release: semantic releases & changelogs for jj" width="600">
+</p>
+
 Automated semantic releases for [Jujutsu](https://github.com/jj-vcs/jj)
 repositories.
 
@@ -254,7 +259,7 @@ no tag. Merge the PR and CI runs `jj-release` to do the actual release.
 
 <!-- prettier-ignore -->
 > [!NOTE]
-> Unlike release-plz's continuously maintained release PR, `jj-release pr` is a
+> Unlike `release-plz`'s continuously maintained release PR, `jj-release pr` is a
 > one-shot preview. No version bump or release commit in the PR itself. If you
 > want a persistent release PR that stays up to date, run `jj-release pr` in CI
 > on every push to main.
@@ -336,13 +341,13 @@ Added = "🚀"
 Fixed = "✅️"
 Bug = "🔥"
 Performance = "⚡️"
+Testing = "🧪"
 
 # Map conventional commit types to custom Keep a Changelog headers.
 # Standard types (feat -> Added, fix -> Fixed, etc.) are handled automatically.
 [changelog.prefix_mapping]
-security = "Security"
-doc = "Documentation"
 revert = "Reverted"
+test = "Testing"
 ```
 
 ---
@@ -760,13 +765,15 @@ jj restore
 
 ## Credits
 
-Parts of the codebase are adapted from these great projects:
+Parts of the codebase are adapted from/inspired by these great projects:
 
 - Version baseline from crates.io rather than manifest. Check for API breaking
   changes with `cargo-semver-checks`:
   [release-plz](https://github.com/release-plz/release-plz)
 
 - [cargo-release](https://github.com/crate-ci/cargo-release)
+
+- Changelog inspirations: [git-cliff](https://github.com/orhun/git-cliff)
 
 ## License
 
