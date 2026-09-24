@@ -62,7 +62,7 @@ pub fn update_changelog(
     let section = changelog::render_changelog_section(
         &prepared.commits,
         &prepared.next_version,
-        config.changelog.strict,
+        &config.changelog,
     );
     let updated = changelog::prepend_to_file(&existing, &section);
     fs::write(&changelog_path, updated)?;

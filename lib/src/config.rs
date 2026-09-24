@@ -1,6 +1,6 @@
 //! `release.toml` config loading.
 
-use std::{fs, path::Path};
+use std::{collections::HashMap, fs, path::Path};
 
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -65,6 +65,8 @@ pub struct ChangelogConfig {
     /// If true, silently drops commits that don't pass strict Conventional Commits parsing.
     /// If false, unformatted commits are placed in an "Other Changes" section.
     pub strict: bool,
+    pub prefix_mapping: HashMap<String, String>,
+    pub exclude_prefixes: Vec<String>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -126,6 +128,8 @@ impl Default for ChangelogConfig {
             enabled: true,
             file: "CHANGELOG.md".to_owned(),
             strict: true,
+            prefix_mapping: HashMap::new(),
+            exclude_prefixes: vec![],
         }
     }
 }

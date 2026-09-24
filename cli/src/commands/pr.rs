@@ -38,7 +38,7 @@ pub fn release_pr(
     let body = changelog::render_changelog_section(
         &prepared.commits,
         &prepared.next_version,
-        config.changelog.strict,
+        &config.changelog,
     );
 
     // Push to a release bookmark so PR has something to merge into main.
