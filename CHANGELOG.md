@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.8.0] - 2026-09-24
 
+### ✨ Added
+
+- **(changelog)** add angular type prefixes to the default headers
+- **(changelog)** add `emoji_mapping` to allow users to choose the emojis used in changelog headers
+- **(changelog)** add `emoji_headers` option and `format_header` function
+- **(changelog)** add flexible commit mapping, exclusions, and strict mode
+- **(config)** add `strict` field to `ChangelogConfig` to catch non-conventional commits
+- **(main)** add no_publish to the Cli struct & pass into run
+
+### ♻️ Changed
+
+- **(changelog)** add const for keep a changelog header to reduce duplication
+
+### 🛠️ Fixed
+
+- `release.toml` remove testing additions
+- **(README)** correct workspace name for core
+- **(changelog)** add a space after **scope** changelog entries
+- **(release)** add a y/n prompt for when cargo.publish = false to warn users and remind them
+
+### 📚 Documentation
+
+- add logo to README
+
+## [0.8.0] - 2026-09-24
+
 ### 🚀 Added
 
 - **(changelog)** add angular type prefixes to the default headers
