@@ -26,4 +26,4 @@ publish = true
 name = "jj-release"
 path = "cli"
 publish = true
-# depends_on = [] # add names of members this depends on
+depends_on = ["jj_release_core"] # add names of members this depends on
