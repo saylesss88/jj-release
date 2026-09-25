@@ -138,6 +138,20 @@ inputs.jj-release.packages.${pkgs.stdenv.hostPlatform.system}.default
 paru -S jj-release
 ```
 
+### Fedora
+You can install `jj-release` from the unofficial COPR repository. This repository provides pre-compiled binaries built automatically for Fedora systems.
+
+First, enable the repository:
+```bash
+sudo dnf copr enable sayless88/jj-release
+```
+
+Then install the package:
+
+```bash
+sudo dnf install jj-release
+```
+
 ---
 
 ## Usage
