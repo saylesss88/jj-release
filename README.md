@@ -132,6 +132,12 @@ inputs.jj-release.packages.${pkgs.stdenv.hostPlatform.system}.default
 }
 ```
 
+### Arch Linux
+
+```bash
+paru -S jj-release
+```
+
 ---
 
 ## Usage
