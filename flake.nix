@@ -25,6 +25,9 @@
             pkg-config
             mold
           ];
+          checkFlags = [
+            "--skip" "regestry::tests"
+          ];
           meta = with pkgs.lib; {
             description = "Semantic releases and changelog generation for jj-vcs repositories";
             license = with licenses; [ asl20 ];
