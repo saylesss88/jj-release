@@ -20,7 +20,7 @@ doctest = false
 cargo_metadata = "0.23.1"
 dirs = "7.0.0"
 git-conventional = "1.1.0"
-jiff = { version = "0.2.37", features = ["std"], default-features = false }
+jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 regex = "1.13.1"
 semver = { version = "1.0.28", default-features = false }
 serde = { version = "1.0.229", default-features = false }
@@ -30,10 +30,7 @@ toml = { version = "1.1.6", features = [
   "parse",
   "serde",
 ], default-features = false }
-toml_edit = { version = "0.25.15", default-features = false, features = [
-  "parse",
-  "display",
-] }
+toml_edit = "0.25.15"
 ureq = { version = "3.4.2", features = [
   "_ring",
   "json",

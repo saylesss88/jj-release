@@ -17,14 +17,9 @@ path = "src/main.rs"
 [dependencies]
 jj_release_core = { path = "../lib", version = "0.8.0" }
 toml_edit = { version = "0.25.15", default-features = false }
-clap = { version = "4.6.7", default-features = false, features = [
-  "derive",
-  "help",
-  "std",
-  "usage",
-] }
+clap = { version = "4.6.7", default-features = false, features = ["derive", "help", "std", "usage"] }
 semver = { version = "1.0.28", default-features = false }
-jiff = { version = "0.2.37", features = ["std"] }
+jiff = { version = "0.2.37", default-features = false }
 
 [lints]
 workspace = true
