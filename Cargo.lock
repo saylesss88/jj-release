@@ -486,7 +486,6 @@ dependencies = [
  "jiff",
  "jj_release_core",
  "semver",
- "toml_edit",
 ]
 
 [[package]]
