@@ -24,6 +24,7 @@ clap = { version = "4.6.7", default-features = false, features = [
   "usage",
 ] }
 semver = { version = "1.0.28", default-features = false }
+jiff = { version = "0.2.37", features = ["std"] }
 
 [lints]
 workspace = true

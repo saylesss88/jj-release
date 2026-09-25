@@ -16,6 +16,7 @@ pub struct Config {
     pub changelog: ChangelogConfig,
     pub manifest_backend: String,
     pub workspace: Option<WorkspaceConfig>,
+    pub replacements: Vec<Replacement>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,7 +69,7 @@ pub struct ChangelogConfig {
     pub prefix_mapping: HashMap<String, String>,
     pub exclude_prefixes: Vec<String>,
     pub emoji_headers: bool,
-    pub emoji_mapping: std::collections::HashMap<String, String>,
+    pub emoji_mapping: HashMap<String, String>,
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -120,6 +121,7 @@ impl Default for Config {
             changelog: ChangelogConfig::default(),
             manifest_backend: "cargo".to_owned(),
             workspace: None,
+            replacements: vec![],
         }
     }
 }
@@ -160,6 +162,24 @@ impl Default for PublishConfig {
             semver_checks_upgrade_major: false,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct Replacement {
+    /// The file path to run the replacement in
+    pub file: String,
+    /// The regex search pattern
+    pub search: String,
+    /// The string to replace it with. Supports {{version}}, {{`crate_name`}}, and {{date}}
+    pub replace: String,
+    /// If true (default), the release will fail if the regex finds 0 matches or >1 match
+    #[serde(default = "default_true")]
+    pub exactly_one: bool,
+}
+
+const fn default_true() -> bool {
+    true
 }
 
 /// Loads release configuration from `<root>/release.toml`, falling back to
@@ -217,6 +237,11 @@ strict = true
 # [changelog.prefix_mapping]
 # security = "Security"
 # doc = "Documentation"
+
+# [[replacements]]
+# file = "README.md"
+# search = 'jj-release = ".*"'
+# replace = 'jj-release = "{{{{version}}}}"'
 
 manifest_backend = "{language}"
 "#
@@ -340,7 +365,7 @@ tag_prefix = "mylib-v"
     #[test]
     fn generate_release_toml_detects_workspace() {
         let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
+        fs::write(dir.path().join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
         let toml = generate_release_toml(dir.path());
         assert!(toml.contains("[workspace]"));
         assert!(toml.contains("enabled = true"));

@@ -3,9 +3,12 @@ use std::{
     path::Path,
 };
 
+use jiff::Zoned;
+
 use jj_release_core::{
     config::{Config, Versioning},
     errors::Result,
+    manifest,
     pipeline::{self, PreparedRelease, ReleaseContext},
     workspace,
 };
@@ -79,6 +82,30 @@ pub fn release_pipeline(
         info!("→ Bumping version to {}…", prepared.next_version);
         ctx.manifest.write_version(root, &prepared.next_version)?;
         pipeline::update_workspace_dependencies(root, config, &prepared.next_version)?;
+
+        // Get the crate name from the manifest
+        let crate_name = manifest::read_name(&root.join("Cargo.toml"))
+            .unwrap_or_else(|_| "unknown_crate".to_string());
+
+        // Format the current date
+        let date = Zoned::now().strftime("%Y-%m-%d").to_string();
+
+        // Stringify the version
+        let next_version_str = prepared.next_version.to_string();
+
+        // Execute the replacements using the correct variables
+        if !config.replacements.is_empty() {
+            info!("→ Applying text replacements…");
+            manifest::apply_replacements(
+                &config.replacements,
+                &crate_name,
+                &next_version_str,
+                &date,
+            )?;
+        }
+
+        // Bump flake.nix
+        manifest::bump_flake_nix(root, &next_version_str)?;
 
         let release_message = format!("chore: release {}", prepared.tag_name);
         info!("→ Creating commit {:?}…", release_message);
