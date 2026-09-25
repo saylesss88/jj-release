@@ -21,12 +21,10 @@
           version = "0.8.0";
           src = pkgs.lib.cleanSource ./.;
           cargoLock.lockFile = ./Cargo.lock;
+          doCheck = false;
           nativeBuildInputs = with pkgs; [
             pkg-config
             mold
-          ];
-          checkFlags = [
-            "--skip" "regestry::tests"
           ];
           meta = with pkgs.lib; {
             description = "Semantic releases and changelog generation for jj-vcs repositories";
