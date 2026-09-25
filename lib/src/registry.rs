@@ -55,7 +55,6 @@ pub fn latest_version_on_crates_io(name: &str) -> Result<Option<Version>> {
 }
 
 #[cfg(test)]
-#[ignore = "requires network access to crates.io"]
 mod tests {
     use super::*;
 
