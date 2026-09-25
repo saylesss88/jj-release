@@ -17,8 +17,7 @@ exclude = [".github", "tests/", "assets/"]
 
 [profile.release]
 opt-level = 3
-lto = true
-codegen-units = 1
+lto = "thin"
 strip = true
 debug = false
 
