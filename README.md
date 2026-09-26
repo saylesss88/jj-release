@@ -1,8 +1,8 @@
 # jj-release
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/saylesss88/jj-release/main/assets/jj-release.svg"
-       alt="jj-release: semantic releases & changelogs for jj" width="600">
+  <img src="https://raw.githubusercontent.com/saylesss88/jj-release/main/assets/jj-releases.svg"
+       alt="jj-release: semantic releases & changelogs for jj" width="300">
 </p>
 
 Automated semantic releases for [Jujutsu](https://github.com/jj-vcs/jj)
