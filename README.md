@@ -1,7 +1,7 @@
 # jj-release
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/saylesss88/jj-release/main/assets/jj-releases.svg"
+  <img src="https://raw.githubusercontent.com/saylesss88/jj-release/main/assets/jj-release-lockup.svg"
        alt="jj-release: semantic releases & changelogs for jj" width="400">
 </p>
 
