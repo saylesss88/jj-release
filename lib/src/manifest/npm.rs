@@ -35,14 +35,18 @@ impl ManifestBackend for NpmManifest {
     }
     fn write_version(&self, root: &Path, version: &Version) -> Result<()> {
         let path = root.join("package.json");
-        let raw = fs::read_to_string(&path)
-            .map_err(|e| ReleaseError::Message(format!("writing {}: {e}", path.display())))?;
-
-        let mut json: Value = serde_json::from_str(&raw)
-            .map_err(|e| ReleaseError::Message(format!("parsing {}: {e}", path.display())))?;
+        let (raw, mut json) = load_json(&path)?;
 
         json["version"] = Value::String(version.to_string());
-        fs::write(&path, serde_json::to_string_pretty(&json)?)
+
+        let mut out = serde_json::to_string_pretty(&json)?;
+
+        // npm writes a trailing newline; keep whatever the file had.
+        if raw.ends_with('\n') {
+            out.push('\n');
+        }
+
+        fs::write(&path, out)
             .map_err(|e| ReleaseError::Message(format!("writing {}: {e}", path.display())))?;
 
         Ok(())
