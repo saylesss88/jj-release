@@ -59,6 +59,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore = "requires network access to crates.io"]
     fn published_version_exists() {
         // anyhow 1.0.0 definitely exists on crates.io
         let v = Version::parse("1.0.0").unwrap();
@@ -66,12 +67,14 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires network access to crates.io"]
     fn unpublished_version_does_not_exist() {
         // This version should never exist
         let v = Version::parse("99.99.99").unwrap();
         assert!(!version_exists_on_crates_io("thiserror", &v).unwrap());
     }
     #[test]
+    #[ignore = "requires network access to crates.io"]
     fn gets_latest_version_from_crates_io() {
         // thiserror is stable and will always have a version
         let v = latest_version_on_crates_io("thiserror").unwrap();
@@ -80,6 +83,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires network access to crates.io"]
     fn returns_none_for_nonexistent_crate() {
         let v =
             latest_version_on_crates_io("this-crate-definitely-does-not-exist-xyzzy123").unwrap();
