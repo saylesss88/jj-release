@@ -152,6 +152,28 @@ Then install the package:
 sudo dnf install jj-release
 ```
 
+### Forge features
+
+All forge backends are enabled by default. To build a smaller binary with
+only the forges you use, disable the defaults and pick what you need:
+
+```sh
+cargo install jj-release --no-default-features --features github
+```
+
+| Feature   | Forge            | Requires                            |
+|-----------|------------------|-------------------------------------|
+| `github`  | GitHub           | [`gh`](https://cli.github.com) CLI  |
+| `gitlab`  | GitLab           | [`glab`](https://gitlab.com/gitlab-org/cli) CLI |
+| `gitea`   | Gitea, Codeberg  | API token                           |
+| `forgejo` | Forgejo          | API token (enables `gitea`)         |
+| `full`    | All of the above |                                     |
+
+If your config selects a forge that wasn't compiled in, `jj-release` exits
+with an error naming the feature to enable.
+
+Prebuilt packages (AUR, COPR, Nix) include every forge.
+
 ---
 
 ## Usage
