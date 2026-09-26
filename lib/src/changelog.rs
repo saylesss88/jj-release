@@ -37,10 +37,7 @@ pub fn render_changelog_section(
                 continue;
             }
             let breaking = conv.breaking();
-            let scope = conv
-                .scope()
-                .map(|s| format!("**({s})** "))
-                .unwrap_or_default();
+            let scope = conv.scope().map_or_default(|s| format!("**({s})** "));
             let summary = conv.description().to_owned();
 
             let entry = if breaking {

@@ -15,6 +15,12 @@ keywords = ["jujutsu", "release", "semantic-release", "changelog", "ci"]
 categories = ["command-line-utilities", "development-tools"]
 exclude = [".github", "tests/", "assets/"]
 
+[workspace.dependencies]
+ureq = { version = "3", default-features = false, features = [
+  "rustls",
+  "json",
+] }
+
 [profile.release]
 opt-level = 3
 lto = "thin"
