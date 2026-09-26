@@ -6,6 +6,7 @@ use std::{
 use jiff::Zoned;
 
 use jj_release_core::{
+    bump,
     config::{Config, Versioning},
     errors::Result,
     manifest,
@@ -96,16 +97,11 @@ pub fn release_pipeline(
         // Execute the replacements using the correct variables
         if !config.replacements.is_empty() {
             info!("→ Applying text replacements…");
-            manifest::apply_replacements(
-                &config.replacements,
-                &crate_name,
-                &next_version_str,
-                &date,
-            )?;
+            bump::apply_replacements(&config.replacements, &crate_name, &next_version_str, &date)?;
         }
 
         // Bump flake.nix
-        manifest::bump_flake_nix(root, &next_version_str)?;
+        bump::bump_flake_nix(root, &next_version_str)?;
 
         let release_message = format!("chore: release {}", prepared.tag_name);
         info!("→ Creating commit {:?}…", release_message);
