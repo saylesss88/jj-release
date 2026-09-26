@@ -38,6 +38,24 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
         }
     };
 
+    #[cfg(feature = "publish-aur")]
+    if let Some(aur_cfg) = &config.aur {
+        println!("AUR Publish: Enabled (package: {})", aur_cfg.package);
+
+        // Check if the system can actually build Arch packages
+        if !crate::detect::tool_available("makepkg") {
+            eprintln!("  ⚠️ Warning: 'makepkg' is missing from PATH.");
+            eprintln!(
+                "     AUR publish will fail on this machine unless it is run inside an Arch Linux environment or container."
+            );
+        }
+
+        // You can also check for git, though your main backend probably already does
+        if !crate::detect::tool_available("git") {
+            eprintln!("  ⚠️ Warning: 'git' is missing from PATH.");
+        }
+    }
+
     let tag = commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)
         .map_err(|e| e.to_string());
 

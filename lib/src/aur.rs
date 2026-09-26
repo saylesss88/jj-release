@@ -13,7 +13,7 @@
 //! clear error. Non-HTTP sources (local files, VCS sources) keep their
 //! existing checksums.
 
-use std::{fmt::Write as _, fs, path::Path, process::Command, thread, time::Duration};
+use std::{fmt::Write as _, fs, path::Path, process::Command};
 
 use blake2::Blake2b512;
 use regex::{NoExpand, Regex};
@@ -210,29 +210,24 @@ fn makepkg_srcinfo(dir: &Path) -> Option<String> {
 /// Download a source, retrying on 404. crates.io's static CDN can take a
 /// few seconds to serve a crate after `cargo publish`.
 fn download(url: &str) -> Result<Vec<u8>> {
-    const ATTEMPTS: u32 = 6;
+    let output = Command::new("curl")
+        .args([
+            "-sSLf",
+            "--retry",
+            "6",
+            "--retry-delay",
+            "10",
+            "--retry-all-errors",
+            url,
+        ])
+        .output()
+        .map_err(|e| msg(format!("spawning curl: {e}")))?;
 
-    for attempt in 1..=ATTEMPTS {
-        let output = Command::new("curl")
-            .args(["-sSLf", url])
-            .output()
-            .map_err(|e| msg(format!("spawning curl: {e}")))?;
-
-        if output.status.success() {
-            return Ok(output.stdout);
-        }
-
-        if attempt < ATTEMPTS {
-            println!("  ⏳ {url} not available yet, retrying ({attempt}/{ATTEMPTS})");
-            thread::sleep(Duration::from_secs(10));
-        } else {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(msg(format!("downloading {url} failed: {}", stderr.trim())));
-        }
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(msg(format!("downloading {url} failed: {}", stderr.trim())));
     }
-    Err(msg(format!(
-        "downloading {url}: gave up after {ATTEMPTS} attempts"
-    )))
+    Ok(output.stdout)
 }
 
 // -- Pure transformations (unit-tested) --

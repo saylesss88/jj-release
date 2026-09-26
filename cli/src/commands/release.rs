@@ -161,6 +161,14 @@ pub fn release_pipeline(
 }
 
 fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
+    #[cfg(feature = "publish-aur")]
+    if let Some(aur_cfg) = &config.aur {
+        println!(
+            "  - Push to AUR package '{}' (bumping to {})",
+            aur_cfg.package, prepared.next_version
+        );
+    }
+
     let is_independent = config
         .workspace
         .as_ref()
