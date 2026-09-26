@@ -23,8 +23,6 @@ use sha2::{Digest, Sha256};
 use crate::config::AurConfig;
 use crate::errors::{ReleaseError, Result};
 
-const USER_AGENT: &str = "jj-release (github.com/saylesss88/jj-release)";
-
 /// Checksum arrays makepkg supports that this module does not.
 const UNSUPPORTED_SUMS: &[&str] = &[
     "md5sums",
@@ -213,23 +211,23 @@ fn makepkg_srcinfo(dir: &Path) -> Option<String> {
 /// few seconds to serve a crate after `cargo publish`.
 fn download(url: &str) -> Result<Vec<u8>> {
     const ATTEMPTS: u32 = 6;
-    const LIMIT: u64 = 500 * 1024 * 1024;
 
     for attempt in 1..=ATTEMPTS {
-        match ureq::get(url).header("User-Agent", USER_AGENT).call() {
-            Ok(mut response) => {
-                return response
-                    .body_mut()
-                    .with_config()
-                    .limit(LIMIT)
-                    .read_to_vec()
-                    .map_err(|e| msg(format!("reading {url}: {e}")));
-            }
-            Err(ureq::Error::StatusCode(404)) if attempt < ATTEMPTS => {
-                println!("  ⏳ {url} not available yet, retrying ({attempt}/{ATTEMPTS})");
-                thread::sleep(Duration::from_secs(10));
-            }
-            Err(e) => return Err(msg(format!("downloading {url}: {e}"))),
+        let output = Command::new("curl")
+            .args(["-sSLf", url])
+            .output()
+            .map_err(|e| msg(format!("spawning curl: {e}")))?;
+
+        if output.status.success() {
+            return Ok(output.stdout);
+        }
+
+        if attempt < ATTEMPTS {
+            println!("  ⏳ {url} not available yet, retrying ({attempt}/{ATTEMPTS})");
+            thread::sleep(Duration::from_secs(10));
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(msg(format!("downloading {url} failed: {}", stderr.trim())));
         }
     }
     Err(msg(format!(

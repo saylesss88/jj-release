@@ -28,7 +28,7 @@ pub enum ReleaseError {
     SemVer(#[from] semver::Error),
 
     // Automatically absorbs ureq network errors
-    #[cfg(feature = "publish-aur")]
+    #[cfg(feature = "gitea")]
     #[error(transparent)]
     Ureq(#[from] ureq::Error),
 
