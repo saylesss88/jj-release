@@ -21,7 +21,6 @@
           version = "0.8.0";
           src = pkgs.lib.cleanSource ./.;
           cargoLock.lockFile = ./Cargo.lock;
-          doCheck = false;
           nativeBuildInputs = with pkgs; [
             pkg-config
             mold
