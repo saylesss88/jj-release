@@ -2,7 +2,7 @@
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/saylesss88/jj-release/main/assets/jj-releases.svg"
-       alt="jj-release: semantic releases & changelogs for jj" width="300">
+       alt="jj-release: semantic releases & changelogs for jj" width="400">
 </p>
 
 Automated semantic releases for [Jujutsu](https://github.com/jj-vcs/jj)
