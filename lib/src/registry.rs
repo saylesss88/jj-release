@@ -14,14 +14,7 @@ use crate::errors::{ReleaseError, Result};
 pub fn version_exists_on_crates_io(name: &str, version: &Version) -> Result<bool> {
     let latest_opt = latest_version_on_crates_io(name)?;
 
-    match latest_opt {
-        // If the crate exists, the target version "exists" if it is older
-        // than or equal to the latest published version.
-        Some(latest) => Ok(*version <= latest),
-
-        // Crate doesn't exist at all on crates.io yet
-        None => Ok(false),
-    }
+    latest_opt.map_or_else(|| Ok(false), |latest| Ok(*version <= latest))
 }
 
 /// Fetches the latest published version of a crate using local `cargo search`

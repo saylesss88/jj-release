@@ -34,7 +34,7 @@ toml = { version = "1.1.6", features = [
   "serde",
 ], default-features = false }
 toml_edit = "0.25.15"
-ureq = { workspace = true }
+ureq = { workspace = true, optional = true }
 which = "8.0.6"
 
 [dev-dependencies]
@@ -44,10 +44,10 @@ tempfile = { version = "3.27.0", default-features = false }
 workspace = true
 
 [features]
-default = ["github", "gitlab", "gitea"]
+default = ["github", "gitlab"]
 github = []
 gitlab = []
-gitea = []
+gitea = ["dep:ureq"]
 forgejo = ["gitea"]
-publish-aur = ["dep:blake2", "dep:tempfile", "dep:sha2"]
+publish-aur = ["dep:blake2", "dep:tempfile", "dep:sha2", "dep:ureq"]
 full = ["github", "gitlab", "gitea", "forgejo", "publish-aur"]

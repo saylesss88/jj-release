@@ -6,10 +6,14 @@ use std::{env, path::PathBuf, process};
 
 use clap::Parser;
 
+#[cfg(feature = "forgejo")]
+use jj_release_core::forge::ForgejoForge;
+#[cfg(feature = "gitea")]
+use jj_release_core::forge::GiteaForge;
 use jj_release_core::{config, detect, errors, jj, pipeline};
 use jj_release_core::{
     errors::{ReleaseError, Result},
-    forge::{ForgeBackend, ForgejoForge, GitHubForge, GitLabForge, GiteaForge, NoForge},
+    forge::{ForgeBackend, GitHubForge, GitLabForge, NoForge},
     jj::ShellBackend,
     manifest::{CargoManifest, GoManifest, ManifestBackend, NpmManifest},
     pipeline::ReleaseContext,
@@ -143,6 +147,7 @@ fn run() -> Result<(), errors::ReleaseError> {
 
             Box::new(GitLabForge)
         }
+        #[cfg(feature = "forgejo")]
         "forgejo" => {
             let (owner, repo) = detect::remote_url(&root)
                 .as_deref()
@@ -155,6 +160,7 @@ fn run() -> Result<(), errors::ReleaseError> {
                 repo,
             })
         }
+        #[cfg(feature = "gitea")]
         "gitea" => {
             let (owner, repo) = detect::remote_url(&root)
                 .as_deref()

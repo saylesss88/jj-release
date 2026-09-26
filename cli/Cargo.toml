@@ -29,7 +29,7 @@ jiff = { version = "0.2.37", default-features = false }
 workspace = true
 
 [features]
-default = ["github", "gitlab", "gitea"]
+default = ["github", "gitlab"]
 github = ["jj_release_core/github"]
 gitlab = ["jj_release_core/gitlab"]
 gitea = ["jj_release_core/gitea"]
