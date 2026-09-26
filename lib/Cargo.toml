@@ -17,6 +17,7 @@ path = "src/lib.rs"
 doctest = false
 
 [dependencies]
+blake2 = { version = "0.11.0", optional = true }
 cargo_metadata = "0.23.1"
 dirs = "7.0.0"
 git-conventional = "1.1.0"
@@ -25,6 +26,8 @@ regex = "1.13.1"
 semver = { version = "1.0.28", default-features = false }
 serde = { version = "1.0.229", default-features = false }
 serde_json = { version = "1.0.151", features = ["preserve_order"] }
+sha2 = { version = "0.11.0", optional = true }
+tempfile = { version = "3.27.0", optional = true }
 thiserror = { version = "2.0.21", default-features = false }
 toml = { version = "1.1.6", features = [
   "parse",
@@ -46,4 +49,5 @@ github = []
 gitlab = []
 gitea = []
 forgejo = ["gitea"]
-full = ["github", "gitlab", "gitea", "forgejo"]
+publish-aur = ["dep:blake2", "dep:tempfile", "dep:sha2"]
+full = ["github", "gitlab", "gitea", "forgejo", "publish-aur"]

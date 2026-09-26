@@ -140,6 +140,22 @@ pub fn release_pipeline(
         ctx.forge.create_release(&prepared.tag_name)?;
     }
 
+    #[cfg(feature = "publish-aur")]
+    if let Some(aur_cfg) = &config.aur {
+        if !quiet {
+            println!("📦 Pushing to AUR...");
+        }
+
+        // Assuming `new_version` is the semver::Version you calculated earlier in this function
+        if let Err(e) = jj_release_core::aur::publish(aur_cfg, &prepared.next_version, dry_run) {
+            // You can choose to return the error to halt, or just log it so
+            // an AUR failure doesn't roll back the whole crates.io release.
+            return Err(crate::errors::ReleaseError::Message(format!(
+                "AUR publish failed: {e}"
+            )));
+        }
+    }
+
     info!("✓ Released {}", prepared.tag_name);
     Ok(())
 }

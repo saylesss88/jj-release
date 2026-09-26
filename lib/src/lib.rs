@@ -27,6 +27,9 @@
 //! }
 //! ```
 
+#[cfg(feature = "publish-aur")]
+pub mod aur;
+
 pub mod bump;
 pub mod changelog;
 pub mod commits;

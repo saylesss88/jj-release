@@ -17,6 +17,26 @@ pub struct Config {
     pub manifest_backend: String,
     pub workspace: Option<WorkspaceConfig>,
     pub replacements: Vec<Replacement>,
+    pub aur: Option<AurConfig>,
+}
+
+/// `[aur]` section of the jj-release config.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AurConfig {
+    /// AUR package name, e.g. `jj-release`.
+    pub package: String,
+    /// Git remote to push to. Defaults to `ssh://aur@aur.archlinux.org/<package>.git`.
+    #[serde(default)]
+    pub repo: Option<String>,
+}
+
+impl AurConfig {
+    #[cfg(feature = "publish-aur")]
+    pub(crate) fn repo_url(&self) -> String {
+        self.repo
+            .clone()
+            .unwrap_or_else(|| format!("ssh://aur@aur.archlinux.org/{}.git", self.package))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -122,6 +142,7 @@ impl Default for Config {
             manifest_backend: "cargo".to_owned(),
             workspace: None,
             replacements: vec![],
+            aur: None,
         }
     }
 }
