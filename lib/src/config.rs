@@ -264,6 +264,9 @@ strict = true
 # search = 'jj-release = ".*"'
 # replace = 'jj-release = "{{{{version}}}}"'
 
+# [aur]
+# package = "my-package"
+
 manifest_backend = "{language}"
 "#
     );
