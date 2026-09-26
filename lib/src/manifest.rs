@@ -9,7 +9,6 @@ use toml_edit::{DocumentMut, Item, Value as TomlValue};
 
 use crate::config::Replacement;
 use crate::errors::{ReleaseError, Result};
-use crate::workspace::WorkspaceManifest;
 
 /// Manages reading and writing version information in project manifests.
 ///
@@ -50,6 +49,7 @@ pub trait ManifestBackend {
 pub struct CargoManifest;
 pub struct GoManifest;
 pub struct NpmManifest;
+pub struct WorkspaceManifest;
 
 impl ManifestBackend for CargoManifest {
     fn read_version(&self, root: &Path) -> Result<Version> {
@@ -91,13 +91,49 @@ impl ManifestBackend for NpmManifest {
     fn write_version(&self, root: &Path, version: &Version) -> Result<()> {
         let path = root.join("package.json");
         let raw = fs::read_to_string(&path)
-            .map_err(|e| ReleaseError::Message(format!("writing {}: {e}", path.display())))?;
+            .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", path.display())))?;
 
         let mut json: Value = serde_json::from_str(&raw)
             .map_err(|e| ReleaseError::Message(format!("parsing {}: {e}", path.display())))?;
 
         json["version"] = Value::String(version.to_string());
         fs::write(&path, serde_json::to_string_pretty(&json)?)
+            .map_err(|e| ReleaseError::Message(format!("writing {}: {e}", path.display())))?;
+
+        Ok(())
+    }
+}
+
+impl ManifestBackend for WorkspaceManifest {
+    fn read_version(&self, root: &Path) -> Result<Version> {
+        let path = root.join("Cargo.toml");
+        let raw = fs::read_to_string(&path)
+            .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", path.display())))?;
+        let doc: DocumentMut = raw
+            .parse()
+            .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", path.display())))?;
+        let version_str = doc
+            .get("workspace")
+            .and_then(|w| w.get("package"))
+            .and_then(|p| p.get("version"))
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ReleaseError::Message("missing [workspace.package].version".into()))?;
+        Version::parse(version_str)
+            .map_err(|e| ReleaseError::Message(format!("invalid semver {version_str:?}: {e}")))
+    }
+
+    fn write_version(&self, root: &Path, version: &Version) -> Result<()> {
+        let path = root.join("Cargo.toml");
+
+        let raw = fs::read_to_string(&path)
+            .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", path.display())))?;
+
+        let mut doc: DocumentMut = raw
+            .parse()
+            .map_err(|e| ReleaseError::Message(format!("parsing {}: {e}", path.display())))?;
+
+        doc["workspace"]["package"]["version"] = toml_edit::value(version.to_string());
+        fs::write(&path, doc.to_string())
             .map_err(|e| ReleaseError::Message(format!("writing {}: {e}", path.display())))?;
 
         Ok(())
