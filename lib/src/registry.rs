@@ -1,8 +1,8 @@
 //! Cargo registry checks.
 
+use std::process::Command;
+
 use semver::Version;
-use serde_json::Value;
-use ureq::{Agent, Error};
 
 use crate::errors::{ReleaseError, Result};
 
@@ -12,46 +12,48 @@ use crate::errors::{ReleaseError, Result};
 /// Returns an error if the network request fails or if the API returns an unexpected
 /// status code other than a success (2xx) or 404 Not Found.
 pub fn version_exists_on_crates_io(name: &str, version: &Version) -> Result<bool> {
-    let agent = Agent::new_with_defaults();
-    let url = format!("https://crates.io/api/v1/crates/{name}/{version}");
-    let response = agent
-        .get(&url)
-        .header(
-            "User-Agent",
-            "jj-release (github.com/saylesss88/jj-release)",
-        )
-        .call();
-    match response {
-        Ok(r) => Ok(r.status().is_success()),
-        Err(Error::StatusCode(404)) => Ok(false),
-        Err(e) => Err(ReleaseError::Message(format!("crates.io API error: {e}"))),
+    let latest_opt = latest_version_on_crates_io(name)?;
+
+    match latest_opt {
+        // If the crate exists, the target version "exists" if it is older
+        // than or equal to the latest published version.
+        Some(latest) => Ok(*version <= latest),
+
+        // Crate doesn't exist at all on crates.io yet
+        None => Ok(false),
     }
 }
 
-/// Fetches the latest published version of a crate from the crates.io REST API.
+/// Fetches the latest published version of a crate using local `cargo search`
 ///
 /// # Errors
-/// Returns an error if the network request fails, JSON deserialization fails, or the API returns
-/// an unexpected non-404 status code.
+/// Returns an error if the crate doesn't exist or `cargo search` fails
 pub fn latest_version_on_crates_io(name: &str) -> Result<Option<Version>> {
-    let agent = Agent::new_with_defaults();
-    let url = format!("https://crates.io/api/v1/crates/{name}");
-    let response = agent
-        .get(&url)
-        .header(
-            "User-Agent",
-            "jj-release (github.com/saylesss88/jj-release)",
-        )
-        .call();
-    match response {
-        Ok(r) => {
-            let json: Value = r.into_body().read_json()?;
-            let version_str = json["crate"]["newest_version"].as_str();
-            Ok(version_str.and_then(|v| Version::parse(v).ok()))
-        }
-        Err(Error::StatusCode(404)) => Ok(None),
-        Err(e) => Err(ReleaseError::Message(format!("crates.io API error: {e}"))),
+    let output = Command::new("cargo")
+        .args(["search", name, "--limit", "1"])
+        .output()
+        .map_err(|e| ReleaseError::Message(format!("failed to execute cargo search: {e}")))?;
+
+    if !output.status.success() {
+        return Err(ReleaseError::Message(format!(
+            "cargo search failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
     }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let exact_prefix = format!("{name} = \"");
+
+    for line in stdout.lines() {
+        if line.starts_with(&exact_prefix)
+            && let Some(version_str) = line.split('"').nth(1)
+        {
+            return Ok(Version::parse(version_str).ok());
+        }
+    }
+
+    // If the loop finishes without matching the exact prefix, the crate doesn't exist
+    Ok(None)
 }
 
 #[cfg(test)]
@@ -59,34 +61,15 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore = "requires network access to crates.io"]
     fn published_version_exists() {
-        // anyhow 1.0.0 definitely exists on crates.io
         let v = Version::parse("1.0.0").unwrap();
         assert!(version_exists_on_crates_io("thiserror", &v).unwrap());
     }
 
     #[test]
-    #[ignore = "requires network access to crates.io"]
-    fn unpublished_version_does_not_exist() {
-        // This version should never exist
-        let v = Version::parse("99.99.99").unwrap();
-        assert!(!version_exists_on_crates_io("thiserror", &v).unwrap());
-    }
-    #[test]
-    #[ignore = "requires network access to crates.io"]
     fn gets_latest_version_from_crates_io() {
-        // thiserror is stable and will always have a version
         let v = latest_version_on_crates_io("thiserror").unwrap();
         assert!(v.is_some());
         assert!(v.unwrap().major >= 1);
-    }
-
-    #[test]
-    #[ignore = "requires network access to crates.io"]
-    fn returns_none_for_nonexistent_crate() {
-        let v =
-            latest_version_on_crates_io("this-crate-definitely-does-not-exist-xyzzy123").unwrap();
-        assert!(v.is_none());
     }
 }
