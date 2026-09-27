@@ -4,11 +4,11 @@ use std::{collections::HashMap, path::Path};
 
 use semver::Version;
 
-use crate::errors::{ReleaseError, Result};
+use crate::errors::Result;
 use crate::{
     PreparedRelease,
     commits::{self, BumpKind},
-    config::{Config, Versioning},
+    config::{Config, Versioning, WorkspaceConfig},
     detect,
     jj::JjBackend,
     manifest::{self, ManifestBackend},
@@ -52,17 +52,11 @@ pub fn prepare_release(
         return Ok(None);
     }
 
-    let current_version = manifest
-        .read_version(root)
-        .map_err(|_| ReleaseError::Message("reading current version".into()))?;
+    let current_version = manifest.read_version(root)?;
 
     // Use crates.io version as baseline if available, more reliable than manifest.
     let baseline_version = if config.publish.cargo && !is_first_release {
-        let cargo_toml = root.join("Cargo.toml");
-        manifest::read_name(&cargo_toml)
-            .ok()
-            .and_then(|name| registry::latest_version_on_crates_io(&name).ok().flatten())
-            .unwrap_or_else(|| current_version.clone())
+        crates_io_version(root).unwrap_or_else(|| current_version.clone())
     } else {
         current_version.clone()
     };
@@ -70,67 +64,13 @@ pub fn prepare_release(
     let commits = backend.log_commits(&format!("{since}..@"))?;
 
     let mut bump = commits::resolve_bump(config.bump.force.as_ref(), &commits)?;
-
-    let member_bumps = config.workspace.as_ref().map_or_else(
-        || None,
-        |ws| {
-            if ws.enabled && matches!(ws.versioning, Versioning::Independent) {
-                let versions = workspace::member_versions(root).ok();
-                let bumps = workspace::member_bumps(
-                    backend,
-                    &ws.members,
-                    &since,
-                    config.bump.force.as_ref(),
-                    &config.release.tag_prefix,
-                )
-                .ok();
-
-                if let (Some(versions), Some(bumps)) = (versions, bumps) {
-                    let mut map = HashMap::new();
-                    for member in &ws.members {
-                        let current = versions
-                            .get(&member.name)
-                            .cloned()
-                            .unwrap_or_else(|| Version::new(0, 0, 0));
-                        let member_bump =
-                            bumps.get(&member.name).copied().unwrap_or(BumpKind::None);
-                        let next = if is_first_release {
-                            current.clone()
-                        } else {
-                            commits::apply_bump(&current, member_bump)
-                        };
-                        map.insert(member.name.clone(), (current, next));
-                    }
-                    Some(map)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        },
-    );
-
-    // Upgrade bump to Major if cargo-semver-checks detects breaking changes.
-    if !is_first_release
-        && config.publish.cargo
-        && config.publish.semver_checks
-        && detect::tool_available("cargo-semver-checks")
-    {
-        eprintln!("→  Running cargo-semver-checks...");
-
-        let is_stable = current_version.major >= 1;
-        let has_breaking = publish::run_semver_checks(root)?;
-        if has_breaking
-            && bump < BumpKind::Major
-            && (is_stable || config.publish.semver_checks_upgrade_major)
-        {
-            eprintln!(
-                "warning: cargo-semver-checks detected API breaking changes, upgrading bump to Major"
-            );
-            bump = BumpKind::Major;
-        }
+    if !is_first_release {
+        bump = upgrade_for_breaking_changes(config, root, &current_version, bump)?;
     }
+
+    let member_bumps = independent_workspace(config)
+        .map(|ws| plan_member_versions(backend, config, ws, root, &since, is_first_release))
+        .transpose()?;
 
     // Compute next_version. If it's the first release, freeze the current version.
     let next_version = if is_first_release {
@@ -151,6 +91,85 @@ pub fn prepare_release(
         bump,
         member_bumps,
     }))
+}
+
+/// The workspace config, if independent versioning is enabled.
+#[must_use]
+pub fn independent_workspace(config: &Config) -> Option<&WorkspaceConfig> {
+    config
+        .workspace
+        .as_ref()
+        .filter(|ws| ws.enabled && matches!(ws.versioning, Versioning::Independent))
+}
+
+/// Latest published version on crates.io, if the crate is published and reachable.
+fn crates_io_version(root: &Path) -> Option<Version> {
+    let name = manifest::read_name(&root.join("Cargo.toml")).ok()?;
+    registry::latest_version_on_crates_io(&name).ok().flatten()
+}
+
+/// Upgrade to a major bump if cargo-semver-checks finds breaking API changes.
+fn upgrade_for_breaking_changes(
+    config: &Config,
+    root: &Path,
+    current: &Version,
+    bump: BumpKind,
+) -> Result<BumpKind> {
+    let enabled = config.publish.cargo
+        && config.publish.semver_checks
+        && detect::tool_available("cargo-semver-checks");
+    // Pre-1.0 crates only upgrade when explicitly allowed.
+    let may_upgrade = current.major >= 1 || config.publish.semver_checks_upgrade_major;
+
+    if !enabled || !may_upgrade || bump >= BumpKind::Major {
+        return Ok(bump);
+    }
+
+    eprintln!("→  Running cargo-semver-checks...");
+    if publish::run_semver_checks(root)? {
+        eprintln!(
+            "warning: cargo-semver-checks detected API breaking changes, upgrading bump to Major"
+        );
+        return Ok(BumpKind::Major);
+    }
+    Ok(bump)
+}
+
+/// Current and next version for each member of an independently versioned workspace.
+fn plan_member_versions(
+    backend: &dyn JjBackend,
+    config: &Config,
+    ws: &WorkspaceConfig,
+    root: &Path,
+    since: &str,
+    is_first_release: bool,
+) -> Result<HashMap<String, (Version, Version)>> {
+    let versions = workspace::member_versions(root)?;
+    let bumps = workspace::member_bumps(
+        backend,
+        &ws.members,
+        since,
+        config.bump.force.as_ref(),
+        &config.release.tag_prefix,
+    )?;
+
+    Ok(ws
+        .members
+        .iter()
+        .map(|member| {
+            let current = versions
+                .get(&member.name)
+                .cloned()
+                .unwrap_or_else(|| Version::new(0, 0, 0));
+            let next = if is_first_release {
+                current.clone()
+            } else {
+                let bump = bumps.get(&member.name).copied().unwrap_or(BumpKind::None);
+                commits::apply_bump(&current, bump)
+            };
+            (member.name.clone(), (current, next))
+        })
+        .collect())
 }
 
 pub(super) fn resolve_since(backend: &dyn JjBackend, config: &Config) -> Result<String> {

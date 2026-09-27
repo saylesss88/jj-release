@@ -31,10 +31,7 @@ pub fn release_pipeline(
         return Ok(());
     };
 
-    let is_independent = config
-        .workspace
-        .as_ref()
-        .is_some_and(|ws| ws.enabled && matches!(ws.versioning, Versioning::Independent));
+    let is_independent = pipeline::independent_workspace(config).is_some();
 
     print_versions(&prepared, is_independent, quiet);
 
