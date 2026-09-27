@@ -21,7 +21,7 @@ pub type Check = (&'static str, std::result::Result<String, String>);
 /// Whether any distro target is configured (and compiled in).
 #[must_use]
 #[allow(unused_mut, unused_variables)] // only used by some feature combinations
-pub fn any_configured(config: &Config) -> bool {
+pub const fn any_configured(config: &Config) -> bool {
     let mut any = false;
     #[cfg(feature = "publish-aur")]
     {

@@ -20,8 +20,9 @@ use regex::{NoExpand, Regex};
 use semver::Version;
 use sha2::{Digest, Sha256};
 
-use super::download;
+use super::{Check, download};
 use crate::config::AurConfig;
+use crate::detect;
 use crate::errors::{ReleaseError, Result};
 
 /// Checksum arrays makepkg supports that this module does not.
@@ -346,8 +347,8 @@ fn bump_pkgbuild(
 /// Pre-flight checks: tools, the package's current layout, and SSH access.
 #[must_use]
 pub fn preflight(cfg: &AurConfig) -> Vec<Check> {
-    let tools = require_tools(&["git", "curl"]).map(|found| {
-        if tool_available("makepkg") {
+    let tools = super::require_tools(&["git", "curl"]).map(|found| {
+        if detect::tool_available("makepkg") {
             format!("{found}, makepkg (regenerates .SRCINFO)")
         } else {
             format!("{found} (no makepkg: .SRCINFO edited in place)")
@@ -369,7 +370,8 @@ fn check_package(cfg: &AurConfig) -> std::result::Result<String, String> {
         "https://aur.archlinux.org/cgit/aur.git/plain/.SRCINFO?h={}",
         cfg.package
     );
-    let bytes = fetch(&url).map_err(|e| format!("{} not found on the AUR ({e})", cfg.package))?;
+    let bytes =
+        super::fetch(&url).map_err(|e| format!("{} not found on the AUR ({e})", cfg.package))?;
     let srcinfo = String::from_utf8_lossy(&bytes);
 
     let version = srcinfo_values(&srcinfo, "pkgver")
