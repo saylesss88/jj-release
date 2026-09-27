@@ -99,6 +99,9 @@ run the release pipeline.
 ## Installation
 
 ```sh
+# Latest changes from source
+cargo install --git https://github.com/saylesss88/jj-release.git
+# From crates.io
 cargo install jj-release
 ```
 

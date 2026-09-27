@@ -284,6 +284,16 @@ strict = true
 # [aur]
 # package = "my-package"
 
+# [copr]
+# Required: your COPR project as owner/project
+# project = "your-username/my-cli-tool"
+
+# Required: path to the spec, relative to the repo root
+# spec = "packaging/rust-my-cli-tool.spec"
+
+# Optional: wait for the COPR build to finish (default: false)
+# wait = true
+
 manifest_backend = "{language}"
 "#
     );
