@@ -20,6 +20,7 @@ use regex::{NoExpand, Regex};
 use semver::Version;
 use sha2::{Digest, Sha256};
 
+use super::download;
 use crate::config::AurConfig;
 use crate::errors::{ReleaseError, Result};
 
@@ -205,29 +206,6 @@ fn makepkg_srcinfo(dir: &Path) -> Option<String> {
     out.status
         .success()
         .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
-}
-
-/// Download a source, retrying on 404. crates.io's static CDN can take a
-/// few seconds to serve a crate after `cargo publish`.
-fn download(url: &str) -> Result<Vec<u8>> {
-    let output = Command::new("curl")
-        .args([
-            "-sSLf",
-            "--retry",
-            "6",
-            "--retry-delay",
-            "10",
-            "--retry-all-errors",
-            url,
-        ])
-        .output()
-        .map_err(|e| msg(format!("spawning curl: {e}")))?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(msg(format!("downloading {url} failed: {}", stderr.trim())));
-    }
-    Ok(output.stdout)
 }
 
 // -- Pure transformations (unit-tested) --

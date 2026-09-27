@@ -147,13 +147,20 @@ pub fn release_pipeline(
         }
 
         // Assuming `new_version` is the semver::Version you calculated earlier in this function
-        if let Err(e) = jj_release_core::aur::publish(aur_cfg, &prepared.next_version, dry_run) {
+        if let Err(e) =
+            jj_release_core::distro::aur::publish(aur_cfg, &prepared.next_version, dry_run)
+        {
             // You can choose to return the error to halt, or just log it so
             // an AUR failure doesn't roll back the whole crates.io release.
             return Err(crate::errors::ReleaseError::Message(format!(
                 "AUR publish failed: {e}"
             )));
         }
+    }
+
+    #[cfg(feature = "publish-copr")]
+    if let Some(copr) = &config.copr {
+        jj_release_core::distro::copr::publish(copr, root, &prepared.next_version, dry_run)?;
     }
 
     info!("✓ Released {}", prepared.tag_name);

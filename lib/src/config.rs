@@ -1,6 +1,10 @@
 //! `release.toml` config loading.
 
-use std::{collections::HashMap, fs, path::Path};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -18,6 +22,7 @@ pub struct Config {
     pub workspace: Option<WorkspaceConfig>,
     pub replacements: Vec<Replacement>,
     pub aur: Option<AurConfig>,
+    pub copr: Option<CoprConfig>,
 }
 
 /// `[aur]` section of the jj-release config.
@@ -37,6 +42,17 @@ impl AurConfig {
             .clone()
             .unwrap_or_else(|| format!("ssh://aur@aur.archlinux.org/{}.git", self.package))
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoprConfig {
+    /// COPR project as `owner/project`, e.g. `saylesss88/jj-release`.
+    pub project: String,
+    /// Path to the RPM spec, relative to the repo root.
+    pub spec: PathBuf,
+    /// Wait for the COPR build to finish instead of returning right away.
+    #[serde(default)]
+    pub wait: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,6 +159,7 @@ impl Default for Config {
             workspace: None,
             replacements: vec![],
             aur: None,
+            copr: None,
         }
     }
 }

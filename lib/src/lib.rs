@@ -27,14 +27,12 @@
 //! }
 //! ```
 
-#[cfg(feature = "publish-aur")]
-pub mod aur;
-
 pub mod bump;
 pub mod changelog;
 pub mod commits;
 pub mod config;
 pub mod detect;
+pub mod distro;
 pub mod errors;
 pub mod forge;
 pub mod jj;
