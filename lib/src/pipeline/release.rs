@@ -6,6 +6,7 @@ use toml_edit::DocumentMut;
 use crate::{
     changelog,
     config::{Config, Versioning},
+    distro,
     errors::ReleaseError,
     errors::Result,
     manifest,
@@ -34,10 +35,22 @@ pub fn run_preflight_checks(
                 ctx.publisher.check(&root.join(&member.path))?;
             }
         }
-    } else {
-        ctx.publisher.check(root)?;
+        return Ok(());
     }
-    Ok(())
+
+    if config.publish.cargo {
+        let failures: Vec<String> = distro::preflight(config, root)
+            .into_iter()
+            .filter_map(|(label, result)| result.err().map(|e| format!("  {label}: {e}")))
+            .collect();
+        if !failures.is_empty() {
+            return Err(ReleaseError::Message(format!(
+                "distro pre-flight checks failed:\n{}",
+                failures.join("\n")
+            )));
+        }
+    }
+    ctx.publisher.check(root)
 }
 
 /// Prepends a new release section to the project's changelog.
