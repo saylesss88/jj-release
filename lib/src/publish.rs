@@ -106,15 +106,21 @@ impl PublishBackend for NpmPublish {
 /// # Errors
 /// Returns an error if the process fails to spawn or if `cargo-semver-checks`
 pub fn run_semver_checks(root: &Path) -> Result<bool> {
+    let installed = Command::new("cargo")
+        .args(["semver-checks", "--version"])
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !installed {
+        return Err(ReleaseError::Message(
+            "cargo-semver-checks is not installed (cargo install cargo-semver-checks)".into(),
+        ));
+    }
+
     let output = Command::new("cargo")
         .args(["semver-checks"])
         .current_dir(root)
         .output()
-        .map_err(|_| {
-            ReleaseError::Message(
-                "spawning cargo semver-checks, is cargo-semver-checks installed?".into(),
-            )
-        })?;
+        .map_err(|e| ReleaseError::Message(format!("spawning cargo semver-checks: {e}")))?;
     // Exit code 0 = no breaking changes, non-zero = breaking changes detected
     Ok(!output.status.success())
 }
