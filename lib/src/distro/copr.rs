@@ -19,7 +19,7 @@ use std::{
 use regex::{Captures, Regex};
 use semver::Version;
 
-use super::download;
+use super::{Check, download, require_tools};
 use crate::config::CoprConfig;
 use crate::errors::{ReleaseError, Result};
 
@@ -188,6 +188,60 @@ fn set_spec_version(spec: &str, new: &str) -> Result<String> {
     Ok(re
         .replace(spec, |c: &Captures<'_>| format!("{}{new}", &c[1]))
         .into_owned())
+}
+
+/// Pre-flight checks: tools, the spec, rpm macros, and COPR authentication.
+#[must_use]
+pub fn preflight(cfg: &CoprConfig, root: &Path) -> Vec<Check> {
+    vec![
+        (
+            "COPR tools",
+            require_tools(&["curl", "tar", "xz", "cargo", "rpmbuild", "copr-cli"]),
+        ),
+        ("COPR spec", check_spec(cfg, root)),
+        ("COPR rpm macros", check_rpm_macros()),
+        ("COPR auth", check_auth()),
+    ]
+}
+
+fn check_spec(cfg: &CoprConfig, root: &Path) -> std::result::Result<String, String> {
+    let spec = read(&root.join(&cfg.spec)).map_err(|e| e.to_string())?;
+    let name = spec_crate_name(&spec).map_err(|e| e.to_string())?;
+    check_vendor_source(&spec).map_err(|e| e.to_string())?;
+    // Only checking that a Version: line exists; the result is discarded.
+    set_spec_version(&spec, "0.0.0").map_err(|e| e.to_string())?;
+    Ok(format!("{} (crate {name})", cfg.spec.display()))
+}
+
+/// `%{crates_source}` comes from cargo-rpm-macros; without it rpmbuild
+/// can't resolve Source0.
+fn check_rpm_macros() -> std::result::Result<String, String> {
+    let output = Command::new("rpm")
+        .args(["--eval", "%{?crates_source:yes}"])
+        .output()
+        .map_err(|e| format!("spawning rpm: {e}"))?;
+    if String::from_utf8_lossy(&output.stdout).trim() == "yes" {
+        Ok("cargo-rpm-macros available".to_owned())
+    } else {
+        Err("cargo-rpm-macros not installed (sudo dnf install cargo-rpm-macros)".to_owned())
+    }
+}
+
+/// `copr-cli whoami` verifies the API token in ~/.config/copr.
+fn check_auth() -> std::result::Result<String, String> {
+    let output = Command::new("copr-cli")
+        .arg("whoami")
+        .output()
+        .map_err(|e| format!("spawning copr-cli: {e}"))?;
+    if output.status.success() {
+        let user = String::from_utf8_lossy(&output.stdout);
+        Ok(format!("authenticated as {}", user.trim()))
+    } else {
+        Err(format!(
+            "copr-cli not authenticated (see copr.fedorainfracloud.org/api): {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))
+    }
 }
 
 #[cfg(test)]

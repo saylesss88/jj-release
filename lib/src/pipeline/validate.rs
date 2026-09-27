@@ -8,10 +8,10 @@
 use std::{env, path::Path};
 
 use crate::{
-    Config, PublishBackend, ReleaseContext, Tag, commits, detect,
+    Config, PublishBackend, ReleaseContext, Tag, commits, detect, distro,
     errors::{ReleaseError, Result},
     manifest,
-    pipeline::prepare,
+    pipeline::{self, prepare},
     publish, registry,
 };
 
@@ -37,6 +37,24 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
             failed += 1;
         }
     };
+
+    if distro::any_configured(config) {
+        if !config.publish.cargo {
+            run_check(
+                "distro packages",
+                Ok("skipped (publish.cargo = false)".to_owned()),
+            );
+        } else if pipeline::independent_workspace(config).is_some() {
+            run_check(
+                "distro packages",
+                Ok("skipped (independent versioning)".to_owned()),
+            );
+        } else {
+            for (label, result) in distro::preflight(config, root) {
+                run_check(label, result);
+            }
+        }
+    }
 
     let tag = commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)
         .map_err(|e| e.to_string());

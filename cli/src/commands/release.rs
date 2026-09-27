@@ -8,7 +8,8 @@ use semver::Version;
 
 use jj_release_core::{
     bump,
-    config::{Config, Versioning},
+    config::{Config, Versioning, WorkspaceConfig, WorkspaceMember},
+    distro,
     errors::Result,
     manifest,
     pipeline::{self, PreparedRelease, ReleaseContext},
@@ -191,19 +192,7 @@ fn update_distro_packages(config: &Config, root: &Path, version: &Version, quiet
 }
 
 fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
-    #[cfg(feature = "publish-aur")]
-    if let Some(aur_cfg) = &config.aur {
-        println!(
-            "  - Push to AUR package '{}' (bumping to {})",
-            aur_cfg.package, prepared.next_version
-        );
-    }
-
-    let is_independent = config
-        .workspace
-        .as_ref()
-        .is_some_and(|ws| ws.enabled && matches!(ws.versioning, Versioning::Independent));
-
+    let is_independent = pipeline::independent_workspace(config).is_some();
     if is_independent {
         println!("[dry-run] Independent workspace release:");
     } else {
@@ -212,76 +201,100 @@ fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
             prepared.next_version, prepared.tag_name
         );
     }
+    print_publish_plan(prepared, config)?;
+    if !is_independent {
+        print_distro_plan(prepared, config);
+    }
+    Ok(())
+}
 
+fn print_distro_plan(prepared: &PreparedRelease, config: &Config) {
+    let plan = distro::describe(config, &prepared.next_version);
+    if plan.is_empty() {
+        return;
+    }
+    if !config.publish.cargo {
+        println!("[dry-run] Distro packages: skipped (publish.cargo = false)");
+        return;
+    }
+    println!("[dry-run] Would update distro packages:");
+    for line in plan {
+        println!("  - {line}");
+    }
+}
+
+fn print_publish_plan(prepared: &PreparedRelease, config: &Config) -> Result<()> {
     if !config.publish.cargo {
         println!("[dry-run] Publishing: disabled (publish.cargo = false)");
         return Ok(());
     }
-    if let Some(ws) = &config.workspace
-        && ws.enabled
-    {
-        let ordered = workspace::ordered_members(&ws.members)?;
-        println!("[dry-run] Would publish in order:");
-        match ws.versioning {
-            Versioning::Independent => {
-                for member in ordered {
-                    if let Some(ref mb) = prepared.member_bumps
-                        && let Some((current, next)) = mb.get(&member.name)
-                    {
-                        if current == next {
-                            println!(
-                                "  - {} ({}) {} (no changes, skipping)",
-                                member.name, member.path, current
-                            );
-                        } else {
-                            let tag = workspace::member_tag_name(
-                                member,
-                                next,
-                                &config.release.tag_prefix,
-                            );
-                            // Find which siblings also bumped and will have deps updated
-                            let updated_deps: Vec<&str> = ws
-                                .members
-                                .iter()
-                                .filter(|other| other.name != member.name)
-                                .filter(|other| mb.get(&other.name).is_some_and(|(c, n)| c != n))
-                                .map(|other| other.name.as_str())
-                                .collect();
 
-                            if updated_deps.is_empty() {
-                                println!(
-                                    "  - {} ({}) {} → {} (tag: {})",
-                                    member.name, member.path, current, next, tag
-                                );
-                            } else {
-                                println!(
-                                    "  - {} ({}) {} → {} (tag: {}, deps updated: {})",
-                                    member.name,
-                                    member.path,
-                                    current,
-                                    next,
-                                    tag,
-                                    updated_deps.join(", ")
-                                );
-                            }
-                        }
-                        continue;
-                    }
-                    println!("  - {} ({})", member.name, member.path);
-                }
-            }
-            Versioning::Unified => {
-                for member in ordered {
-                    println!(
-                        "  - {} ({}) → {} (deps updated)",
-                        member.name, member.path, prepared.next_version
-                    );
-                }
-            }
-        }
+    let Some(ws) = config.workspace.as_ref().filter(|ws| ws.enabled) else {
+        println!("[dry-run] Would publish from root");
         return Ok(());
+    };
+
+    println!("[dry-run] Would publish in order:");
+    for member in workspace::ordered_members(&ws.members)? {
+        match ws.versioning {
+            Versioning::Independent => print_independent_member(member, ws, prepared, config),
+            Versioning::Unified => println!(
+                "  - {} ({}) → {} (deps updated)",
+                member.name, member.path, prepared.next_version
+            ),
+        }
+    }
+    Ok(())
+}
+
+fn print_independent_member(
+    member: &WorkspaceMember,
+    ws: &WorkspaceConfig,
+    prepared: &PreparedRelease,
+    config: &Config,
+) {
+    let Some((current, next)) = prepared
+        .member_bumps
+        .as_ref()
+        .and_then(|mb| mb.get(&member.name))
+    else {
+        println!("  - {} ({})", member.name, member.path);
+        return;
+    };
+
+    if current == next {
+        println!(
+            "  - {} ({}) {} (no changes, skipping)",
+            member.name, member.path, current
+        );
+        return;
     }
 
-    println!("[dry-run] Would publish from root");
-    Ok(())
+    let tag = workspace::member_tag_name(member, next, &config.release.tag_prefix);
+
+    // Siblings that also bump, so this member's deps on them get updated.
+    let updated_deps: Vec<&str> = ws
+        .members
+        .iter()
+        .filter(|other| other.name != member.name)
+        .filter(|other| {
+            prepared
+                .member_bumps
+                .as_ref()
+                .and_then(|mb| mb.get(&other.name))
+                .is_some_and(|(c, n)| c != n)
+        })
+        .map(|other| other.name.as_str())
+        .collect();
+
+    let deps = if updated_deps.is_empty() {
+        String::new()
+    } else {
+        format!(", deps updated: {}", updated_deps.join(", "))
+    };
+
+    println!(
+        "  - {} ({}) {} → {} (tag: {tag}{deps})",
+        member.name, member.path, current, next
+    );
 }

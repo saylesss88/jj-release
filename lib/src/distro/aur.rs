@@ -343,6 +343,67 @@ fn bump_pkgbuild(
     Ok(out)
 }
 
+/// Pre-flight checks: tools, the package's current layout, and SSH access.
+#[must_use]
+pub fn preflight(cfg: &AurConfig) -> Vec<Check> {
+    let tools = require_tools(&["git", "curl"]).map(|found| {
+        if tool_available("makepkg") {
+            format!("{found}, makepkg (regenerates .SRCINFO)")
+        } else {
+            format!("{found} (no makepkg: .SRCINFO edited in place)")
+        }
+    });
+    vec![
+        ("AUR tools", tools),
+        ("AUR package", check_package(cfg)),
+        ("AUR SSH access", check_access(cfg)),
+    ]
+}
+
+/// Fetch the current .SRCINFO over HTTPS and make sure we can handle it.
+fn check_package(cfg: &AurConfig) -> std::result::Result<String, String> {
+    if cfg.repo.is_some() {
+        return Ok("custom repo, layout checked at publish time".to_owned());
+    }
+    let url = format!(
+        "https://aur.archlinux.org/cgit/aur.git/plain/.SRCINFO?h={}",
+        cfg.package
+    );
+    let bytes = fetch(&url).map_err(|e| format!("{} not found on the AUR ({e})", cfg.package))?;
+    let srcinfo = String::from_utf8_lossy(&bytes);
+
+    let version = srcinfo_values(&srcinfo, "pkgver")
+        .first()
+        .copied()
+        .ok_or_else(|| "no pkgver in .SRCINFO".to_owned())?
+        .to_owned();
+    let kinds = detect_checksums(&srcinfo).map_err(|e| e.to_string())?;
+    let sums: Vec<&str> = kinds.iter().map(|k| k.key()).collect();
+
+    Ok(format!(
+        "{} at {version}, {}",
+        cfg.package,
+        sums.join(" + ")
+    ))
+}
+
+/// `git ls-remote` proves the SSH key is accepted without cloning anything.
+fn check_access(cfg: &AurConfig) -> std::result::Result<String, String> {
+    let url = cfg.repo_url();
+    let output = Command::new("git")
+        .args(["ls-remote", "--heads", &url])
+        .output()
+        .map_err(|e| format!("spawning git: {e}"))?;
+    if output.status.success() {
+        Ok(format!("can reach {url}"))
+    } else {
+        Err(format!(
+            "cannot reach {url}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
