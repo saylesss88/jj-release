@@ -135,3 +135,24 @@ fn no_trigger_exits_cleanly() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("No trigger commit found"));
 }
+
+#[test]
+fn validate_passes_with_valid_repo() {
+    let dir = tempfile::tempdir().unwrap();
+    init_repo(dir.path());
+    write_cargo_toml(dir.path(), "0.1.0");
+
+    jj_new(dir.path(), "feat: something");
+    Command::new("jj")
+        .args(["tag", "set", "v0.1.0", "-r", "@"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    jj_new(dir.path(), "feat: add thing");
+    jj_new(dir.path(), "Release: please");
+
+    let out = jj_release(dir.path(), &["validate"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // Should pass identity, manifest, version tag, trigger, bump checks
+    assert!(stdout.contains("trigger commit") && stdout.contains("✓"));
+}
