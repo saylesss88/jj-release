@@ -58,7 +58,7 @@ cargo install jj-release
 
 Requires `jj` 0.43+ in a colocated repository (`jj git init --colocate`). Forge
 releases need `gh` or `glab` for GitHub and GitLab. See
-[Installation](https://saylesss88.github.io/jj-release/installation.html) for
+[Installation](https://saylesss88.github.io/jj-release-book/installation.html) for
 Cargo features, NixOS configuration, and optional tools.
 
 ## Quick start
@@ -74,7 +74,7 @@ jj-release            # release
 ```
 
 `jj-release` runs locally or in CI. For GitHub Actions, see
-[CI setup](https://saylesss88.github.io/jj-release/ci.html).
+[CI setup](https://saylesss88.github.io/jj-release-book/ci.html).
 
 ## How it works
 
@@ -91,19 +91,19 @@ default) since the last version tag, it:
 7. Creates a forge release and updates distro packages, if configured.
 
 If anything fails before the push, your remote is untouched. See
-[Recovering from a failed release](https://saylesss88.github.io/jj-release/recovery.html).
+[Recovering from a failed release](https://saylesss88.github.io/jj-release-book/recovery.html).
 
 Prefer to review first? `jj-release pr` opens a pull request with the changelog
 preview instead of releasing.
 
 ## Documentation
 
-- [Configuration reference](https://saylesss88.github.io/jj-release/configuration.html)
-- [Conventional Commits and changelogs](https://saylesss88.github.io/jj-release/commits.html)
-- [Forges](https://saylesss88.github.io/jj-release/forges.html)
-- [Workspaces](https://saylesss88.github.io/jj-release/workspaces.html)
-- [AUR](https://saylesss88.github.io/jj-release/aur.html) and
-  [COPR](https://saylesss88.github.io/jj-release/copr.html) publishing
+- [Configuration reference](https://saylesss88.github.io/jj-release-book/configuration.html)
+- [Conventional Commits and changelogs](https://saylesss88.github.io/jj-release-book/commits.html)
+- [Forges](https://saylesss88.github.io/jj-release-book/forges.html)
+- [Workspaces](https://saylesss88.github.io/jj-release-book/workspaces.html)
+- [AUR](https://saylesss88.github.io/jj-release-book/aur.html) and
+  [COPR](https://saylesss88.github.io/jj-release-book/copr.html) publishing
 - [Library API (`jj_release_core`)](https://docs.rs/jj_release_core)
 
 ## Repository layout
