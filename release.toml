@@ -41,3 +41,9 @@ spec = "copr/rust-jj-release.spec"
 
 # Optional: wait for the COPR build to finish (default: false)
 # wait = true
+
+[[replacements]]
+file = "copr/rust-jj-release.spec"
+search = '(?m)^(Version:\s+)\S+'
+replace = '${1}{{version}}'
+exactly_one = true
