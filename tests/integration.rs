@@ -202,3 +202,23 @@ fn changelog_writes_to_file() {
     assert!(content.contains("# Changelog"));
     assert!(content.contains("### Added"));
 }
+
+#[test]
+fn next_version_patch_bump() {
+    let dir = tempfile::tempdir().unwrap();
+    init_repo(dir.path());
+    write_cargo_toml(dir.path(), "0.1.0");
+
+    jj_new(dir.path(), "feat: something");
+    Command::new("jj")
+        .args(["tag", "set", "v0.1.0", "-r", "@"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    jj_new(dir.path(), "fix: patch something");
+
+    let out = jj_release(dir.path(), &["next-version"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success());
+    assert_eq!(stdout.trim(), "0.1.1");
+}
