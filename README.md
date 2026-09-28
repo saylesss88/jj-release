@@ -20,7 +20,7 @@ branches. `jj-release` is built for `jj`: it walks history with revsets, moves
 bookmarks instead of branches, and starts a release from a commit message, so
 shipping is just another `jj new`.
 
-**[Read the book →](https://saylesss88.github.io/jj-release/)**
+**[Read the book →](https://saylesss88.github.io/jj-release-book/)**
 
 ## Features
 
