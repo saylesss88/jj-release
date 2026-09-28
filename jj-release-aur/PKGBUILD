@@ -1,5 +1,6 @@
 # Maintainer: T Sawyer <saylesss87 at proton dot me>
-pkgname=jj-release
+pkgbase=jj-release
+pkgname=('jj-release' 'jj-release-full')
 pkgver=0.8.0
 pkgrel=1
 pkgdesc='Semantic releases and changelog generation for jj-vcs repositories'
@@ -7,34 +8,56 @@ url='https://github.com/saylesss88/jj-release'
 license=('Apache-2.0')
 makedepends=('cargo')
 depends=('gcc-libs' 'glibc')
-arch=('x86_64')
+arch=('x86_64' 'aarch64')
 options=(!lto)
-source=("$pkgname-$pkgver.tar.gz::https://static.crates.io/crates/$pkgname/$pkgname-$pkgver.crate")
+source=("$pkgbase-$pkgver.tar.gz::https://static.crates.io/crates/$pkgbase/$pkgbase-$pkgver.crate")
 b2sums=('6b0e74bf3a6f4a3c91d8222f28c8c9ac2a8bfd1361cbcc6c2307283a75440e161e6ba2af81fc584a0e0f7559a0fc0f41c35edaca01bd5443a21244189c1ba345')
 
 prepare() {
   export RUSTUP_TOOLCHAIN=stable
-  cd "$pkgname-$pkgver"
-  echo "[workspace]" >> Cargo.toml
+  cd "$pkgbase-$pkgver"
+  echo "[workspace]" >>Cargo.toml
   cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
 build() {
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
-  cd "$pkgname-$pkgver"
-  cargo build --frozen --release --all-features
+  cd "$pkgbase-$pkgver"
+
+  # 1. Build default (GitHub & GitLab only)
+  cargo build --frozen --release --no-default-features --features github,gitlab
+  cp target/release/$pkgbase target/release/$pkgbase-default
+
+  cargo build --frozen --release --features full
+  cp target/release/$pkgbase target/release/$pkgbase-full
 }
 
 check() {
   export RUSTUP_TOOLCHAIN=stable
-  cd "$pkgname-$pkgver"
-  cargo test --frozen --all-features
+  cd "$pkgbase-$pkgver"
+  cargo test --frozen --no-default-features --features github,gitlab
 }
 
-package() {
-  cd "$pkgname-$pkgver"
-  install -Dm0755 -t "$pkgdir/usr/bin/" "target/release/$pkgname"
-  # install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+package_jj-release() {
+  pkgdesc='Semantic releases and changelog generation for jj-vcs repositories (github & gitlab)'
+  depends=('gcc-libs' 'glibc')
+
+  cd "$pkgbase-$pkgver"
+  # Both packages install the binary as `jj-release` so the command is the same for the user
+  install -Dm0755 "target/release/$pkgbase-default" "$pkgdir/usr/bin/$pkgbase"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }
 
+package_jj-release-full() {
+  pkgdesc='Semantic releases and changelog generation for jj-vcs repositories (all features)'
+  depends=('gcc-libs' 'glibc')
+
+  # Tells pacman this package acts as `jj-release` and prevents installing both at once
+  provides=('jj-release')
+  conflicts=('jj-release')
+
+  cd "$pkgbase-$pkgver"
+  install -Dm0755 "target/release/$pkgbase-full" "$pkgdir/usr/bin/$pkgbase"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
