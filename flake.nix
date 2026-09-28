@@ -14,23 +14,41 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-      in
-      {
-        packages.default = pkgs.rustPlatform.buildRustPackage {
+        jj-release-base = pkgs.rustPlatform.buildRustPackage {
           pname = "jj-release";
           version = "0.8.0";
           src = pkgs.lib.cleanSource ./.;
           cargoLock.lockFile = ./Cargo.lock;
-          nativeBuildInputs = with pkgs; [
-            pkg-config
-            mold
+
+          buildNoDefaultFeatures = true;
+          buildFeatures = [
+            "github"
+            "gitlab"
           ];
+
+          nativeBuildInputs =
+            with pkgs;
+            [ pkg-config ] ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ mold ];
+
           meta = with pkgs.lib; {
             description = "Semantic releases and changelog generation for jj-vcs repositories";
             license = with licenses; [ asl20 ];
             mainProgram = "jj-release";
           };
         };
+      in
+      {
+        packages = {
+          default = jj-release-base;
+
+          jj-release-full = jj-release-base.overrideAttrs (oldAttrs: {
+            pname = "${oldAttrs.pname}-full"; # Distinguish the package name
+
+            # Override just the features.
+            buildFeatures = [ "full" ];
+          });
+        };
+
         apps.default = flake-utils.lib.mkApp {
           drv = self.packages.${system}.default;
         };
@@ -53,4 +71,3 @@
       }
     );
 }
-
