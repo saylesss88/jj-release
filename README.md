@@ -5,1085 +5,120 @@
        alt="jj-release: semantic releases & changelogs for jj" width="400">
 </p>
 
-Automated semantic releases for [Jujutsu](https://github.com/jj-vcs/jj)
-repositories.
+<p align="center">
+  <a href="https://crates.io/crates/jj-release"><img src="https://img.shields.io/crates/v/jj-release.svg" alt="crates.io"></a>
+  <a href="https://docs.rs/jj_release_core"><img src="https://img.shields.io/docsrs/jj_release_core" alt="docs.rs"></a>
+  <a href="https://aur.archlinux.org/packages/jj-release"><img src="https://img.shields.io/aur/version/jj-release" alt="AUR"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/crates/l/jj-release.svg" alt="License"></a>
+</p>
 
-Unlike tools built around mutable Git branches (like `release-plz` or
-`cargo-release`), `jj-release` is designed natively for `jj`. It uses `jj`'s
-revset language to walk commit history, operates on movable bookmarks, and uses
-a commit-message trigger that fits naturally into the `jj` workflow.
+Automated semantic releases and changelogs for
+[Jujutsu](https://github.com/jj-vcs/jj) repositories.
 
----
+Tools like `release-plz` and `cargo-release` are built around mutable Git
+branches. `jj-release` is built for `jj`: it walks history with revsets, moves
+bookmarks instead of branches, and starts a release from a commit message, so
+shipping is just another `jj new`.
 
-## Table of Contents
+**[Read the book →](https://saylesss88.github.io/jj-release/)**
 
-- [Workspace](#workspace)
-- [How it works](#how-it-works)
-- [Quick Start](#quick-start)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Getting Started](#getting-started)
-- [First release](#first-release)
-- [Local usage](#local-usage)
+## Features
 
----
+- **Semantic versioning from your commits.** Bumps are computed from
+  [Conventional Commits](https://www.conventionalcommits.org), with
+  [cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks)
+  catching breaking API changes your commit messages missed.
+- **Keep a Changelog output.** Grouped, scoped, optionally emoji-headed sections
+  prepended to `CHANGELOG.md`.
+- **Forge releases and PRs** on GitHub, GitLab, Forgejo/Codeberg, and Gitea.
+- **Workspaces** with unified or independent versioning, published in dependency
+  order.
+- **Version bumps everywhere.** Manifests, cross-member dependencies,
+  `flake.nix`, and any file you configure with regex replacements.
+- **Distro packages.** Optionally update your AUR package and submit a Fedora
+  COPR build after each release.
+- **Safe by default.** Pre-flight checks run before anything changes, and
+  nothing is pushed until the publish succeeds.
 
-## Workspace
-
-This repository contains two crates:
-
-- [`jj-release`](cli/): the CLI tool (`cargo install jj-release`)
-- [`jj_release_core`](lib/): the library for programmatic use
-
----
-
-## How it works
-
-Add a trigger commit when you're ready to ship:
-
-```sh
-jj new -m "Release: please"
-jj git push --bookmark main
-```
-
-CI detects the trigger, walks commits back to the last version tag, and
-classifies them as patch/minor/major using
-[Conventional Commits](https://www.conventionalcommits.org). API-breaking
-changes are detected via
-[cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks) and can
-automatically upgrade the bump to major. The version baseline comes from
-crates.io rather than the local manifest, ensuring the correct bump even when
-versions have drifted.
-
-A trigger is recognized when any commit reachable from `release.bookmark` has a
-description containing `release.trigger` (case-sensitive substring match) since
-the last version tag. The trigger commit itself is not included in changelog
-generation or bump calculation unless its message also matches a Conventional
-Commit type.
-
-Accidentally triggering a release with `docs: Release: please improve wording`
-is possible, choose a trigger string unlikely to appear in normal commit
-messages.
-
-### What a Release Changes
-
-Unless `--dry-run` is used, `jj-release` may:
-
-- Modify version manifests and `CHANGELOG.md`
-- Create a release commit and version tag
-- Move and push the configured bookmark
-- Publish packages to the configured registry
-- Create a GitHub, GitLab, or Forgejo release
-
-Run `jj-release validate` and `jj-release --dry-run` before enabling it in CI.
-
----
-
-## Quick Start
-
-```sh
-cargo install jj-release
-jj-release init
-jj-release validate
-
-# After adding releasable commits:
-jj new -m "Release: please"
-jj git push --bookmark main
-```
-
-On GitHub Actions, add the workflow shown below so pushes containing the trigger
-run the release pipeline.
-
----
+Rust is the primary target. npm and Go manifests are supported but less
+battle-tested.
 
 ## Installation
 
 ```sh
-# Latest changes from source
-cargo install --git https://github.com/saylesss88/jj-release.git
-# From crates.io
 cargo install jj-release
 ```
 
-Requires `jj` on your PATH.
+| Platform    | Command                                                                    |
+| ----------- | -------------------------------------------------------------------------- |
+| Arch (AUR)  | `paru -S jj-release`                                                       |
+| Fedora      | `sudo dnf copr enable sayless88/jj-release && sudo dnf install jj-release` |
+| Nix         | `nix run github:saylesss88/jj-release`                                     |
+| From source | `cargo install --git https://github.com/saylesss88/jj-release`             |
 
-Optional dependencies:
+Requires `jj` 0.43+ in a colocated repository (`jj git init --colocate`). Forge
+releases need `gh` or `glab` for GitHub and GitLab. See
+[Installation](https://saylesss88.github.io/jj-release/installation.html) for
+Cargo features, NixOS configuration, and optional tools.
 
-- For forge releases, `gh` or `glab` must also be available.
-- For independent workspace versioning, `cargo-edit` must be installed.
-- `cargo-semver-checks` (Required by default to prevent accidental breaking
-  changes. Can be disabled by setting `semver_checks = false` in
-  `release.toml`).
-
-### NixOS
-
-Try it out without installing permanently :
-
-```bash
-nix run github:saylesss88/jj-release
-```
-
-Flake input:
-
-```nix
-# In your flake.nix:
-inputs.jj-release.url = "github:saylesss88/jj-release";
-
-# In your configuration.nix (assuming `inputs` is passed via specialArgs)
-{ inputs, pkgs, ... }: {
-inputs.jj-release.packages.${pkgs.stdenv.hostPlatform.system}.default
-}
-```
-
-### Arch Linux
-
-```bash
-paru -S jj-release
-```
-
-### Fedora
-
-You can install `jj-release` from the unofficial COPR repository. This
-repository provides pre-compiled binaries built automatically for Fedora
-systems.
-
-First, enable the repository:
-
-```bash
-sudo dnf copr enable sayless88/jj-release
-```
-
-Then install the package:
-
-```bash
-sudo dnf install jj-release
-```
-
-### Forge features
-
-All forge backends are enabled by default. To build a smaller binary with only
-the forges you use, disable the defaults and pick what you need:
+## Quick start
 
 ```sh
-cargo install jj-release --no-default-features --features github
-```
+jj-release init       # detect forge, language and workspace; write release.toml
+jj-release validate   # check that everything is ready
 
-| Feature   | Forge            | Requires                                        |
-| --------- | ---------------- | ----------------------------------------------- |
-| `github`  | GitHub           | [`gh`](https://cli.github.com) CLI              |
-| `gitlab`  | GitLab           | [`glab`](https://gitlab.com/gitlab-org/cli) CLI |
-| `gitea`   | Gitea, Codeberg  | API token                                       |
-| `forgejo` | Forgejo          | API token (enables `gitea`)                     |
-| `full`    | All of the above |                                                 |
-
-If your config selects a forge that wasn't compiled in, `jj-release` exits with
-an error naming the feature to enable.
-
-Prebuilt packages (AUR, COPR, Nix) include every forge.
-
----
-
-## Usage
-
-```sh
-# Show usage and help menu
-jj-release --help
-# Auto-detect environment and generate a release.toml
-jj-release init
-
-# Check everything is ready before releasing
-jj-release validate
-
-# Full release pipeline
-jj-release
-
-# Dry run, see what would happen without changing anything
-jj-release --dry-run
-
-# Run release without publishing to crates.io
-jj-release --no-publish
-
-# Print the next version that would be released
-jj-release next-version
-
-# Preview the next changelog section
-jj-release changelog
-
-# Prepend the next section to an existing CHANGELOG.md
-jj-release changelog -o CHANGELOG.md
-
-# Regenerate the full changelog from all tags (useful for bootstrapping)
-jj-release changelog --full -o CHANGELOG.md
-
-# Open a PR for review before publishing
-jj-release pr
-```
-
----
-
-## Getting Started
-
-The fastest way to set up a new repo:
-
-```sh
-jj-release init     # detects forge, language, workspace: writes release.toml
-jj-release validate # confirms everything is ready
-```
-
-`init` detects:
-
-- Forge: from the git remote URL (`github.com` → github, `gitlab.com` → gitlab,
-  `codeberg.org` → forgejo, `gitea.com` → gitea)
-- Language: from files present (`Cargo.toml` → cargo, `package.json` → npm,
-  `go.mod` → go)
-- Workspace: reads [workspace.members] from `Cargo.toml` and auto-populates
-  member names, paths, and versioning strategy (unified vs independent)
-
-`validate` checks:
-
-- `jj` identity configured
-- Forge CLI available (`gh`, `glab`)
-- `cargo-semver-checks` detects breaking API changes & warns if bump should be
-  major version
-- Runs `cargo publish --dry-run`
-- Manifest readable, version parseable, and in sync with crates.io
-- Version tag exists (needed as a baseline)
-- Trigger commit present
-- `CARGO_REGISTRY_TOKEN` set/`.cargo/credentials.toml` present (if publishing to
-  crates.io)
-
-## First Release
-
-`jj-release` requires zero configuration for your first release.
-
-If your repository has no existing version tags, `jj-release` automatically
-enters **First Release Mode**. It will:
-
-1. Freeze your `Cargo.toml` version exactly as it is (e.g., `0.1.0`).
-2. Generate a changelog from the very first commit in your repository.
-3. Publish the release and create your initial version tag.
-
-You do not need to manually create a baseline tag.
-
-### Releasing 1.0.0
-
-When you're ready to release 1.0.0, set `force` in `release.toml`:
-
-```toml
-[bump]
-force = "major"
-```
-
-This overrides the automatic bump calculation regardless of commit types. Remove
-it after the release.
-
----
-
-## Local usage
-
-`jj-release` doesn't require CI. If you have `jj` on your PATH and are logged in
-to crates.io (`cargo login`), you can run it directly (Recommended over CI):
-
-```sh
+# When you're ready to ship:
 jj new -m "Release: please"
-jj-release
+jj-release --dry-run  # preview
+jj-release            # release
 ```
 
-Running `jj-release` locally does the full pipeline:
-
-1. Scans for the trigger commit since the last version tag
-2. Walks commits and computes the semver bump from conventional commit types
-3. Runs pre-flight checks (including `cargo-publish --dry-run`) to ensure the
-   release won't fail midway
-4. Writes a new section to `CHANGELOG.md`
-5. Bumps the version in manifest
-6. Creates a `chore: release vX.Y.Z` commit and tags it `vX.Y.Z` locally
-7. Runs the actual `cargo publish`
-8. Advances the bookmark and pushes to origin
-9. Creates a GitHub release (if `create_release = true`)
-
-The `CARGO_REGISTRY_TOKEN` environment variable is only needed in CI where
-there's no credentials file.
-
-Fail-Safe Design: `jj-release` delays irreversible remote actions (like
-`git push`) until the very end. If a step like `cargo publish` fails, your
-remote git repository remains completely untouched. Because you are using
-Jujutsu, you can simply `jj abandon` the failed local release commit, fix the
-underlying issue, and run `jj-release` again.
-
----
-
-## PR Workflow
-
-If you want to review before it publishes, use the `pr` subcommand instead:
-
-```sh
-jj new -m "Release: please"
-jj-release pr
-```
-
-This pushes your current bookmark to a `release/vX.Y.Z` branch and opens a PR
-with the changelog preview as the PR body. No version bump, no release commit,
-no tag. Merge the PR and CI runs `jj-release` to do the actual release.
-
-<!-- prettier-ignore -->
-> [!NOTE]
-> Unlike `release-plz`'s continuously maintained release PR, `jj-release pr` is a
-> one-shot preview. No version bump or release commit in the PR itself. If you
-> want a persistent release PR that stays up to date, run `jj-release pr` in CI
-> on every push to main.
-
----
-
-## Configuration
-
-Drop a `release.toml` in your repo root, or run `jj-release init` to generate
-one automatically. All fields are optional, defaults work for most GitHub + Rust
-projects out of the box:
-
-```toml
-[release]
-trigger = "Release: please"          # commit message substring that kicks off a release
-tag_prefix = "v"                     # prefix for version tags, e.g. v1.2.3
-bookmark = "main"                    # bookmark to advance after release
-forge = "github"                     # forge for releases and PRs: github, gitlab, forgejo, or none
-create_release = false               # create a release on the forge after tagging
-forge_url = ""                       # base URL for self-hosted forges
-
-[bump]
-# force = "minor"                    # override commit analysis: "major", "minor", or "patch"
-
-[publish]
-cargo = false                        # set to true to publish to crates.io
-cargo_flags = []                     # extra flags forwarded to `cargo publish`
-semver_checks = true                 # run cargo-semver-checks before publishing
-semver_checks_upgrade_major = false  # auto-upgrade to major (default: only post-1.0)
-
-[changelog]
-enabled = true                       # write a CHANGELOG.md entry on each release
-file = "CHANGELOG.md"                # path to the changelog file
-strict = true                        # drop unmapped/unformatted commits (false = "Other Changes")
-
-manifest_backend = "cargo"           # manifest format: cargo, npm, go
-```
-
-By default, `jj-release` only handles versioning, changelogs, tags, and forge
-releases. To automatically publish to crates.io, explicitly enable it in your
-configuration:
-
-```toml
-[publish]
-cargo = true
-```
-
-Publishing can also be skipped per-run with `--no-publish` without editing
-`release.toml`, useful for testing the release pipeline or in scripts that
-handle publishing separately.
-
-### Changelog Configuration
-
-You can customize how `jj-release` parses your commits and maps them to the Keep
-a Changelog format. By default, only `feat`, `fix`, `bug`, `perf`, `refactor`,
-`removed`, `security`, and `docs` commits are included.
-
-Add these options to your `release.toml` to customize the behavior:
-
-```toml
-[changelog]
-enabled = true
-file = "CHANGELOG.md"
-# Add emojis to the changelog headers
-emoji_headers = true
-
-# If true (default), commits that do not strictly match Conventional Commits
-# or your prefix_mapping are silently dropped from the changelog.
-# If false, unformatted commits are collected in an "Other Changes" section.
-strict = false
-
-# An array of commit types or prefixes to silently exclude from the changelog.
-# Matches against the parsed conventional type or the raw string.
-exclude_prefixes = ["chore", "ci", "test", "WIP:"]
-
-# Override specific default emojis (keys must match the exact Header name)
-[changelog.emoji_mapping]
-Added = "🚀"
-Fixed = "✅️"
-Bug = "🔥"
-Performance = "⚡️"
-Testing = "🧪"
-
-# Map conventional commit types to custom Keep a Changelog headers.
-# Standard types (feat -> Added, fix -> Fixed, etc.) are handled automatically.
-[changelog.prefix_mapping]
-revert = "Reverted"
-test = "Testing"
-```
-
----
-
-## Post-Processing & File Replacements
-
-`jj-release` can automatically update version strings in arbitrary files (like
-your `README.md`, installation scripts, or `flake.nix`) during the release
-process.
-
-### Native Nix Flake Support
-
-If your repository contains a `flake.nix` file in the root directory with a
-standard `version = "..."` declaration, `jj-release` will automatically detect
-it and bump the version alongside your project manifest.
-
-**This behavior is native and requires zero configuration.**
-
----
-
-### Custom Replacements
-
-You can configure additional regex-based search-and-replace operations across
-other project files by adding an array of `[[replacements]]` tables to your
-`release.toml`.
-
-The `replace` field supports built-in template variables that are substituted
-before the regex substitution occurs.
-
-| Variable         | Description                              | Example Output |
-| :--------------- | :--------------------------------------- | :------------- |
-| `{{version}}`    | The new semantic version being released. | `1.2.3`        |
-| `{{crate_name}}` | The name of the primary crate.           | `my_crate`     |
-| `{{date}}`       | Today's date in `YYYY-MM-DD` format.     | `2026-09-24`   |
-
-#### Configuration Example
-
-```toml
-# Update installation instructions in README.md
-[[replacements]]
-file = "README.md"
-search = 'jj-release = ".*"'
-replace = 'jj-release = "{{version}}"'
-
-# Update version constants in source code, using capture groups
-# for complex lines. Use native TOML braces {{1}} for regex groups.
-[[replacements]]
-file = "lib/src/manifest.rs"
-search = 'version\s*=\s*"[^"]+"'
-# NOTE: Native TOML braces become standard braces in regex replacement
-replace = 'version = "${{1}}{{version}}${{3}}"'
-```
-
----
-
-## Exit Codes
-
-`jj-release` uses distinct exit codes so CI scripts can distinguish failure
-modes:
-
-| Code | Meaning                                      |
-| ---- | -------------------------------------------- |
-| 0    | Success, or no trigger found (nothing to do) |
-| 2    | Missing or invalid configuration             |
-| 3    | Missing required CLI tool (`gh`, `glab`)     |
-| 101  | General release failure                      |
-
-Exit code 1 is reserved for unexpected panics. All handled errors use the codes
-above. The `Silent` exit state passes through an arbitrary code for cases where
-the error was already reported upstream.
-
----
-
-## Forge Support
-
-`jj-release` supports multiple forges for release creation and PR/MR opening:
-
-| Forge            | `forge =`   | CLI required | Release | PR/MR  | Status                                                              |
-| ---------------- | ----------- | ------------ | ------- | ------ | ------------------------------------------------------------------- |
-| GitHub (default) | `"github"`  | `gh`         | ✓       | ✓      | ✓ tested                                                            |
-| GitLab           | `"gitlab"`  | `glab`       | ✓       | ✓ (MR) | ✓ tested                                                            |
-| Forgejo/Codeberg | `"forgejo"` | none (REST)  | ✓       | ✓      | ✓ tested on Codeberg, release creation not yet supported (see note) |
-| Gitea            | `"gitea"`   | none (REST)  | ✓       | ✓      | implemented, untested                                               |
-| None             | `"none"`    | –            | –       | –      | –                                                                   |
-
-For GitLab, set `forge_url` if using a self-hosted instance:
-
-```toml
-[release]
-forge = "gitlab"
-forge_url = "https://gitlab.example.com"
-```
-
-For Forgejo/Codeberg, set `forge_url` to your instance and provide a token:
-
-```toml
-[release]
-forge = "forgejo"
-forge_url = "https://codeberg.org"
-```
-
-```sh
-export FORGEJO_TOKEN=your-token
-```
-
-For Gitea, set `forge_url` to your instance and provide a token:
-
-```toml
-[release]
-forge = "gitea"
-forge_url = "https://gitea.com"
-```
-
-```sh
-export GITEA_TOKEN=your-token
-```
-
-<!-- prettier-ignore -->
-> [!NOTE]
-> Forgejo/Codeberg and Gitea: tagging, pushing, and PR creation all work correctly.
-> `create_release = true` is not yet supported. The release API requires
-> annotated git tags but `jj` creates lightweight tags. Keep `create_release =
->  false`.
-
-The token needs `repository` scope, create one at
-`https://codeberg.org/user/settings/applications`.
-
-| Forge   | Authentication                                                      |
-| ------- | ------------------------------------------------------------------- |
-| GitHub  | `gh auth login` locally or `GITHUB_TOKEN` in GitHub Actions         |
-| GitLab  | `glab auth login` locally or the token/env mechanism used by `glab` |
-| Forgejo | `FORGEJO_TOKEN` and `forge_url`                                     |
-| Gitea   | `GITEA_TOKEN` and `forge_url`                                       |
-
----
-
-## Multi-Language Support
-
-<!-- prettier-ignore -->
-> [!NOTE]
-> npm and Golang support is implemented but not yet battle-tested in production.
-> Feedback welcome if you use `jj-release` with these languages.
-
-`jj-release` supports multiple manifest formats via `manifest_backend`:
-
-| Language   | `manifest_backend =` | Version file   | Publish command |
-| ---------- | -------------------- | -------------- | --------------- |
-| Rust       | `"cargo"` (default)  | `Cargo.toml`   | `cargo publish` |
-| JavaScript | `"npm"`              | `package.json` | `npm publish`   |
-| Golang     | `"go"`               | tag-only       | –               |
-
----
-
-## Arch User Repository (AUR) Publishing
-
-<details>
-<summary> ✔️ Click to expand AUR publishing docs </summary>
-
-`jj-release` can automatically update your AUR package after a successful
-crates.io and Forge release. This step runs at the very end of the pipeline to
-ensure the new source tarball is fully available for checksum calculation.
-
-**Prerequisites**
-
-1. **Feature flag:** `jj-release` must be built with the `publish-aur` (or
-   `full`) feature: `cargo install jj-release --features publish-aur`. The AUR,
-   COPR, and Nix packages include it already.
-2. **Tools:** `git` and `curl` must be on your `PATH`. `makepkg` is optional
-   (see below), so this works from any Linux distro or macOS.
-3. **Authentication:** your machine needs SSH access to `aur@aur.archlinux.org`,
-   the same setup you'd use to push to the AUR by hand.
-
-**Configuration**
-
-Add the `[aur]` table to your `release.toml`:
-
-```toml
-[aur]
-# Required: The exact name of your package on the AUR
-package = "my-cli-tool"
-
-# Optional: Override the default Git URL.
-# Defaults to ssh://aur@aur.archlinux.org/{package}.git
-# repo = "ssh://aur@aur.archlinux.org/custom-repo-name.git"
-```
-
-**Pipeline Execution**
-
-When AUR publishing is enabled, `jj-release` executes the following sequence
-after all other release steps succeed:
-
-1. Clones your AUR package repository into a temporary directory.
-
-2. Sets `pkgver` in the `PKGBUILD` to the new version and resets `pkgrel` to
-   `1`.
-
-3. Downloads each remote source with `curl` and recomputes its checksums
-   (`sha256sums` and/or `b2sums`). Downloads are retried briefly, since
-   crates.io can take a few seconds to serve a newly published crate.
-
-4. Regenerates `.SRCINFO` with `makepkg --printsrcinfo`. If `makepkg` isn't
-   available, it updates the version, source, and checksum fields in `.SRCINFO`
-   directly.
-5. Commits the changes as `Update to <version>` and pushes to the AUR.
-
-If the AUR package is already at the new version, this step is skipped, so
-rerunning after a partial failure is safe.
-
-**Limitations**
-
-- Single packages only (no split packages).
-- Only `sha256sums` and `b2sums` are supported. Other checksum arrays and
-  architecture-specific sources (`source_x86_64`) produce a clear error.
-- If you edit the `PKGBUILD` by hand, regenerate `.SRCINFO` yourself before
-  pushing. Without `makepkg`, `jj-release` only updates version-related fields.
-
-**Dry run**
-
-`jj-release run --dry-run` clones the repo, applies the changes, and prints the
-diff without committing or pushing. It still needs SSH access and network access
-for the clone and downloads.
-
-</details>
-
-## Fedora COPR Publishing
-
-<details>
-<summary>✔️ Click to expand COPR publishing docs</summary>
-
-`jj-release` can build a source RPM for each release and submit it to your
-[COPR](https://copr.fedorainfracloud.org) project. It runs at the end of the
-pipeline, after the crates.io publish, since the RPM is built from the published
-crate.
-
-**Prerequisites**
-
-1. **Feature flag:** `jj-release` must be built with the `publish-copr` (or
-   `full`) feature: `cargo install jj-release --features publish-copr`.
-2. **A Fedora (or other RPM-based) machine** with:
-
-```sh
-   sudo dnf install copr-cli rpm-build cargo-rpm-macros curl tar xz cargo
-```
-
-3. **COPR API access:** log in at
-   [copr.fedorainfracloud.org/api](https://copr.fedorainfracloud.org/api), copy
-   the configuration block, and save it to `~/.config/copr`.
-4. **An existing COPR project** with the chroots you want to build for.
-
-**The spec file**
-
-Keep your RPM spec in your repository. `jj-release` builds from a temporary copy
-with the new version and never modifies the original. The spec must have:
-
-- `%global crate <crate-name>`: used to download the published `.crate`
-- a `Version:` line: replaced with the new version
-- `SourceN: vendor.tar.xz`: the vendored dependencies, since COPR builders have
-  no network access
-
-A spec generated with `rust2rpm` and adjusted for vendoring works as is:
-
-```spec
-Source0:        %{crates_source}
-Source1:        vendor.tar.xz
-
-%prep
-%autosetup -n %{crate}-%{version} -p1 -a 1
-%cargo_prep -v vendor
-```
-
-Remove `%generate_buildrequires` / `%cargo_generate_buildrequires`, since
-dependencies come from the vendor tarball instead of Fedora packages. To build
-with Cargo features, pass them to the macros, e.g. `%cargo_build -f full` and
-`%cargo_install -f full`.
-
-**Configuration**
-
-Add a `[copr]` table to your `release.toml`:
-
-```toml
-[copr]
-# Required: your COPR project as owner/project
-project = "your-username/my-cli-tool"
-
-# Required: path to the spec, relative to the repo root
-spec = "packaging/rust-my-cli-tool.spec"
-
-# Optional: wait for the COPR build to finish (default: false)
-# wait = true
-```
-
-**What it does**
-
-After all other release steps succeed, `jj-release`:
-
-1. Copies the spec to a temporary directory and sets `Version:` to the new
-   version.
-2. Downloads the published `.crate` from crates.io with `curl`, retrying briefly
-   while the CDN catches up.
-3. Extracts it, runs `cargo vendor`, and packs the result as `vendor.tar.xz`.
-4. Builds a source RPM with `rpmbuild -bs`.
-5. Submits it with `copr-cli build`. By default it doesn't wait for the build;
-   set `wait = true` to follow it and have failures reported.
-
-A COPR failure is reported as a warning rather than failing the release, since
-the crates.io publish, tag, and forge release have already happened.
-
-**Limitations**
-
-- Pre-release versions (e.g. `1.0.0-rc.1`) are not supported yet, since RPM
-  versions can't contain `-`.
-- Skipped when `publish.cargo = false`, since the RPM is built from the
-  crates.io release.
-- Skipped for workspaces with independent versioning.
-
-**Checking your setup**
-
-`jj-release validate` checks that the required tools are installed, the spec has
-the required fields, `cargo-rpm-macros` is available, and `copr-cli` is
-authenticated. The same checks run automatically before every release, so a
-broken setup fails before anything is published.
-
-`jj-release --dry-run` lists the COPR submission a release would make, without
-building or submitting anything.
-
-</details>
-
----
-
-## Workspace Support
-
-`jj-release` supports Rust workspaces with two versioning strategies. Run
-`jj-release init` to auto-detect which one your workspace uses.
-
-### Unified Versioning
-
-All members share a single version from [workspace.package]. Every member bumps
-together on each release:
-
-```toml
-[workspace]
-enabled = true
-versioning = "unified" # or "independent"
-
-[[workspace.members]]
-name = "mylib"
-path = "lib"
-publish = true
-
-[[workspace.members]]
-name = "mycli"
-path = "cli"
-publish = true
-depends_on = ["mylib"]   # publish lib before cli
-```
-
-Cross-member dependency versions are updated automatically during the release.
-You do not need to manually update `Cargo.toml` dependency versions between
-workspace members before releasing.
-
-For example, the `version` requirement in this local dependency will
-automatically be kept in sync:
-
-```toml
-[dependencies]
-jj_release_core = { path = "../lib", version = "0.7.0" }
-```
-
-### Independent Versioning
-
-Each member has its own version and only bumps when commits touched its path.
-Members get their own tag prefix:
-
-```toml
-[workspace]
-enabled = true
-versioning = "independent"
-
-[[workspace.members]]
-name = "mylib"
-path = "lib"
-publish = true
-tag_prefix = "mylib-v"   # creates tags like mylib-v0.5.0
-
-[[workspace.members]]
-name = "mycli"
-path = "cli"
-publish = true
-tag_prefix = "v"
-depends_on = ["mylib"]
-```
-
-<!-- prettier-ignore -->
-> [!NOTE]
-> Independent versioning requires `cargo-edit` for version bumping:
->
-> ```sh
-> cargo install cargo-edit
-> ```
-
-Members are published in dependency order. `mylib` before `mycli`. So crates.io
-has time to index the library before the CLI tries to depend on it.
-
-```sh
-jj-release --dry-run
- Current version: 0.7.0
-[dry-run] Independent workspace release:
-[dry-run] Would publish in order:
-  - mylib (lib) 0.4.0 (no changes, skipping)
-  - mycli (cli) 0.7.0 → 0.8.0 (tag: mycli-v0.8.0)
-```
-
-Cross-member dependency versions are updated automatically during the release.
-You do not need to manually update `Cargo.toml` dependency versions between
-workspace members before releasing.
-
----
-
-## Conventional Commits
-
-`jj-release` follows the
-[Conventional Commits](https://www.conventionalcommits.org) spec to determine
-the version bump. It natively supports standard Angular types alongside a
-dedicated `bug` type:
-
-| Commit type                          | Bump       | Changelog Header   |
-| ------------------------------------ | ---------- | ------------------ |
-| `feat:`                              | minor      | Added              |
-| `fix:`                               | patch      | Fixed              |
-| `bug:`                               | patch      | Bug                |
-| `refactor:`                          | patch      | Changed            |
-| `perf:`                              | patch      | Performance        |
-| `docs:`                              | No release | Documentation      |
-| `feat!:` or `BREAKING CHANGE` footer | major      | Breaking           |
-| `chore:`, `docs:`, `test:`, etc.     | No release | Dropped by default |
-| `deprecate:`, `deprecated:`          | No release | Deprecated         |
-| `chore:`, `test:`, `ci:`             | No release | Dropped by default |
-
-The highest bump across all commits since the last tag wins. Scoped commits are
-preserved in the changelog. `feat(cli): add init subcommand` renders as
-`**(cli)** add init subcommand` under `### Added`
-
-<!-- prettier-ignore -->
-> [!NOTE]
-> `chore:`, `docs:`, `style:`, `test:`, `ci:`, and `build:` commits do not
-> trigger a release. If your only changes since the last tag are in these
-> categories, jj-release will exit with "No releasable commits". Either add a
-> `feat:` or `fix:` commit, or force a bump in `release.toml`:
->
-> ```toml
-> [bump]
-> force = "patch"
-> ```
->
-> Remove `force` after the release so future versions are computed
-> automatically.
-
----
-
-## Changelog format
-
-`jj-release` follows the [Keep a Changelog](https://keepachangelog.com) format.
-Each release prepends a new section to `CHANGELOG.md`:
-
-```markdown
-# Changelog
-
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [0.2.0] - 2026-09-08
-
-### Added
-
-- **(cli)** add init subcommand
-- add wallpaper cycling support
-
-### Fixed
-
-- prevent daemon crash on empty directory
-```
-
-<details>
-<summary>Fixing commit messages after a release (Immutable Commits)</summary>
-
-If you need to fix a typo in a commit message after a release is finalized
-(which marks the commit as immutable), rewriting the message will detach the Git
-tag. Because changelog generators rely on Git tags to group history, you must
-re-anchor the tag to the new timeline before regenerating the changelog.
-
-1. **Rewrite the commit message:**
-
-```bash
-jj --ignore-immutable desc -r <commit_rev> -m 'fix: your new message'
-```
-
-(Note: use single quotes `'` if your message contains backticks so your shell
-doesn't execute them). 2. Find the new release commit hash: Because history is
-rewritten, the release commit generated a new hash. Find it using `jj log`. 3.
-Re-anchor the release tag (i.e. The commit `chore: release vX.Y.Z`):
-
-```bash
-jj tag set vX.Y.Z -r <NEW_RELEASE_HASH> --allow-move
-```
-
-(Note: the further back in history you go, the more tags you'll have to
-re-anchor) 4. Regenerate your changelog. The generator will now traverse the
-corrected timeline and parse the updated messages.
-
-```bash
-rm CHANGELOG.md
-jj-release changelog --full -o CHANGELOG.md
-```
-
-5. Push/Force-push the corrected history. Since you altered public history,
-   force- push the updated branch and tag back to your remote.
-
-```bash
-# Push the corrected bookmark (no force need if jj handles the move)
-jj git push
-
-# Force-push each re-anchored tag via git directly
-# (jj git push doesn't support --force)
-git push origin vX.Y.Z --force
-```
-
-Or if you have multiple tags to re-anchor, push them all:
-
-```bash
-jj git push # pushes the bookmark
-# then for each re-anchored tag:
-git push origin v0.1.0 --force
-git push origin v0.2.0 --force
-# etc.
-```
-
-Force-pushing is generally considered bad practice in collaborative projects
-since others may have fetched the old tags. For a solo project it's fine, just
-keep this in mind..
-
-</details>
-
----
-
-## GitHub Actions
-
-<!-- prettier-ignore -->
-> [!NOTE]
-> This action takes a while to finish since it compiles `jj` and `jj-release`
-> from source. Use `jj-release` locally if you're in a hurry.
-
-Add this workflow to your consumer repo at `.github/workflows/release.yml`:
-
-<details>
-<summary> ✔️ Click to expand `release.yml` </summary>
-
-```yaml
-name: Release
-
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  release:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: Install jj
-        run: cargo install jj-cli --locked
-
-      - name: Install jj-release
-        run: cargo install jj-release --locked
-
-      - name: Attach jj to colocated git repo
-        run: jj git init --colocate
-
-      - name: Run release
-        run: jj-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-```
-
-</details>
-
----
-
-## Recovering from a Failed Release
-
-If a release fails midway through (e.g., `cargo publish` fails due to registry
-validation), you can cleanly revert the entire pipeline using Jujutsu's
-operation log:
-
-1. Find the operation right before you ran `jj-release`:
-
-```bash
-jj op log
-```
-
-2. Restore the repo to that operation:
-
-```bash
-jj op restore <operation_hash>
-```
-
-3. Discard the mutated files (like `Cargo.toml` bumps) from your working copy:
-
-```bash
-jj restore
-```
-
-<!-- prettier-ignore -->
-> [!NOTE]
-> `jj-release` runs `cargo publish --dry-run` as a pre-flight check, but this
-> only validates local compilation. Server-side registry rejections (like
-> invalid URLs or missing permissions) will still cause the pipeline to fail
-> during the final push.
-
----
-
-## Requirements
-
-- Rust 1.80+
-- jj 0.43+ (tested on 0.43.0; earlier versions may work but tag and push flag
-  syntax differs)
-- A colocated jj/git repository (`jj git init --colocate`)
-
----
+`jj-release` runs locally or in CI. For GitHub Actions, see
+[CI setup](https://saylesss88.github.io/jj-release/ci.html).
+
+## How it works
+
+When `jj-release` finds a commit containing the trigger (`Release: please` by
+default) since the last version tag, it:
+
+1. Classifies commits since the last tag as major, minor, or patch, using the
+   latest crates.io version as the baseline.
+2. Runs pre-flight checks, including `cargo publish --dry-run`.
+3. Writes the changelog and bumps versions.
+4. Creates a `chore: release vX.Y.Z` commit and tag.
+5. Publishes to crates.io.
+6. Moves the bookmark and pushes the commit and tag.
+7. Creates a forge release and updates distro packages, if configured.
+
+If anything fails before the push, your remote is untouched. See
+[Recovering from a failed release](https://saylesss88.github.io/jj-release/recovery.html).
+
+Prefer to review first? `jj-release pr` opens a pull request with the changelog
+preview instead of releasing.
+
+## Documentation
+
+- [Configuration reference](https://saylesss88.github.io/jj-release/configuration.html)
+- [Conventional Commits and changelogs](https://saylesss88.github.io/jj-release/commits.html)
+- [Forges](https://saylesss88.github.io/jj-release/forges.html)
+- [Workspaces](https://saylesss88.github.io/jj-release/workspaces.html)
+- [AUR](https://saylesss88.github.io/jj-release/aur.html) and
+  [COPR](https://saylesss88.github.io/jj-release/copr.html) publishing
+- [Library API (`jj_release_core`)](https://docs.rs/jj_release_core)
+
+## Repository layout
+
+- [`cli/`](cli/): the `jj-release` binary
+- [`lib/`](lib/): `jj_release_core`, the library behind it
 
 ## Credits
 
-Parts of the codebase are adapted from/inspired by these great projects:
-
-- Version baseline from crates.io rather than manifest. Check for API breaking
-  changes with `cargo-semver-checks`:
-  [release-plz](https://github.com/release-plz/release-plz)
-
-- [cargo-release](https://github.com/crate-ci/cargo-release)
-
-- Changelog inspirations: [git-cliff](https://github.com/orhun/git-cliff)
+Ideas and code adapted from
+[release-plz](https://github.com/release-plz/release-plz) (crates.io version
+baseline, semver checks),
+[cargo-release](https://github.com/crate-ci/cargo-release), and
+[git-cliff](https://github.com/orhun/git-cliff) (changelogs).
 
 ## License
 
-- [Apache-2.0](https://github.com/saylesss88/jj-release/blob/main/LICENSE)
+[Apache-2.0](LICENSE)
