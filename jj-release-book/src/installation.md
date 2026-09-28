@@ -26,12 +26,12 @@ cargo install jj-release
 
 ## Forge Features
 
-| Feature    | Enables                        | Requires     |
-| ---------- | ------------------------------ | ------------ |
-| `github`   | GitHub releases and PRs via `gh` | `gh` CLI   |
-| `gitlab`   | GitLab releases and MRs via `glab` | `glab` CLI |
-| `gitea`    | Gitea releases and PRs via REST API | `GITEA_TOKEN` |
-| `forgejo`  | Forgejo/Codeberg via REST API (includes `gitea`) | `FORGEJO_TOKEN` |
+| Feature   | Enables                                          | Requires        |
+| --------- | ------------------------------------------------ | --------------- |
+| `github`  | GitHub releases and PRs via `gh`                 | `gh` CLI        |
+| `gitlab`  | GitLab releases and MRs via `glab`               | `glab` CLI      |
+| `gitea`   | Gitea releases and PRs via REST API              | `GITEA_TOKEN`   |
+| `forgejo` | Forgejo/Codeberg via REST API (includes `gitea`) | `FORGEJO_TOKEN` |
 
 ```sh
 # Forgejo/Codeberg only, no GitHub or GitLab
@@ -40,10 +40,10 @@ cargo install jj-release --no-default-features --features forgejo
 
 ## Publish Features
 
-| Feature        | Enables                          |
-| -------------- | -------------------------------- |
+| Feature        | Enables                                |
+| -------------- | -------------------------------------- |
 | `publish-aur`  | Publishing to the Arch User Repository |
-| `publish-copr` | Publishing to Fedora COPR        |
+| `publish-copr` | Publishing to Fedora COPR              |
 
 ```sh
 # Full build with all forges and publish targets
@@ -68,27 +68,51 @@ jj_release_core = { version = "0.9.0", features = ["full"] }
 
 ---
 
-### NixOS
+### NixOS & Flakes
 
-Try it out without installing permanently:
+The flake provides two packages depending on the features you need:
 
+- **Default** (`default`): Includes the `github` and `gitlab` features.
+- **Full** (`jj-release-full`): Includes the `full` feature flag.
+
+**Try it out without installing:**
+
+Run the default package:
 ```bash
 nix run github:saylesss88/jj-release
 ```
 
-Flake input:
+Run the full package:
+```bash
+nix run github:saylesss88/jj-release#jj-release-full
+```
+
+**Add to your NixOS configuration via Flakes:**
+
+First, add the input to your `flake.nix`:
 
 ```nix
 # In your flake.nix:
 inputs.jj-release.url = "github:saylesss88/jj-release";
+```
 
-# In your configuration.nix (assuming `inputs` is passed via specialArgs)
+Then, in your `configuration.nix` (assuming `inputs` is passed via `specialArgs`),
+add your preferred package to `environment.systemPackages`:
+
+```nix
 { inputs, pkgs, ... }: {
-inputs.jj-release.packages.${pkgs.stdenv.hostPlatform.system}.default
+  environment.systemPackages = [
+    # Choose ONE of the following:
+
+    # 1. For the default build (GitHub/GitLab only):
+    inputs.jj-release.packages.${pkgs.stdenv.hostPlatform.system}.default
+
+    # 2. For the full build:
+    inputs.jj-release.packages.${pkgs.stdenv.hostPlatform.system}.jj-release-full
+  ];
 }
 ```
 
-> By default, the flake includes all features.
 
 ---
 
