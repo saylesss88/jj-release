@@ -222,3 +222,31 @@ fn next_version_patch_bump() {
     assert!(out.status.success());
     assert_eq!(stdout.trim(), "0.1.1");
 }
+
+#[test]
+fn dry_run_shows_no_publish_warning() {
+    let dir = tempfile::tempdir().unwrap();
+    init_repo(dir.path());
+    write_cargo_toml(dir.path(), "0.1.0");
+
+    // Write release.toml with cargo = false
+    fs::write(
+        dir.path().join("release.toml"),
+        "[publish]\ncargo = false\n",
+    )
+    .unwrap();
+
+    jj_new(dir.path(), "feat: something");
+    Command::new("jj")
+        .args(["tag", "set", "v0.1.0", "-r", "@"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    jj_new(dir.path(), "feat: new thing");
+    jj_new(dir.path(), "Release: please");
+
+    let out = jj_release(dir.path(), &["--dry-run"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success());
+    assert!(stdout.contains("publish.cargo = false"));
+}
