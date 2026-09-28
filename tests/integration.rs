@@ -156,3 +156,49 @@ fn validate_passes_with_valid_repo() {
     // Should pass identity, manifest, version tag, trigger, bump checks
     assert!(stdout.contains("trigger commit") && stdout.contains("✓"));
 }
+
+#[test]
+fn changelog_generates_section() {
+    let dir = tempfile::tempdir().unwrap();
+    init_repo(dir.path());
+    write_cargo_toml(dir.path(), "0.1.0");
+
+    jj_new(dir.path(), "feat: something");
+    Command::new("jj")
+        .args(["tag", "set", "v0.1.0", "-r", "@"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    jj_new(dir.path(), "feat: add new thing");
+
+    let out = jj_release(dir.path(), &["changelog"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("### Added"));
+    assert!(stdout.contains("add new thing"));
+}
+
+#[test]
+fn changelog_writes_to_file() {
+    let dir = tempfile::tempdir().unwrap();
+    init_repo(dir.path());
+    write_cargo_toml(dir.path(), "0.1.0");
+
+    jj_new(dir.path(), "feat: something");
+    Command::new("jj")
+        .args(["tag", "set", "v0.1.0", "-r", "@"])
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    jj_new(dir.path(), "feat: add new thing");
+
+    let changelog_path = dir.path().join("CHANGELOG.md");
+    let out = jj_release(
+        dir.path(),
+        &["changelog", "-o", changelog_path.to_str().unwrap()],
+    );
+    assert!(out.status.success());
+    assert!(changelog_path.exists());
+    let content = fs::read_to_string(&changelog_path).unwrap();
+    assert!(content.contains("# Changelog"));
+    assert!(content.contains("### Added"));
+}
