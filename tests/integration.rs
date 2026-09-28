@@ -250,3 +250,49 @@ fn dry_run_shows_no_publish_warning() {
     assert!(out.status.success());
     assert!(stdout.contains("publish.cargo = false"));
 }
+
+#[test]
+fn first_release_mode_no_tags() {
+    let dir = tempfile::tempdir().unwrap();
+    init_repo(dir.path());
+    write_cargo_toml(dir.path(), "0.1.0");
+
+    jj_new(dir.path(), "feat: initial implementation");
+    jj_new(dir.path(), "Release: please");
+
+    let out = jj_release(dir.path(), &["--dry-run"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success());
+    // Should enter first release mode and freeze at 0.1.0
+    assert!(stdout.contains("0.1.0"));
+}
+
+#[test]
+fn init_creates_release_toml() {
+    let dir = tempfile::tempdir().unwrap();
+    init_repo(dir.path());
+    write_cargo_toml(dir.path(), "0.1.0");
+
+    let out = jj_release(dir.path(), &["init"]);
+    assert!(out.status.success());
+    assert!(dir.path().join("release.toml").exists());
+    let content = fs::read_to_string(dir.path().join("release.toml")).unwrap();
+    assert!(content.contains("[release]"));
+    assert!(content.contains("forge ="));
+}
+
+#[test]
+fn init_refuses_to_overwrite_existing() {
+    let dir = tempfile::tempdir().unwrap();
+    init_repo(dir.path());
+    write_cargo_toml(dir.path(), "0.1.0");
+    fs::write(dir.path().join("release.toml"), "[release]\n").unwrap();
+
+    let out = jj_release(dir.path(), &["init"]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success());
+    assert!(stdout.contains("already exists"));
+    // File should be unchanged
+    let content = fs::read_to_string(dir.path().join("release.toml")).unwrap();
+    assert_eq!(content, "[release]\n");
+}
