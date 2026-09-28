@@ -31,3 +31,13 @@ depends_on = ["jj_release_core"] # add names of members this depends on
 
 [aur]
 package = "jj-release"
+
+[copr]
+# Required: your COPR project as owner/project
+project = "sayless88/jj-release"
+
+# Required: path to the spec, relative to the repo root
+spec = "copr/rust-jj-release.spec"
+
+# Optional: wait for the COPR build to finish (default: false)
+# wait = true
