@@ -62,13 +62,6 @@ depends_on = ["mylib"]
 ```
 
 <!-- prettier-ignore -->
-> [!NOTE]
-> Independent versioning requires `cargo-edit` for version bumping:
->
-> ```sh
-> cargo install cargo-edit
-> ```
-
 Members are published in dependency order. `mylib` before `mycli`. So crates.io
 has time to index the library before the CLI tries to depend on it.
 
