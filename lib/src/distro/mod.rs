@@ -25,11 +25,11 @@ pub const fn any_configured(config: &Config) -> bool {
     let mut any = false;
     #[cfg(feature = "publish-aur")]
     {
-        any |= config.aur.is_some();
+        any |= config.publish.aur.is_some();
     }
     #[cfg(feature = "publish-copr")]
     {
-        any |= config.copr.is_some();
+        any |= config.publish.copr.is_some();
     }
     any
 }
@@ -41,11 +41,11 @@ pub const fn any_configured(config: &Config) -> bool {
 pub fn preflight(config: &Config, root: &Path) -> Vec<Check> {
     let mut checks = Vec::new();
     #[cfg(feature = "publish-aur")]
-    if let Some(aur) = &config.aur {
+    if let Some(aur) = &config.publish.aur {
         checks.extend(aur::preflight(aur));
     }
     #[cfg(feature = "publish-copr")]
-    if let Some(copr) = &config.copr {
+    if let Some(copr) = &config.publish.copr {
         checks.extend(copr::preflight(copr, root));
     }
     checks
@@ -57,14 +57,14 @@ pub fn preflight(config: &Config, root: &Path) -> Vec<Check> {
 pub fn describe(config: &Config, version: &Version) -> Vec<String> {
     let mut lines = Vec::new();
     #[cfg(feature = "publish-aur")]
-    if let Some(aur) = &config.aur {
+    if let Some(aur) = &config.publish.aur {
         lines.push(format!(
             "AUR: {} → {version} (pkgrel 1, checksums from the crates.io release)",
             aur.package
         ));
     }
     #[cfg(feature = "publish-copr")]
-    if let Some(copr) = &config.copr {
+    if let Some(copr) = &config.publish.copr {
         lines.push(format!(
             "COPR: {} ← SRPM from {} at {version}{}",
             copr.project,
@@ -90,11 +90,11 @@ pub fn update_all(
 ) -> Vec<(&'static str, Result<()>)> {
     let mut results = Vec::new();
     #[cfg(feature = "publish-aur")]
-    if let Some(aur) = &config.aur {
+    if let Some(aur) = &config.publish.aur {
         results.push(("AUR", aur::publish(aur, version, false)));
     }
     #[cfg(feature = "publish-copr")]
-    if let Some(copr) = &config.copr {
+    if let Some(copr) = &config.publish.copr {
         results.push(("COPR", copr::publish(copr, root, version, false)));
     }
     results

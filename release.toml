@@ -2,7 +2,7 @@
 
 [release]
 forge = "github"
-create_release = false
+create_release = true
 
 [publish]
 cargo = true

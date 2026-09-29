@@ -175,7 +175,7 @@ fn move_bookmark_and_export(ctx: &ReleaseContext<'_>, config: &Config, quiet: bo
 #[cfg_attr(not(feature = "publish-copr"), allow(unused_variables))]
 fn update_distro_packages(config: &Config, root: &Path, version: &Version, quiet: bool) {
     #[cfg(feature = "publish-aur")]
-    if let Some(aur) = &config.aur {
+    if let Some(aur) = &config.publish.aur {
         info!(quiet, "→ Updating AUR package {}…", aur.package);
         if let Err(e) = jj_release_core::distro::aur::publish(aur, version, false) {
             eprintln!("warning: AUR update failed: {e}");
@@ -183,7 +183,7 @@ fn update_distro_packages(config: &Config, root: &Path, version: &Version, quiet
     }
 
     #[cfg(feature = "publish-copr")]
-    if let Some(copr) = &config.copr {
+    if let Some(copr) = &config.publish.copr {
         info!(quiet, "→ Submitting to COPR project {}…", copr.project);
         if let Err(e) = jj_release_core::distro::copr::publish(copr, root, version, false) {
             eprintln!("warning: COPR submission failed: {e}");

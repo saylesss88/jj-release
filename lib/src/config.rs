@@ -21,18 +21,17 @@ pub struct Config {
     pub manifest_backend: String,
     pub workspace: Option<WorkspaceConfig>,
     pub replacements: Vec<Replacement>,
-    pub aur: Option<AurConfig>,
-    pub copr: Option<CoprConfig>,
 }
 
 /// `[aur]` section of the jj-release config.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct AurConfig {
     /// AUR package name, e.g. `jj-release`.
     pub package: String,
     /// Git remote to push to. Defaults to `ssh://aur@aur.archlinux.org/<package>.git`.
     #[serde(default)]
     pub repo: Option<String>,
+    pub required: bool,
 }
 
 impl AurConfig {
@@ -53,6 +52,7 @@ pub struct CoprConfig {
     /// Wait for the COPR build to finish instead of returning right away.
     #[serde(default)]
     pub wait: bool,
+    pub required: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,6 +91,8 @@ pub struct PublishConfig {
     pub cargo_flags: Vec<String>,
     pub semver_checks: bool,
     pub semver_checks_upgrade_major: bool, // auto-upgrade to Major on breaking changes
+    pub aur: Option<AurConfig>,
+    pub copr: Option<CoprConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,8 +160,6 @@ impl Default for Config {
             manifest_backend: "cargo".to_owned(),
             workspace: None,
             replacements: vec![],
-            aur: None,
-            copr: None,
         }
     }
 }
@@ -198,6 +198,8 @@ impl Default for PublishConfig {
             cargo_flags: vec![],
             semver_checks: true,
             semver_checks_upgrade_major: false,
+            aur: None,
+            copr: None,
         }
     }
 }
@@ -281,10 +283,10 @@ strict = true
 # search = 'jj-release = ".*"'
 # replace = 'jj-release = "{{{{version}}}}"'
 
-# [aur]
+# [publish.aur]
 # package = "my-package"
 
-# [copr]
+# [publish.copr]
 # Required: your COPR project as owner/project
 # project = "your-username/my-cli-tool"
 
