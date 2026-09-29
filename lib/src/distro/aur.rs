@@ -524,4 +524,38 @@ build() {
         assert_eq!(source_url("jj-release.patch"), None);
         assert_eq!(source_url("git+https://example.com/repo.git"), None);
     }
+
+    #[test]
+    fn bumps_split_pkgbuild() {
+        let pkgbuild = r#"pkgbase=jj-release
+pkgname=('jj-release' 'jj-release-full')
+pkgver=0.8.0
+pkgrel=1
+source=("$pkgbase-$pkgver.tar.gz::https://static.crates.io/crates/$pkgbase/$pkgbase-$pkgver.crate")
+b2sums=('oldhash')
+
+package_jj-release() {
+  install -Dm0755 target/release/jj-release "$pkgdir/usr/bin/jj-release"
+}
+
+package_jj-release-full() {
+  provides=('jj-release')
+  conflicts=('jj-release')
+  install -Dm0755 target/release/jj-release-full "$pkgdir/usr/bin/jj-release"
+}
+"#;
+        let out = bump_pkgbuild(
+            pkgbuild,
+            "0.9.0",
+            &[(ChecksumKind::B2, vec!["newhash".to_owned()])],
+        )
+        .unwrap();
+        assert!(out.contains("\npkgver=0.9.0\n"));
+        assert!(out.contains("\npkgrel=1\n"));
+        assert!(out.contains("\nb2sums=('newhash')\n"));
+        // package_ functions untouched
+        assert!(out.contains("package_jj-release()"));
+        assert!(out.contains("package_jj-release-full()"));
+        assert!(out.contains("provides=('jj-release')"));
+    }
 }

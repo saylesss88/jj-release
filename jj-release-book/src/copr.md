@@ -67,7 +67,7 @@ with Cargo features, pass them to the macros, e.g. `%cargo_build -f full` and
 Add a `[copr]` table to your `release.toml`:
 
 ```toml
-[copr]
+[publish.copr]
 # Required: your COPR project as owner/project
 project = "your-username/my-cli-tool"
 

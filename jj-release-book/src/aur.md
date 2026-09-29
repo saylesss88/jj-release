@@ -21,7 +21,7 @@ ensure the new source tarball is fully available for checksum calculation.
 Add the `[aur]` table to your `release.toml`:
 
 ```toml
-[aur]
+[publish.aur]
 # Required: The exact name of your package on the AUR
 package = "my-cli-tool"
 
@@ -58,7 +58,6 @@ rerunning after a partial failure is safe.
 
 ### Limitations
 
-- Single packages only (no split packages).
 - Only `sha256sums` and `b2sums` are supported. Other checksum arrays and
   architecture-specific sources (`source_x86_64`) produce a clear error.
 - If you edit the `PKGBUILD` by hand, regenerate `.SRCINFO` yourself before
