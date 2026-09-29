@@ -142,20 +142,33 @@ pub fn run_publish(
     root: &Path,
     prepared: &PreparedRelease,
 ) -> Result<()> {
-    if !config.publish.cargo {
-        return Ok(());
+    if config.publish.cargo {
+        let is_independent = config
+            .workspace
+            .as_ref()
+            .is_some_and(|ws| matches!(ws.versioning, Versioning::Independent));
+
+        if is_independent {
+            publish_independent(ctx, config, prepared, root)?;
+        } else {
+            publish_unified(ctx, config, root)?;
+        }
+    }
+    // Distro targets run after crates.io succeeds.
+    #[cfg(any(feature = "publish-aur", feature = "publish-copr"))]
+    {
+        use crate::distro;
+        if distro::any_configured(config) {
+            for (target, result) in distro::update_all(config, root, &prepared.next_version) {
+                match result {
+                    Ok(()) => eprintln!("✓ {target} updated"),
+                    Err(e) => eprintln!("✗ {target} failed: {e}"),
+                }
+            }
+        }
     }
 
-    let is_independent = config
-        .workspace
-        .as_ref()
-        .is_some_and(|ws| matches!(ws.versioning, Versioning::Independent));
-
-    if is_independent {
-        publish_independent(ctx, config, prepared, root)
-    } else {
-        publish_unified(ctx, config, root)
-    }
+    Ok(())
 }
 
 pub(super) fn publish_independent(
