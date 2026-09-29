@@ -95,11 +95,13 @@ pub fn publish(cfg: &CoprConfig, root: &Path, version: &Version, dry_run: bool) 
     let srpm = find_srpm(work)?;
 
     if dry_run {
-        println!(
-            "  📦 Dry run: built {}, not submitting to COPR project {}",
-            srpm.file_name().unwrap_or_default().to_string_lossy(),
-            cfg.project
-        );
+        if cfg.update_local {
+            println!(
+                "  📦 Dry run: would update spec at {} to {new}",
+                spec_src.display()
+            );
+        }
+        println!("  📦 Dry run: built {}, not submitting...", ...);
         return Ok(());
     }
 
@@ -110,6 +112,11 @@ pub fn publish(cfg: &CoprConfig, root: &Path, version: &Version, dry_run: bool) 
     }
     copr.arg(&cfg.project).arg(&srpm);
     run(&mut copr, "copr-cli build")?;
+
+    // Write the updated version back to the repo spec so it stays in sync.
+    if cfg.update_local {
+        write(&spec_src, spec.as_bytes())?;
+    }
 
     println!(
         "  📦 Submitted {crate_name} {new} to COPR project {}",
@@ -290,5 +297,24 @@ Source1:        vendor.tar.xz
     #[test]
     fn errors_without_version() {
         assert!(set_spec_version("Name: foo\n", "1.0.0").is_err());
+    }
+
+    #[test]
+    fn update_local_writes_version_back_to_spec() {
+        let dir = tempfile::tempdir().unwrap();
+        let spec_path = dir.path().join("rust-jj-release.spec");
+        fs::write(&spec_path, SPEC).unwrap();
+
+        // Simulate what publish does, set the version and write back.
+        let new_version = "0.9.0";
+        let updated = set_spec_version(SPEC, new_version).unwrap();
+        fs::write(&spec_path, updated.as_bytes()).unwrap();
+
+        let content = fs::read_to_string(&spec_path).unwrap();
+        assert!(content.contains("\nVersion:        0.9.0\n"));
+        assert!(!content.contains("0.8.0"));
+        // Other fields untouched.
+        assert!(content.contains("%global crate jj-release"));
+        assert!(content.contains("Release:        %autorelease"));
     }
 }
