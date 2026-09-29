@@ -4,7 +4,7 @@
 your `README.md`, installation scripts, or `flake.nix`) during the release
 process.
 
-### Native Nix Flake Support
+## Native Nix Flake Support
 
 If your repository contains a `flake.nix` file in the root directory with a
 standard `version = "..."` declaration, `jj-release` will automatically detect
@@ -45,16 +45,4 @@ file = "lib/src/manifest.rs"
 search = 'version\s*=\s*"[^"]+"'
 # NOTE: Native TOML braces become standard braces in regex replacement
 replace = 'version = "${{1}}{{version}}${{3}}"'
-```
-
-Example replacing the version in your COPR `release.spec` (by default a temp
-project is created and bumped before pushing leaving the release.spec
-untouched):
-
-```toml
-[[replacements]]
-file = "copr/rust-jj-release.spec"
-search = '(?m)^(Version:\s+)\S+'
-replace = '${1}{{version}}'
-exactly_one = true
 ```

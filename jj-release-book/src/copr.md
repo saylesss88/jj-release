@@ -50,15 +50,18 @@ with Cargo features, pass them to the macros, e.g. `%cargo_build -f full` and
 
 <!-- prettier-ignore -->
 > [!NOTE]
-> If you want the local `.spec`'s version to be bumped also you can use `jj-release`'s
->custom replacements by adding the following to your `release.toml`:
+> If you want the local `.spec` version to stay in sync with each release, set
+> `update_local = true` in your `[publish.copr]` config:
+>
 > ```toml
-> [[replacements]]
-> file = "copr/rust-jj-release.spec"
-> search = '(?m)^(Version:\s+)\S+'
-> replace = '${1}{{version}}'
-> exactly_one = true
+> [publish.copr]
+> project = "sayless88/jj-release"
+> spec = "copr/rust-jj-release.spec"
+> update_local = true
 > ```
+>
+> Without this, only the temporary copy used to build the SRPM is updated — the
+> spec file in your repository is left unchanged.
 
 ---
 
