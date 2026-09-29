@@ -1,6 +1,6 @@
 //! Workspace support for multi-crate projects.
 
-use std::{borrow::ToOwned, collections::HashMap, fs, path::Path, process::Command};
+use std::{borrow::ToOwned, collections::HashMap, fs, path::Path};
 
 use crate::errors::{ReleaseError, Result};
 use cargo_metadata::MetadataCommand;
@@ -12,7 +12,7 @@ use crate::{
     config::{Versioning, WorkspaceMember},
     detect,
     jj::JjBackend,
-    manifest::ManifestBackend,
+    manifest::{CargoManifest, ManifestBackend},
 };
 
 pub struct WorkspaceManifest;
@@ -233,20 +233,27 @@ pub fn member_versions(root: &Path) -> Result<HashMap<String, Version>> {
 /// * Spawning the `cargo` command fails (e.g., if Cargo or `cargo-edit` is not installed).
 /// * The `cargo set-version` command execution fails with a non-zero exit
 pub fn bump_member_version(root: &Path, member_name: &str, version: &Version) -> Result<()> {
-    let status = Command::new("cargo")
-        .args(["set-version", "-p", member_name, &version.to_string()])
-        .current_dir(root)
-        .status()
-        .map_err(|_| {
-            ReleaseError::Message(
-                "spawning cargo set-version, is cargo-edit installed?".to_string(),
-            )
+    // Find the member's Cargo.toml via cargo_metadata
+    let metadata = MetadataCommand::new()
+        .manifest_path(root.join("Cargo.toml"))
+        .exec()?;
+
+    let package = metadata
+        .packages
+        .iter()
+        .find(|p| p.name.as_str() == member_name)
+        .ok_or_else(|| {
+            ReleaseError::Message(format!("member {member_name} not found in workspace"))
         })?;
-    if !status.success() {
-        return Err(ReleaseError::Message(format!(
-            "cargo set-version failed for {member_name}"
-        )));
-    }
+
+    let cargo_toml = Path::new(package.manifest_path.as_str());
+    let member_dir = cargo_toml.parent().ok_or_else(|| {
+        ReleaseError::Message(format!(
+            "could not determine parent directory of {}",
+            cargo_toml.display()
+        ))
+    })?;
+    CargoManifest.write_version(member_dir, version)?;
     Ok(())
 }
 
@@ -462,50 +469,6 @@ edition = "2024"
     }
 
     #[test]
-    fn bump_member_version_requires_cargo_edit() {
-        // If cargo-edit isn't installed this test documents the requirement.
-        let dir = tempfile::tempdir().unwrap();
-        fs::write(
-            dir.path().join("Cargo.toml"),
-            r#"
-[workspace]
-members = ["lib"]
-resolver = "2"
-"#,
-        )
-        .unwrap();
-        fs::create_dir(dir.path().join("lib")).unwrap();
-        fs::write(
-            dir.path().join("lib/Cargo.toml"),
-            r#"
-[package]
-name = "mylib"
-version = "0.3.0"
-edition = "2024"
-"#,
-        )
-        .unwrap();
-        fs::create_dir(dir.path().join("lib/src")).unwrap();
-        fs::write(dir.path().join("lib/src/lib.rs"), "").unwrap();
-
-        let new_version = Version::parse("0.4.0").unwrap();
-        let result = bump_member_version(dir.path(), "mylib", &new_version);
-
-        if let Err(err) = result {
-            // cargo-edit not installed, that's ok, just document it
-            let msg = err.to_string();
-            assert!(
-                msg.contains("cargo set-version") || msg.contains("cargo-edit"),
-                "unexpected error: {msg}"
-            );
-        } else {
-            // cargo-edit is installed, verify the version was bumped
-            let versions = member_versions(dir.path()).unwrap();
-            assert_eq!(versions.get("mylib").unwrap().to_string(), "0.4.0");
-        }
-    }
-
-    #[test]
     fn member_bumps_computes_per_member() {
         let backend = MockBackend {
             commits: vec![CommitInfo {
@@ -575,5 +538,38 @@ edition = "2024"
 
         assert_eq!(ordered.len(), 1);
         assert_eq!(ordered[0].name, "mycli");
+    }
+
+    #[test]
+    fn bump_member_version_with_toml_edit() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            r#"
+[workspace]
+members = ["lib"]
+resolver = "2"
+"#,
+        )
+        .unwrap();
+        fs::create_dir(dir.path().join("lib")).unwrap();
+        fs::write(
+            dir.path().join("lib/Cargo.toml"),
+            r#"[package]
+name = "mylib"
+version = "0.3.0"
+edition = "2021"
+"#,
+        )
+        .unwrap();
+        fs::create_dir(dir.path().join("lib/src")).unwrap();
+        fs::write(dir.path().join("lib/src/lib.rs"), "").unwrap();
+
+        let new_version = Version::parse("0.4.0").unwrap();
+        bump_member_version(dir.path(), "mylib", &new_version).unwrap();
+
+        let content = fs::read_to_string(dir.path().join("lib/Cargo.toml")).unwrap();
+        assert!(content.contains("\"0.4.0\""));
+        assert!(!content.contains("\"0.3.0\""));
     }
 }
