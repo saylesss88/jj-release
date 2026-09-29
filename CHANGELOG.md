@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-09-29
+
+### ✨ Added
+
+- **(copr)** add optional local version bump
+- change from [aur] to [publish.aur] to be more explicit, same for copr
+- tie in publishing aur and copr to `run_publish`
+- add cargo.metadata for cargo-binstall
+- **(workspace)** replace call to `cargo-edit` with `toml_edit` removing the need for `cargo-edit` on independent workspaces
+- create `jj-release-book` replacing the long `README.md`
+- add [copr] to default relaese.toml
+- **(distro)** add AUR/COPR pre-flight checks and dry-run output
+- **(release)** run distro pre-flight checks before publishing
+- add Fedora COPR version bump and release
+- add [aur] package ... to generated release.toml
+- **(aur)** tie in aur publishing to dry-run and validate
+- implement auto-publish new version for Arch Linux AUR
+- add full option for features
+- **(forge)** feature-gate forge backends
+- add fedora copr install steps
+- create jj-release-aur directory, publish to AUR, add README section for Arch users
+- arbitrary file replacements and native flake.nix bumping
+- add flake.nix
+
+### ♻️ Changed
+
+- **(pr)** move from implicit macro to a parameterized macro outside of the function
+- **(PKGBUILD)** add jj-release with features github & gitlab and jj-release-full with all features
+- **(flake.nix)** make default only include github & gitlab features and a full option with all features
+- **(README)** slim down README, move documentation to mdBook
+- **(prepare)** slim down `prepare_release` with helper functions
+- **(release)** slim down prepare_release with helper functions
+- **(manifest)** split manifest.rs into per-backend modules
+- **(manifest)** create bump module and move `apply_replacements`, and `bump_flake_nix` to `bump.rs`
+
+### 🚀 Performance
+
+- **(aur)** remove `ureq` dependency and use curl so the core logic is free from heavy network deps
+- feature-gate ureq behind gitea and forgejo features and remove them from the default features list
+- **(registry)** replace `ureq` with local `cargo search`
+- attempt to improve compile times with [profile.release] changes
+
+### 🛠️ Fixed
+
+- **(copr)** dry run comment
+- **(README)** correct path to book
+- clippy lints, correct paths
+- remove aur output from validate function
+- **(manifest)** preserve package.json key order and trailing newline
+- move WorkspaceManifest into manifest.rs
+- commit ignore for registry tests
+- add ignore to registry tests because they fail nix run/nix build from requiring network access. Remove doCheck = false from flake.nix
+
+### 📚 Documentation
+
+- updates
+- finish empty mdBook chapters
+
 ## [0.8.0] - 2026-09-24
 
 ### ✨ Added

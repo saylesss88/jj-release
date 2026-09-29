@@ -16,7 +16,7 @@
         pkgs = nixpkgs.legacyPackages.${system};
         jj-release-base = pkgs.rustPlatform.buildRustPackage {
           pname = "jj-release";
-          version = "0.8.0";
+          version = "0.9.0";
           src = pkgs.lib.cleanSource ./.;
           cargoLock.lockFile = ./Cargo.lock;
 
