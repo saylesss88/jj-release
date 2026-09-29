@@ -1,11 +1,14 @@
 # Installation
 
-```sh
-# Latest changes from source
-cargo install --git https://github.com/saylesss88/jj-release.git
-# From crates.io
-cargo install jj-release
-```
+| Platform            | Command                                                                    |
+| ------------------- | -------------------------------------------------------------------------- |
+| Arch (AUR)          | `paru -S jj-release`                                                       |
+| Arch (AUR, full)    | `paru -S jj-release-full`                                                  |
+| Fedora (COPR)       | `sudo dnf copr enable sayless88/jj-release && sudo dnf install jj-release` |
+| Fedora (COPR, full) | `sudo dnf install jj-release-full`                                         |
+| Nix                 | `nix run github:saylesss88/jj-release`                                     |
+| From source         | `cargo install --git https://github.com/saylesss88/jj-release`             |
+| Cargo Binstall      | `cargo binstall jj-release`                                                |
 
 Requires `jj` on your PATH.
 
@@ -78,11 +81,13 @@ The flake provides two packages depending on the features you need:
 **Try it out without installing:**
 
 Run the default package:
+
 ```bash
 nix run github:saylesss88/jj-release
 ```
 
 Run the full package:
+
 ```bash
 nix run github:saylesss88/jj-release#jj-release-full
 ```
@@ -96,8 +101,8 @@ First, add the input to your `flake.nix`:
 inputs.jj-release.url = "github:saylesss88/jj-release";
 ```
 
-Then, in your `configuration.nix` (assuming `inputs` is passed via `specialArgs`),
-add your preferred package to `environment.systemPackages`:
+Then, in your `configuration.nix` (assuming `inputs` is passed via
+`specialArgs`), add your preferred package to `environment.systemPackages`:
 
 ```nix
 { inputs, pkgs, ... }: {
@@ -112,7 +117,6 @@ add your preferred package to `environment.systemPackages`:
   ];
 }
 ```
-
 
 ---
 
