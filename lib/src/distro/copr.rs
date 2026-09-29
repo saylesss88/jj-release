@@ -71,7 +71,8 @@ pub fn publish(cfg: &CoprConfig, root: &Path, version: &Version, dry_run: bool) 
             .args(["vendor", "--locked"])
             .current_dir(&crate_dir)
             // cargo vendor prints a config snippet on stdout we don't need.
-            .stdout(Stdio::null()),
+            .stdout(Stdio::null())
+            .stderr(Stdio::null()),
         "cargo vendor",
     )?;
     run(
