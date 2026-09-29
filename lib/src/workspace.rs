@@ -558,7 +558,7 @@ resolver = "2"
             r#"[package]
 name = "mylib"
 version = "0.3.0"
-edition = "2021"
+edition = "2024"
 "#,
         )
         .unwrap();

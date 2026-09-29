@@ -139,7 +139,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
             dir.path().join("Cargo.toml"),
-            "[package]\nname=\"test\"\nversion=\"0.1.0\"\nedition=\"2021\"\n",
+            "[package]\nname=\"test\"\nversion=\"0.1.0\"\nedition=\"2024\"\n",
         )
         .unwrap();
         let v = detect_manifest(dir.path())
