@@ -49,17 +49,30 @@ battle-tested.
 cargo install jj-release
 ```
 
-| Platform    | Command                                                                    |
-| ----------- | -------------------------------------------------------------------------- |
-| Arch (AUR)  | `paru -S jj-release`                                                       |
-| Fedora      | `sudo dnf copr enable sayless88/jj-release && sudo dnf install jj-release` |
-| Nix         | `nix run github:saylesss88/jj-release`                                     |
-| From source | `cargo install --git https://github.com/saylesss88/jj-release`             |
+By default, only `github` and `gitlab` features are included.
+
+```sh
+# Forgejo/Codeberg only, no GitHub or GitLab
+cargo install jj-release --no-default-features --features forgejo
+```
+
+| Platform         | Command                                                                    |
+| ---------------- | -------------------------------------------------------------------------- |
+| Arch (AUR)       | `paru -S jj-release`                                                       |
+| Arch (AUR, full) | `paru -S jj-release-full`                                                  |
+| Fedora           | `sudo dnf copr enable sayless88/jj-release && sudo dnf install jj-release` |
+| Fedora (full)    | `sudo dnf install jj-release-full`                                         |
+| Nix              | `nix run github:saylesss88/jj-release`                                     |
+| From source      | `cargo install --git https://github.com/saylesss88/jj-release`             |
+| Cargo Binstall   | `cargo binstall jj-release`                                                |
 
 Requires `jj` 0.43+ in a colocated repository (`jj git init --colocate`). Forge
 releases need `gh` or `glab` for GitHub and GitLab. See
-[Installation](https://saylesss88.github.io/jj-release-book/installation.html) for
-Cargo features, NixOS configuration, and optional tools.
+[Installation](https://saylesss88.github.io/jj-release-book/installation.html)
+for Cargo features, NixOS configuration, and optional tools.
+
+> For Forgejo/Gitea forge support and AUR/COPR publishing, install the `full`
+> variant: `paru -S jj-release-full` or `sudo dnf install jj-release-full`.
 
 ## Quick start
 
