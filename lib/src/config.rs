@@ -23,7 +23,7 @@ pub struct Config {
     pub replacements: Vec<Replacement>,
 }
 
-/// `[aur]` section of the jj-release config.
+/// `[publish.aur]` section of the jj-release config.
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub struct AurConfig {
     /// AUR package name, e.g. `jj-release`.
@@ -53,6 +53,10 @@ pub struct CoprConfig {
     #[serde(default)]
     pub wait: bool,
     pub required: bool,
+    /// Write the updated version back to the spec file in the repo after a
+    /// successful publish. Defaults to true so the committed spec stays in sync.
+    #[serde(default = "default_true")]
+    pub update_local: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
