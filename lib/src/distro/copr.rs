@@ -101,7 +101,11 @@ pub fn publish(cfg: &CoprConfig, root: &Path, version: &Version, dry_run: bool) 
                 spec_src.display()
             );
         }
-        println!("  📦 Dry run: built {}, not submitting...", ...);
+        println!(
+            "  📦 Dry run: built {}, not submitting to COPR project {}",
+            srpm.file_name().unwrap_or_default().to_string_lossy(),
+            cfg.project
+        );
         return Ok(());
     }
 
