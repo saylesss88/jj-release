@@ -295,10 +295,12 @@ strict = true
 
 # [publish.aur]
 # package = "my-package"
+# required = false
 
 # [publish.copr]
 # Required: your COPR project as owner/project
 # project = "your-username/my-cli-tool"
+# required = false
 
 # Required: path to the spec, relative to the repo root
 # spec = "packaging/rust-my-cli-tool.spec"
