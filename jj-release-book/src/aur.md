@@ -65,6 +65,7 @@ rerunning after a partial failure is safe.
 
 **Dry run**
 
-`jj-release run --dry-run` clones the repo, applies the changes, and prints the
-diff without committing or pushing. It still needs SSH access and network access
-for the clone and downloads.
+`jj-release --dry-run` clones the AUR repo, applies the version bump and
+checksum updates, and prints the staged diff without committing or pushing.
+It still requires SSH access to the AUR and network access to download
+sources for checksum calculation.
