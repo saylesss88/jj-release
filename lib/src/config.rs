@@ -25,6 +25,7 @@ pub struct Config {
 
 /// `[publish.aur]` section of the jj-release config.
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[serde(default)]
 pub struct AurConfig {
     /// AUR package name, e.g. `jj-release`.
     pub package: String,
@@ -44,7 +45,8 @@ impl AurConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct CoprConfig {
     /// COPR project as `owner/project`, e.g. `saylesss88/jj-release`.
     pub project: String,
