@@ -31,6 +31,7 @@ pub struct AurConfig {
     /// Git remote to push to. Defaults to `ssh://aur@aur.archlinux.org/<package>.git`.
     #[serde(default)]
     pub repo: Option<String>,
+    #[serde(default)]
     pub required: bool,
 }
 
@@ -52,6 +53,7 @@ pub struct CoprConfig {
     /// Wait for the COPR build to finish instead of returning right away.
     #[serde(default)]
     pub wait: bool,
+    #[serde(default)]
     pub required: bool,
     /// Write the updated version back to the spec file in the repo after a
     /// successful publish. Defaults to true so the committed spec stays in sync.

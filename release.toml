@@ -29,10 +29,10 @@ path = "cli"
 publish = true
 depends_on = ["jj_release_core"] # add names of members this depends on
 
-[aur]
+[publish.aur]
 package = "jj-release"
 
-[copr]
+[publish.copr]
 # Required: your COPR project as owner/project
 project = "sayless88/jj-release"
 
