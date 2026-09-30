@@ -24,11 +24,15 @@ Add the `[aur]` table to your `release.toml`:
 [publish.aur]
 # Required: The exact name of your package on the AUR
 package = "my-cli-tool"
+required = false
 
 # Optional: Override the default Git URL.
 # Defaults to ssh://aur@aur.archlinux.org/{package}.git
 # repo = "ssh://aur@aur.archlinux.org/custom-repo-name.git"
 ```
+
+> `required` controls whether an AUR failure aborts the release or just warns.
+> Set `required = true` if you want a failure to be treated as fatal.
 
 ---
 
@@ -65,7 +69,6 @@ rerunning after a partial failure is safe.
 
 **Dry run**
 
-`jj-release --dry-run` clones the AUR repo, applies the version bump and
-checksum updates, and prints the staged diff without committing or pushing.
-It still requires SSH access to the AUR and network access to download
-sources for checksum calculation.
+`jj-release --dry-run` shows what version the AUR package and COPR spec would be
+bumped to, but does not clone, download, or modify anything. No SSH access or
+network access is required for the dry run.

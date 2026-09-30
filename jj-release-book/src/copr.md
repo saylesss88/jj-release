@@ -58,10 +58,14 @@ with Cargo features, pass them to the macros, e.g. `%cargo_build -f full` and
 > project = "sayless88/jj-release"
 > spec = "copr/rust-jj-release.spec"
 > update_local = true
+> required = false
 > ```
 >
-> Without this, only the temporary copy used to build the SRPM is updated — the
+> Without this, only the temporary copy used to build the SRPM is updated, the
 > spec file in your repository is left unchanged.
+
+> `required` controls whether an COPR failure aborts the release or just warns.
+> Set `required = true` if you want a failure to be treated as fatal.
 
 ---
 
