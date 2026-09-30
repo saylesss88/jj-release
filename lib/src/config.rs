@@ -2,6 +2,7 @@
 
 use std::{
     collections::HashMap,
+    fmt::Write,
     fs,
     path::{Path, PathBuf},
 };
@@ -9,7 +10,11 @@ use std::{
 use semver::Version;
 use serde::{Deserialize, Serialize};
 
-use crate::errors::{ReleaseError, Result};
+use crate::{
+    detect,
+    errors::{ReleaseError, Result},
+    workspace,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -260,9 +265,6 @@ impl Config {
 /// the forge, language, and workspace from the given root path.
 #[must_use]
 pub fn generate_release_toml(root: &Path) -> String {
-    use crate::{detect, workspace};
-    use std::fmt::Write;
-
     let forge = detect::detect_forge(root).unwrap_or("github");
     let language = detect::detect_language(root).unwrap_or("cargo");
 

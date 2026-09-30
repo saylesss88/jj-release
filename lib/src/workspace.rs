@@ -2,7 +2,6 @@
 
 use std::{borrow::ToOwned, collections::HashMap, fs, path::Path};
 
-use crate::errors::{ReleaseError, Result};
 use cargo_metadata::MetadataCommand;
 use semver::Version;
 use toml_edit::DocumentMut;
@@ -11,6 +10,7 @@ use crate::{
     commits::{self, BumpKind},
     config::{Versioning, WorkspaceMember},
     detect,
+    errors::{ReleaseError, Result},
     jj::JjBackend,
     manifest::{CargoManifest, ManifestBackend},
 };
