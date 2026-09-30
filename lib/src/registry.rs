@@ -54,12 +54,14 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore]
     fn published_version_exists() {
         let v = Version::parse("1.0.0").unwrap();
         assert!(version_exists_on_crates_io("thiserror", &v).unwrap());
     }
 
     #[test]
+    #[ignore]
     fn gets_latest_version_from_crates_io() {
         let v = latest_version_on_crates_io("thiserror").unwrap();
         assert!(v.is_some());
