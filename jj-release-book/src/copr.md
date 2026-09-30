@@ -77,6 +77,7 @@ Add a `[copr]` table to your `release.toml`:
 [publish.copr]
 # Required: your COPR project as owner/project
 project = "your-username/my-cli-tool"
+required = false
 
 # Required: path to the spec, relative to the repo root
 spec = "packaging/rust-my-cli-tool.spec"

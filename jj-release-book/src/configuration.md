@@ -35,7 +35,7 @@ strict = true                        # drop unmapped/unformatted commits (false 
 # Defaults to ssh://aur@aur.archlinux.org/{package}.git
 # repo = "ssh://aur@aur.archlinux.org/custom-repo-name.git"
 
-[copr]
+# [copr]
 # Required: your COPR project as owner/project
 # project = "your-username/my-cli-tool"
 
@@ -99,4 +99,3 @@ Testing = "🧪"
 revert = "Reverted"
 test = "Testing"
 ```
-
