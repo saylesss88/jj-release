@@ -21,10 +21,10 @@ pub fn render_changelog_section(
     compare_url: Option<&str>,
 ) -> String {
     let date = Zoned::now().date();
-    let heading = match compare_url {
-        Some(url) => format!("## [{version}]({url}) - {date}\n"),
-        None => format!("## [{version}] - {date}\n"),
-    };
+    let heading = compare_url.map_or_else(
+        || format!("## [{version}] - {date}\n"),
+        |url| format!("## [{version}]({url}) - {date}\n"),
+    );
     let mut out = heading;
 
     // Dynamically group commits by their target header
@@ -186,6 +186,7 @@ fn format_header(header: &str, config: &ChangelogConfig) -> String {
     format!("{emoji} {header}")
 }
 
+#[must_use]
 pub fn compare_url(
     base_url: &str,
     owner_repo: &str,
@@ -196,6 +197,7 @@ pub fn compare_url(
     format!("{base_url}/{owner_repo}/compare/{tag_prefix}{prev}...{tag_prefix}{next}")
 }
 
+#[must_use]
 pub fn forge_base_url(config: &Config) -> Option<String> {
     if !config.release.forge_url.is_empty() {
         return Some(config.release.forge_url.clone());
