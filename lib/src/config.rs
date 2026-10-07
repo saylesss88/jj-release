@@ -29,8 +29,7 @@ pub struct Config {
 }
 
 /// `[publish.aur]` section of the jj-release config.
-#[derive(Debug, Default, Clone, Deserialize, Serialize)]
-#[serde(default)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AurConfig {
     /// AUR package name, e.g. `jj-release`.
     pub package: String,
@@ -50,8 +49,7 @@ impl AurConfig {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-// #[serde(default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoprConfig {
     /// COPR project as `owner/project`, e.g. `saylesss88/jj-release`.
     pub project: String,
@@ -111,6 +109,7 @@ pub struct PublishConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[non_exhaustive]
 #[serde(default)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct ChangelogConfig {
     pub enabled: bool,
     pub file: String,
