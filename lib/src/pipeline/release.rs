@@ -76,6 +76,7 @@ pub fn update_changelog(
         &prepared.commits,
         &prepared.next_version,
         &config.changelog,
+        None,
     );
     let updated = changelog::prepend_to_file(&existing, &section);
     fs::write(&changelog_path, updated)?;

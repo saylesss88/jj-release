@@ -4,7 +4,7 @@ use std::{fs, path::Path};
 
 use semver::Version;
 
-use crate::{Config, ReleaseContext, Tag, changelog, commits, errors::Result};
+use crate::{Config, ReleaseContext, Tag, changelog, commits, detect, errors::Result};
 
 /// Renders and prints the changelog section for the pending release to standard output.
 ///
@@ -31,7 +31,26 @@ pub fn print_changelog(
     };
     let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
     let next = commits::apply_bump(&current, commits::compute_bump(&commits));
-    let section = changelog::render_changelog_section(&commits, &next, &config.changelog);
+
+    let url = if config.changelog.link_headers {
+        changelog::forge_base_url(config).and_then(|base| {
+            detect::parse_remote_owner_repo(root.to_str().unwrap_or_default()).map(
+                |(owner, repo)| {
+                    changelog::compare_url(
+                        &base,
+                        &format!("{owner}/{repo}"),
+                        &current,
+                        &next,
+                        &config.release.tag_prefix,
+                    )
+                },
+            )
+        })
+    } else {
+        None
+    };
+    let section =
+        changelog::render_changelog_section(&commits, &next, &config.changelog, url.as_deref());
 
     match output {
         Some(path) => {
@@ -48,6 +67,7 @@ pub fn print_changelog(
     }
     Ok(())
 }
+
 /// Generates and outputs a comprehensive changelog from the repository's entire history.
 ///
 ///# Errors
@@ -62,6 +82,16 @@ pub fn print_full_changelog(
     root: &Path,
     output: Option<&Path>,
 ) -> Result<()> {
+    // Resolve remote base and repo only once
+    let remote_info = if config.changelog.link_headers {
+        changelog::forge_base_url(config).and_then(|base| {
+            detect::parse_remote_owner_repo(root.to_str().unwrap_or_default())
+                .map(|(owner, repo)| (base, format!("{owner}/{repo}")))
+        })
+    } else {
+        None
+    };
+
     // Get all tags.
     let raw_tags = ctx.backend.list_tags()?;
     let mut all_tags: Vec<Tag> = raw_tags
@@ -77,15 +107,33 @@ pub fn print_full_changelog(
     // Build sections, one per tag range.
     let mut sections = Vec::new();
     let mut versions = Vec::new();
+    let mut urls = Vec::new();
+
     let mut prev = "root()".to_owned();
+    let mut previous_version: Option<Version> = None;
 
     for tag in &all_tags {
         let revset = format!("{prev}..{}", tag.name);
         let tag_commits = ctx.backend.log_commits(&revset)?;
+
+        let url = if let (Some(prev_v), Some((base, repo))) = (&previous_version, &remote_info) {
+            Some(changelog::compare_url(
+                base,
+                repo,
+                prev_v,
+                &tag.version,
+                &config.release.tag_prefix,
+            ))
+        } else {
+            None // First tag has no previous tag to compare against
+        };
+
         sections.push((tag.name.clone(), tag_commits));
         versions.push(tag.version.clone());
+        urls.push(url);
 
         prev.clone_from(&tag.name);
+        previous_version = Some(tag.version.clone());
     }
 
     // Include commits since last tag.
@@ -94,14 +142,29 @@ pub fn print_full_changelog(
         .last()
         .map_or_else(|| "root()".to_owned(), |t| t.name.clone());
     let tip_commits = ctx.backend.log_commits(&format!("{since}..@"))?;
+
     if !tip_commits.is_empty() {
         let bump = commits::compute_bump(&tip_commits);
         let next = commits::apply_bump(&current, bump);
+
+        let url = if let (Some(prev_v), Some((base, repo))) = (&previous_version, &remote_info) {
+            Some(changelog::compare_url(
+                base,
+                repo,
+                prev_v,
+                &next,
+                &config.release.tag_prefix,
+            ))
+        } else {
+            None
+        };
+
         sections.push(("unreleased".to_owned(), tip_commits));
         versions.push(next);
+        urls.push(url);
     }
 
-    let result = changelog::render_full_changelog(&sections, &versions, &config.changelog);
+    let result = changelog::render_full_changelog(&sections, &versions, &config.changelog, &urls);
 
     match output {
         Some(path) => {

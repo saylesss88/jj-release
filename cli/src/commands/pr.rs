@@ -48,6 +48,7 @@ pub fn release_pr(
         &prepared.commits,
         &prepared.next_version,
         &config.changelog,
+        None,
     );
 
     // Push to a release bookmark so PR has something to merge into main.
