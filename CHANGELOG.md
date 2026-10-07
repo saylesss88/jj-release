@@ -5,7 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.9.0] - 2026-09-29
+## [0.10.0](https://github.com/saylesss88/jj-release/compare/v0.9.0...v0.10.0) - 2026-10-07
+
+### ✨ Added
+
+- **(changelog)** add link to Comparing changes for changelog headers
+
+### 🛠️ Fixed
+
+- **(tests/regestry)** add ignore so nix commands work
+- temporarily add required = false to generated release.toml
+- use statements, levels of function & Type calls
+- publish.aur and publish.copr default to required
+- **(workflow)** add write permissions for latest apple release
+
+### 📚 Documentation
+
+- **(lib/Cargo.toml)** fix metadata to point to correct docs.rs for the lib as well as have repository metadata lead to jj-release/lib
+- mdBook updates
+- **(aur,copr)** add required section to docs so it doesn't fail on users
+- fix aur.md dry run explaination in jj-release-book
+- update install section of mdBook
+
+## [0.9.0](https://github.com/saylesss88/jj-release/compare/v0.8.0...v0.9.0) - 2026-10-07
 
 ### ✨ Added
 
@@ -63,7 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - updates
 - finish empty mdBook chapters
 
-## [0.8.0] - 2026-09-24
+## [0.8.0](https://github.com/saylesss88/jj-release/compare/v0.7.0...v0.8.0) - 2026-10-07
 
 ### ✨ Added
 
@@ -89,29 +111,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - add logo to README
 
-## [0.8.0] - 2026-09-24
+## [0.7.0](https://github.com/saylesss88/jj-release/compare/v0.6.0...v0.7.0) - 2026-10-07
 
-### 🚀 Added
-
-- **(changelog)** add angular type prefixes to the default headers
-- **(changelog)** add `emoji_mapping` to allow users to choose the emojis used in changelog headers
-- **(changelog)** add `emoji_headers` option and `format_header` function
-- **(changelog)** add flexible commit mapping, exclusions, and strict mode
-- **(config)** add `strict` field to `ChangelogConfig` to catch non-conventional commits
-- **(main)** add no_publish to the Cli struct & pass into run
-
-### ♻️ Changed
-
-- **(changelog)** add const for keep a changelog header to reduce duplication
-
-### 🛠️ Fixed
-
-- **(changelog)** add a space after **scope** changelog entries
-- **(release)** add a y/n prompt for when cargo.publish = false to warn users and remind them
-
-## [0.7.0] - 2026-09-24
-
-### 🚀 Added
+### ✨ Added
 
 - add generate_release_toml to lib for programmatic config generation
 
@@ -135,9 +137,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - add `prepare_release` example
 - add `full_changelog` example
 
-## [0.6.0] - 2026-09-24
+## [0.6.0](https://github.com/saylesss88/jj-release/compare/v0.5.2...v0.6.0) - 2026-10-07
 
-### 🚀 Added
+### ✨ Added
 
 - add Gitea forge support via shared GiteaCompatClient with Forgejo
 
@@ -151,17 +153,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - doc comment in lib.rs to use jj_release_core
 - **(README)** correct version and exit codes
 
-### 🔥 Bug
+### 🪲 Bug
 
 - **(changelog)** prepend_to_file was duplicating the header info per release
 
-## [0.5.2] - 2026-09-24
+## [0.5.2](https://github.com/saylesss88/jj-release/compare/v0.5.1...v0.5.2) - 2026-10-07
 
 ### 🛠️ Fixed
 
 - explicitly define readme path for crates.io
 
-## [0.5.1] - 2026-09-24
+## [0.5.1](https://github.com/saylesss88/jj-release/compare/v0.5.0...v0.5.1) - 2026-10-07
 
 ### ♻️ Changed
 
@@ -176,9 +178,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **(forge)** move helper functions only used in tests into the test module and drop unused ones
 - tests to use new default of not publishing to cargo
 
-## [0.5.0] - 2026-09-24
+## [0.5.0](https://github.com/saylesss88/jj-release/compare/v0.4.0...v0.5.0) - 2026-10-07
 
-### 🚀 Added
+### ✨ Added
 
 - **(pipeline)** implement zero-config first release mode
 - **(cli)** add contextual hint when release trigger is missing
@@ -234,9 +236,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - update README
 - update README
 
-## [0.4.0] - 2026-09-24
+## [0.4.0](https://github.com/saylesss88/jj-release/compare/v0.3.0...v0.4.0) - 2026-10-07
 
-### 🚀 Added
+### ✨ Added
 
 - **(pipeline)** create first tag if one doesn't exist rather than warning user
 - implement ForgejoForge with REST API for releases and PRs
@@ -258,9 +260,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - update README
 - update README
 
-## [0.3.0] - 2026-09-24
+## [0.3.0](https://github.com/saylesss88/jj-release/compare/v0.2.0...v0.3.0) - 2026-10-07
 
-### 🚀 Added
+### ✨ Added
 
 - **(init)** use crate name for independent tags
 - **(release)** wire per-member tagging into independent workspace release pipeline
@@ -293,9 +295,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - document behavior when there are only conventional commits that don't warrant a bump
 - remove readme from Cargo.toml, it can be inferred
 
-## [0.2.0] - 2026-09-24
+## [0.2.0](https://github.com/saylesss88/jj-release/compare/v0.1.0...v0.2.0) - 2026-10-07
 
-### 🚀 Added
+### ✨ Added
 
 - add validate subcommand
 - require version tag before release with helpful hint, add require_tag config option
@@ -349,9 +351,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **(jj)** remove JJ_CONFIG= line in ShellBackend::run
 - private/public items in crate
 
-## [0.1.0] - 2026-09-24
+## [0.1.0] - 2026-10-07
 
-### 🚀 Added
+### ✨ Added
 
 - **(config)** add new [changelog] section
 - add prepend_to_file for changelog generation

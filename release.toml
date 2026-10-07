@@ -2,7 +2,7 @@
 
 [release]
 forge = "github"
-create_release = false
+create_release = true
 
 [publish]
 cargo = false
@@ -12,23 +12,23 @@ enabled = true
 strict = true
 emoji_headers = true
 # exclude_prefixes = ["chore", "ci", "test"]
+link_headers = true
 
-# [publish.aur]
-# package = "my-package"
+[publish.aur]
+package = "jj-release"
 # required = false
 
-# [publish.copr]
+[publish.copr]
 # Required: your COPR project as owner/project
 # project = "your-username/my-cli-tool"
 # required = false
 
 # Required: path to the spec, relative to the repo root
-# spec = "packaging/rust-my-cli-tool.spec"
+spec = "copr/rust-jj-release.spec"
 
 # Optional: wait for the COPR build to finish (default: false)
 # wait = true
 
-manifest_backend = "cargo"
 
 [workspace]
 enabled = true
@@ -44,4 +44,7 @@ publish = true
 name = "jj-release"
 path = "cli"
 publish = true
-# depends_on = []
+depends_on = ["jj_release_core"]
+
+
+manifest_backend = "cargo"

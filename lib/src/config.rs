@@ -51,7 +51,7 @@ impl AurConfig {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+// #[serde(default)]
 pub struct CoprConfig {
     /// COPR project as `owner/project`, e.g. `saylesss88/jj-release`.
     pub project: String,
@@ -284,6 +284,7 @@ cargo = false
 enabled = true
 strict = true
 # emoji_headers = true
+# link_headers = true
 # exclude_prefixes = ["chore", "ci", "test"]
 
 # [changelog.prefix_mapping]
@@ -309,6 +310,7 @@ strict = true
 
 # Optional: wait for the COPR build to finish (default: false)
 # wait = true
+
 
 manifest_backend = "{language}"
 "#

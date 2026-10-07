@@ -32,10 +32,11 @@ pub fn print_changelog(
     let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
     let next = commits::apply_bump(&current, commits::compute_bump(&commits));
 
-    let url = if config.changelog.link_headers {
+    let url: Option<String> = if config.changelog.link_headers {
         changelog::forge_base_url(config).and_then(|base| {
-            detect::parse_remote_owner_repo(root.to_str().unwrap_or_default()).map(
-                |(owner, repo)| {
+            detect::remote_url(root)
+                .and_then(|url| detect::parse_remote_owner_repo(&url))
+                .map(|(owner, repo)| {
                     changelog::compare_url(
                         &base,
                         &format!("{owner}/{repo}"),
@@ -43,12 +44,12 @@ pub fn print_changelog(
                         &next,
                         &config.release.tag_prefix,
                     )
-                },
-            )
+                })
         })
     } else {
         None
     };
+
     let section =
         changelog::render_changelog_section(&commits, &next, &config.changelog, url.as_deref());
 
@@ -83,9 +84,10 @@ pub fn print_full_changelog(
     output: Option<&Path>,
 ) -> Result<()> {
     // Resolve remote base and repo only once
-    let remote_info = if config.changelog.link_headers {
+    let remote_info: Option<(String, String)> = if config.changelog.link_headers {
         changelog::forge_base_url(config).and_then(|base| {
-            detect::parse_remote_owner_repo(root.to_str().unwrap_or_default())
+            detect::remote_url(root) // 1. Fetch the git URL string
+                .and_then(|url| detect::parse_remote_owner_repo(&url)) // 2. Parse it
                 .map(|(owner, repo)| (base, format!("{owner}/{repo}")))
         })
     } else {
