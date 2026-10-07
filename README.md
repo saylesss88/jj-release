@@ -115,6 +115,7 @@ preview instead of releasing.
 - [Conventional Commits and changelogs](https://saylesss88.github.io/jj-release-book/commits.html)
 - [Forges](https://saylesss88.github.io/jj-release-book/forges.html)
 - [Workspaces](https://saylesss88.github.io/jj-release-book/workspaces.html)
+- [Changelogs](https://saylesss88.github.io/jj-release-book/changelog.html)
 - [AUR](https://saylesss88.github.io/jj-release-book/aur.html) and
   [COPR](https://saylesss88.github.io/jj-release-book/copr.html) publishing
 - [Library API (`jj_release_core`)](https://docs.rs/jj_release_core)

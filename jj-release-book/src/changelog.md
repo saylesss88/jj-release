@@ -49,7 +49,8 @@ enabled = true
 file = "CHANGELOG.md"
 # Add emojis to the changelog headers
 emoji_headers = true
-
+# Add a link to the Compare changes page for your changelog headers
+link_headers = true
 # If true (default), commits that do not strictly match Conventional Commits
 # or your prefix_mapping are silently dropped from the changelog.
 # If false, unformatted commits are collected in an "Other Changes" section.
