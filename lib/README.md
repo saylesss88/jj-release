@@ -24,6 +24,22 @@ implementations for four core traits:
 - **`ForgeBackend`**: Interacts with remote Git forges like GitHub, GitLab,
   Forgejo, and Gitea.
 
+Beyond the core pipeline, the library also provides:
+
+- **`distro`** — publish to AUR and Fedora COPR after a crates.io release
+  (behind `publish-aur` and `publish-copr` feature flags)
+- **`workspace`** — detect and manage multi-crate Cargo workspaces, including
+  topological publish ordering and per-member version bumping
+- **`manifest`** — read and write version fields across Cargo, npm, and Go
+  manifests without losing formatting, and update cross-member dependency
+  versions
+- **`config`** — load `release.toml` and generate one automatically via
+  `generate_release_toml`
+- **`detect`** — auto-detect forge, language, and workspace versioning strategy
+- **`registry`** — query crates.io for published versions as a release baseline
+- **Replacements** — update arbitrary files (README badges, spec files, docs)
+  with version strings on each release
+
 ---
 
 ## Usage
@@ -116,6 +132,8 @@ See the [`examples/`](examples/) directory for runnable demos:
 - `init`: preview the generated `release.toml` for a repository
 - `run_release`: demonstrates how to run the full pipeliine. Warning, this
   example makes real changes!
+- `workspace_info`: inspect workspace members, versions, and dependency order
+- `bump_deps`: update cross-member dependency versions without a full release
 
 ---
 

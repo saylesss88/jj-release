@@ -2,7 +2,12 @@
 //!
 //! Run with: `cargo run --example workspace_info -- /path/to/repo`
 
-use jj_release_core::{ManifestBackend, config::Versioning, manifest, workspace};
+use jj_release_core::{
+    ManifestBackend,
+    config::Versioning,
+    manifest::{CargoManifest, WorkspaceManifest},
+    workspace,
+};
 use std::{env, path::PathBuf};
 
 fn main() {
@@ -27,9 +32,9 @@ fn main() {
     for member in &ws.members {
         let member_root = root.join(&member.path);
         // Try member's own Cargo.toml first but fall back to workspace root
-        let version = manifest::CargoManifest
+        let version = CargoManifest
             .read_version(&member_root)
-            .or_else(|_| manifest::WorkspaceManifest.read_version(root));
+            .or_else(|_| WorkspaceManifest.read_version(root));
         match version {
             Ok(v) => println!("  {} ({}) — {v}", member.name, member.path),
             Err(e) => println!("  {} ({}) — error: {e}", member.name, member.path),
