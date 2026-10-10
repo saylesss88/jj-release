@@ -50,7 +50,11 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
                 Ok("skipped (independent versioning)".to_owned()),
             );
         } else {
-            for (label, result) in distro::preflight(config, root) {
+            for (label, required, result) in distro::preflight(config, root) {
+                let result = match result {
+                    Err(e) if !required => Ok(format!("warning, not required: {e}")),
+                    other => other,
+                };
                 run_check(label, result);
             }
         }

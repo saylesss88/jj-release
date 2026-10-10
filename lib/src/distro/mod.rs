@@ -18,6 +18,9 @@ use crate::{config::Config, errors::Result};
 /// A named pre-flight check: `Ok(detail)` or `Err(reason)`.
 pub type Check = (&'static str, std::result::Result<String, String>);
 
+/// A named pre-flight check: `Ok(detail)` or `Err(reason)`.
+pub type PreflightCheck = (&'static str, bool, std::result::Result<String, String>);
+
 /// Whether any distro target is configured (and compiled in).
 #[must_use]
 #[allow(unused_mut, unused_variables)] // only used by some feature combinations
@@ -38,15 +41,23 @@ pub const fn any_configured(config: &Config) -> bool {
 /// calls (AUR access, COPR auth) but changes nothing.
 #[must_use]
 #[allow(unused_mut, unused_variables)]
-pub fn preflight(config: &Config, root: &Path) -> Vec<Check> {
+pub fn preflight(config: &Config, root: &Path) -> Vec<PreflightCheck> {
     let mut checks = Vec::new();
     #[cfg(feature = "publish-aur")]
     if let Some(aur) = &config.publish.aur {
-        checks.extend(aur::preflight(aur));
+        checks.extend(
+            aur::preflight(aur)
+                .into_iter()
+                .map(|(label, result)| (label, aur.required, result)),
+        );
     }
     #[cfg(feature = "publish-copr")]
     if let Some(copr) = &config.publish.copr {
-        checks.extend(copr::preflight(copr, root));
+        checks.extend(
+            copr::preflight(copr, root)
+                .into_iter()
+                .map(|(label, result)| (label, copr.required, result)),
+        );
     }
     checks
 }
@@ -87,15 +98,19 @@ pub fn update_all(
     config: &Config,
     root: &Path,
     version: &Version,
-) -> Vec<(&'static str, Result<()>)> {
+) -> Vec<(&'static str, bool, Result<()>)> {
     let mut results = Vec::new();
     #[cfg(feature = "publish-aur")]
     if let Some(aur) = &config.publish.aur {
-        results.push(("AUR", aur::publish(aur, version, false)));
+        results.push(("AUR", aur.required, aur::publish(aur, version, false)));
     }
     #[cfg(feature = "publish-copr")]
     if let Some(copr) = &config.publish.copr {
-        results.push(("COPR", copr::publish(copr, root, version, false)));
+        results.push((
+            "COPR",
+            copr.required,
+            copr::publish(copr, root, version, false),
+        ));
     }
     results
 }

@@ -39,14 +39,18 @@ pub fn run_preflight_checks(
     }
 
     if config.publish.cargo {
-        let failures: Vec<String> = distro::preflight(config, root)
-            .into_iter()
-            .filter_map(|(label, result)| result.err().map(|e| format!("  {label}: {e}")))
-            .collect();
-        if !failures.is_empty() {
+        let mut fatal = Vec::new();
+        for (label, required, result) in distro::preflight(config, root) {
+            match result {
+                Ok(_) => {}
+                Err(e) if required => fatal.push(format!("  {label}: {e}")),
+                Err(e) => eprintln!("⚠ {label} (not required): {e}"),
+            }
+        }
+        if !fatal.is_empty() {
             return Err(ReleaseError::Message(format!(
                 "distro pre-flight checks failed:\n{}",
-                failures.join("\n")
+                fatal.join("\n")
             )));
         }
     }
@@ -157,15 +161,23 @@ pub fn run_publish(
     }
     // Distro targets run after crates.io succeeds.
     #[cfg(any(feature = "publish-aur", feature = "publish-copr"))]
-    {
-        use crate::distro;
-        if distro::any_configured(config) {
-            for (target, result) in distro::update_all(config, root, &prepared.next_version) {
-                match result {
-                    Ok(()) => eprintln!("✓ {target} updated"),
-                    Err(e) => eprintln!("✗ {target} failed: {e}"),
+    if distro::any_configured(config) {
+        let mut fatal = Vec::new();
+        for (target, required, result) in distro::update_all(config, root, &prepared.next_version) {
+            match result {
+                Ok(()) => eprintln!("✓ {target} updated"),
+                Err(e) if required => {
+                    eprintln!("✗ {target} failed: {e}");
+                    fatal.push(target);
                 }
+                Err(e) => eprintln!("⚠ {target} failed (not required): {e}"),
             }
+        }
+        if !fatal.is_empty() {
+            return Err(ReleaseError::Message(format!(
+                "required distro target(s) failed (crates.io was already published): {}",
+                fatal.join(", ")
+            )));
         }
     }
 
