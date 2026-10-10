@@ -14,6 +14,8 @@ jj-release changelog -o CHANGELOG.md
 jj-release changelog --full -o CHANGELOG.md
 ```
 
+### Basic Changelog Example:
+
 ```markdown
 # Changelog
 
@@ -31,6 +33,29 @@ and this project adheres to
 - add wallpaper cycling support
 
 ### Fixed
+
+- prevent daemon crash on empty directory
+```
+
+## Customized Example with emoji headers & Compare links:
+
+```markdown
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.2.0](https://github.com/saylesss88/jj-release/compare/v0.1.0...v0.2.0) - 2026-09-08
+
+### ✨ Added
+
+- **(cli)** add init subcommand
+- add wallpaper cycling support
+
+### 🛠️ Fixed
 
 - prevent daemon crash on empty directory
 ```

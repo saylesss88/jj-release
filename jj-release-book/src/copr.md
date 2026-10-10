@@ -58,14 +58,14 @@ with Cargo features, pass them to the macros, e.g. `%cargo_build -f full` and
 > project = "sayless88/jj-release"
 > spec = "copr/rust-jj-release.spec"
 > update_local = true
-> required = false
+> fail_on_error = false
 > ```
 >
 > Without this, only the temporary copy used to build the SRPM is updated, the
 > spec file in your repository is left unchanged.
 
-> `required` controls whether an COPR failure aborts the release or just warns.
-> Set `required = true` if you want a failure to be treated as fatal.
+> `fail_on_error` controls whether an COPR failure aborts the release or just warns.
+> Set `fail_on_error = true` if you want a failure to be treated as fatal.
 
 ---
 
@@ -77,7 +77,7 @@ Add a `[copr]` table to your `release.toml`:
 [publish.copr]
 # Required: your COPR project as owner/project
 project = "your-username/my-cli-tool"
-required = false
+# fail_on_error = false
 
 # Required: path to the spec, relative to the repo root
 spec = "packaging/rust-my-cli-tool.spec"

@@ -24,15 +24,15 @@ Add the `[aur]` table to your `release.toml`:
 [publish.aur]
 # Required: The exact name of your package on the AUR
 package = "my-cli-tool"
-required = false
+# fail_on_error = false
 
 # Optional: Override the default Git URL.
 # Defaults to ssh://aur@aur.archlinux.org/{package}.git
 # repo = "ssh://aur@aur.archlinux.org/custom-repo-name.git"
 ```
 
-> `required` controls whether an AUR failure aborts the release or just warns.
-> Set `required = true` if you want a failure to be treated as fatal.
+> `fail_on_error` controls whether an AUR failure aborts the release or just warns.
+> Set `fail_on_error = true` if you want a failure to be treated as fatal.
 
 ---
 
