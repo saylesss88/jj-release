@@ -20,7 +20,7 @@ fail_on_error = false
 
 [publish.copr]
 # Required: your COPR project as owner/project
-project = "sayless88/rust-jj-release"
+project = "sayless88/jj-release"
 fail_on_error = false
 
 # Required: path to the spec, relative to the repo root
