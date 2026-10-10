@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-10-10
+
+### ✨ Added
+
+- **(aur/copr)** tie in required
+- **(changelog)** add link to Comparing changes for changelog headers
+
+### 🛠️ Fixed
+
+- **(changelog)** read the actual Git remote URL from the repo
+- **(tests/regestry)** add ignore so nix commands work
+- temporarily add required = false to generated release.toml
+- use statements, levels of function & Type calls
+- publish.aur and publish.copr default to required
+- **(workflow)** add write permissions for latest apple release
+
+### 📚 Documentation
+
+- **(config)** add doc comment for required field
+- **(lib/README)** README edits
+- **(lib/README)** add new examples to README
+- **(example)** add bump_deps example
+- **(example)** add workspace_info example
+- add compare changes to changelog headers docs
+- **(lib/Cargo.toml)** fix metadata to point to correct docs.rs for the lib as well as have repository metadata lead to jj-release/lib
+- mdBook updates
+- **(aur,copr)** add required section to docs so it doesn't fail on users
+- fix aur.md dry run explaination in jj-release-book
+- update install section of mdBook
+
 ## [0.10.0](https://github.com/saylesss88/jj-release/compare/v0.9.0...v0.10.0) - 2026-10-07
 
 ### ✨ Added
