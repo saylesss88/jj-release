@@ -48,7 +48,7 @@ pub fn preflight(config: &Config, root: &Path) -> Vec<PreflightCheck> {
         checks.extend(
             aur::preflight(aur)
                 .into_iter()
-                .map(|(label, result)| (label, aur.required, result)),
+                .map(|(label, result)| (label, aur.fail_on_error, result)),
         );
     }
     #[cfg(feature = "publish-copr")]
@@ -56,7 +56,7 @@ pub fn preflight(config: &Config, root: &Path) -> Vec<PreflightCheck> {
         checks.extend(
             copr::preflight(copr, root)
                 .into_iter()
-                .map(|(label, result)| (label, copr.required, result)),
+                .map(|(label, result)| (label, copr.fail_on_error, result)),
         );
     }
     checks
@@ -102,13 +102,13 @@ pub fn update_all(
     let mut results = Vec::new();
     #[cfg(feature = "publish-aur")]
     if let Some(aur) = &config.publish.aur {
-        results.push(("AUR", aur.required, aur::publish(aur, version, false)));
+        results.push(("AUR", aur.fail_on_error, aur::publish(aur, version, false)));
     }
     #[cfg(feature = "publish-copr")]
     if let Some(copr) = &config.publish.copr {
         results.push((
             "COPR",
-            copr.required,
+            copr.fail_on_error,
             copr::publish(copr, root, version, false),
         ));
     }

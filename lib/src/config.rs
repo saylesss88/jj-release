@@ -42,8 +42,8 @@ pub struct AurConfig {
     /// target is reported as a warning and the release continues. When `true`,
     /// either one fails the release. Note that distro targets are updated after
     /// the crates.io publish, so a failure at that stage leaves the crate published.
-    #[serde(default)]
-    pub required: bool,
+    #[serde(default, alias = "required")]
+    pub fail_on_error: bool,
 }
 
 impl AurConfig {
@@ -70,8 +70,8 @@ pub struct CoprConfig {
     /// target is reported as a warning and the release continues. When `true`,
     /// either one fails the release. Note that distro targets are updated after
     /// the crates.io publish, so a failure at that stage leaves the crate published.
-    #[serde(default)]
-    pub required: bool,
+    #[serde(default, alias = "required")]
+    pub fail_on_error: bool,
     /// Write the updated version back to the spec file in the repo after a
     /// successful publish. Defaults to true so the committed spec stays in sync.
     #[serde(default = "default_true")]
@@ -309,12 +309,12 @@ strict = true
 
 # [publish.aur]
 # package = "my-package"
-# required = false
+# fail_on_error = false
 
 # [publish.copr]
 # Required: your COPR project as owner/project
 # project = "your-username/my-cli-tool"
-# required = false
+# fail_on_error = false
 
 # Required: path to the spec, relative to the repo root
 # spec = "packaging/rust-my-cli-tool.spec"
