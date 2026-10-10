@@ -36,6 +36,12 @@ pub struct AurConfig {
     /// Git remote to push to. Defaults to `ssh://aur@aur.archlinux.org/<package>.git`.
     #[serde(default)]
     pub repo: Option<String>,
+    /// Fail the release if this target can't be updated.
+    ///
+    /// When `false` (the default), a failed pre-flight check or publish for this
+    /// target is reported as a warning and the release continues. When `true`,
+    /// either one fails the release. Note that distro targets are updated after
+    /// the crates.io publish, so a failure at that stage leaves the crate published.
     #[serde(default)]
     pub required: bool,
 }
@@ -58,6 +64,12 @@ pub struct CoprConfig {
     /// Wait for the COPR build to finish instead of returning right away.
     #[serde(default)]
     pub wait: bool,
+    /// Fail the release if this target can't be updated.
+    ///
+    /// When `false` (the default), a failed pre-flight check or publish for this
+    /// target is reported as a warning and the release continues. When `true`,
+    /// either one fails the release. Note that distro targets are updated after
+    /// the crates.io publish, so a failure at that stage leaves the crate published.
     #[serde(default)]
     pub required: bool,
     /// Write the updated version back to the spec file in the repo after a
@@ -292,8 +304,8 @@ strict = true
 
 # [[replacements]]
 # file = "README.md"
-# search = 'jj-release = ".*"'
-# replace = 'jj-release = "{{{{version}}}}"'
+# search = 'your-crate = ".*"'
+# replace = 'your-crate = "{{{{version}}}}"'
 
 # [publish.aur]
 # package = "my-package"
