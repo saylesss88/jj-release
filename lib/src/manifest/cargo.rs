@@ -182,7 +182,7 @@ fn update_dep_in_table(table: &mut Table, crate_name: &str, new_version: &str) {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
+    use std::{io::Write, process};
 
     use tempfile::NamedTempFile;
 
@@ -272,7 +272,7 @@ anyhow = "1"
     // These shell out to the real `cargo`. The throwaway crates have no
     // dependencies, so everything runs `--offline`.
 
-    fn cargo(dir: &Path, args: &[&str]) -> std::process::Output {
+    fn cargo(dir: &Path, args: &[&str]) -> process::Output {
         Command::new("cargo")
             .args(args)
             .current_dir(dir)
