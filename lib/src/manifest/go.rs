@@ -48,6 +48,6 @@ mod tests {
             .write_version(dir.path(), &Version::parse("1.0.0").unwrap())
             .unwrap();
         // No files created.
-        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
     }
 }
