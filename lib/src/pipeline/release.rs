@@ -230,6 +230,10 @@ pub(super) fn publish_independent(
             fs::write(&cargo_toml, doc.to_string())?;
         }
 
+        // Keep the lock file in step with the bumped manifests so it is part
+        // of the release commit, not rewritten by `cargo publish` afterwards.
+        ctx.manifest.sync_lockfile(root)?;
+
         // Commit, tag, export, push tag
         ctx.backend.new_commit(&format!("chore: release {tag}"))?;
         ctx.backend.create_tag(&tag, "@")?;
@@ -265,4 +269,165 @@ pub(super) fn publish_unified(
 
     // For single crates or unified workspaces, we just publish from the project root
     ctx.publisher.publish(root, &config.publish.cargo_flags)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{cell::RefCell, process::Command, rc::Rc};
+
+    use super::*;
+    use crate::{
+        commits::{BumpKind, CommitInfo},
+        config::{WorkspaceConfig, WorkspaceMember},
+        forge::NoForge,
+        jj::JjBackend,
+        manifest::{ManifestBackend, WorkspaceManifest},
+        publish::NoPublish,
+    };
+
+    type Log = Rc<RefCell<Vec<String>>>;
+
+    /// Real workspace manifest that records when the lock file is synced.
+    struct RecordingManifest(Log);
+
+    impl ManifestBackend for RecordingManifest {
+        fn read_version(&self, root: &Path) -> Result<Version> {
+            WorkspaceManifest.read_version(root)
+        }
+        fn write_version(&self, root: &Path, version: &Version) -> Result<()> {
+            WorkspaceManifest.write_version(root, version)
+        }
+        fn sync_lockfile(&self, root: &Path) -> Result<()> {
+            self.0.borrow_mut().push("sync_lockfile".into());
+            WorkspaceManifest.sync_lockfile(root)
+        }
+    }
+
+    /// Backend that records calls, and checks the lock file is already
+    /// consistent at the moment the release commit is created.
+    struct RecordingBackend {
+        log: Log,
+        root: std::path::PathBuf,
+    }
+
+    impl JjBackend for RecordingBackend {
+        fn log_commits(&self, _: &str) -> Result<Vec<CommitInfo>> {
+            Ok(vec![])
+        }
+        fn new_commit(&self, message: &str) -> Result<String> {
+            let in_sync = Command::new("cargo")
+                .args(["metadata", "--locked", "--offline", "--format-version", "1"])
+                .current_dir(&self.root)
+                .output()
+                .unwrap()
+                .status
+                .success();
+            assert!(
+                in_sync,
+                "Cargo.lock was stale when the release commit was made"
+            );
+            self.log.borrow_mut().push(format!("new_commit {message}"));
+            Ok(String::new())
+        }
+        fn create_tag(&self, tag: &str, _: &str) -> Result<()> {
+            self.log.borrow_mut().push(format!("create_tag {tag}"));
+            Ok(())
+        }
+        fn set_bookmark(&self, _: &str, _: &str) -> Result<()> {
+            Ok(())
+        }
+        fn git_push(&self, _: Option<&str>, tag: Option<&str>) -> Result<()> {
+            self.log
+                .borrow_mut()
+                .push(format!("git_push {}", tag.unwrap_or("-")));
+            Ok(())
+        }
+        fn git_export(&self) -> Result<()> {
+            Ok(())
+        }
+        fn list_tags(&self) -> Result<Vec<String>> {
+            Ok(vec![])
+        }
+        fn check_identity(&self) -> Result<()> {
+            Ok(())
+        }
+        fn log_commits_for_path(&self, _: &str, _: &str) -> Result<Vec<CommitInfo>> {
+            Ok(vec![])
+        }
+    }
+
+    #[test]
+    fn independent_release_syncs_lockfile_before_the_release_commit() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"a\"]\nresolver = \"3\"\n",
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("a/src")).unwrap();
+        fs::write(
+            root.join("a/Cargo.toml"),
+            "[package]\nname = \"a\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        fs::write(root.join("a/src/lib.rs"), "").unwrap();
+        assert!(
+            Command::new("cargo")
+                .args(["generate-lockfile", "--offline"])
+                .current_dir(root)
+                .status()
+                .unwrap()
+                .success()
+        );
+
+        let log: Log = Rc::default();
+        let backend = RecordingBackend {
+            log: Rc::clone(&log),
+            root: root.to_path_buf(),
+        };
+        let manifest = RecordingManifest(Rc::clone(&log));
+        let ctx = ReleaseContext::new(&backend, &manifest, &NoForge, &NoPublish);
+
+        let config = Config {
+            workspace: Some(WorkspaceConfig {
+                enabled: true,
+                versioning: Versioning::Independent,
+                members: vec![WorkspaceMember {
+                    name: "a".into(),
+                    path: "a".into(),
+                    ..WorkspaceMember::default()
+                }],
+            }),
+            ..Config::default()
+        };
+
+        let old = Version::new(0, 1, 0);
+        let new = Version::new(0, 2, 0);
+        let prepared = PreparedRelease {
+            since: "v0.1.0".into(),
+            current_version: old.clone(),
+            baseline_version: old.clone(),
+            next_version: new.clone(),
+            tag_name: "v0.2.0".into(),
+            commits: vec![],
+            bump: BumpKind::Minor,
+            member_bumps: Some([("a".to_owned(), (old, new))].into_iter().collect()),
+        };
+
+        publish_independent(&ctx, &config, &prepared, root).unwrap();
+
+        let calls = log.borrow().clone();
+        assert_eq!(
+            calls,
+            [
+                "sync_lockfile",
+                "new_commit chore: release v0.2.0",
+                "create_tag v0.2.0",
+                "git_push v0.2.0",
+            ]
+        );
+        let lock = fs::read_to_string(root.join("Cargo.lock")).unwrap();
+        assert!(lock.contains("name = \"a\"\nversion = \"0.2.0\""), "{lock}");
+    }
 }

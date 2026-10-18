@@ -1,6 +1,6 @@
 //! `Cargo.toml` reading and editing, preserving formatting via `toml_edit`.
 
-use std::{fs, path::Path};
+use std::{fs, path::Path, process::Command};
 
 use semver::Version;
 use toml_edit::{DocumentMut, Item, Table, Value};
@@ -18,6 +18,50 @@ impl ManifestBackend for CargoManifest {
     fn write_version(&self, root: &Path, version: &Version) -> Result<()> {
         write_version(&root.join("Cargo.toml"), version)
     }
+
+    fn sync_lockfile(&self, root: &Path) -> Result<()> {
+        sync_lockfile(root)
+    }
+}
+
+/// Refreshes `Cargo.lock` after the workspace's own versions changed, without
+/// touching any third-party dependency version.
+///
+/// `cargo update --workspace` only re-locks workspace members. It is tried with
+/// `--offline` first, since nothing here needs the network when the registry
+/// cache is warm, and retried online if that fails (for example on a cold
+/// cache). Does nothing if there is no `Cargo.lock`.
+///
+/// # Errors
+///
+/// Returns an error if `cargo` cannot be spawned or `cargo update` fails.
+pub fn sync_lockfile(root: &Path) -> Result<()> {
+    if !root.join("Cargo.lock").exists() {
+        return Ok(());
+    }
+
+    let update = |offline: bool| {
+        let mut cmd = Command::new("cargo");
+        cmd.args(["update", "--workspace"]);
+        if offline {
+            cmd.arg("--offline");
+        }
+        cmd.current_dir(root)
+            .output()
+            .map_err(|e| ReleaseError::Message(format!("spawning cargo update --workspace: {e}")))
+    };
+
+    let mut output = update(true)?;
+    if !output.status.success() {
+        output = update(false)?;
+    }
+    if !output.status.success() {
+        return Err(ReleaseError::Message(format!(
+            "cargo update --workspace failed:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        )));
+    }
+    Ok(())
 }
 
 /// Read and parse a TOML file into an editable document.
@@ -222,6 +266,104 @@ anyhow = "1"
     fn read_name_errors_when_missing() {
         let f = make_cargo_toml("[package]\nversion = \"1.0.0\"\n");
         assert!(read_name(f.path()).is_err());
+    }
+
+    // --- sync_lockfile -----------------------------------------------------
+    // These shell out to the real `cargo`. The throwaway crates have no
+    // dependencies, so everything runs `--offline`.
+
+    fn cargo(dir: &Path, args: &[&str]) -> std::process::Output {
+        Command::new("cargo")
+            .args(args)
+            .current_dir(dir)
+            .output()
+            .unwrap()
+    }
+
+    /// A one-crate project with a freshly generated `Cargo.lock`.
+    fn crate_with_lock(dir: &Path, version: &str) {
+        fs::write(
+            dir.join("Cargo.toml"),
+            format!(
+                "[package]\nname = \"locked-crate\"\nversion = \"{version}\"\nedition = \"2024\"\n"
+            ),
+        )
+        .unwrap();
+        fs::create_dir_all(dir.join("src")).unwrap();
+        fs::write(dir.join("src/lib.rs"), "").unwrap();
+        assert!(
+            cargo(dir, &["generate-lockfile", "--offline"])
+                .status
+                .success()
+        );
+    }
+
+    /// `cargo metadata --locked` fails if `Cargo.lock` would need to change.
+    fn lock_is_in_sync(dir: &Path) -> bool {
+        cargo(
+            dir,
+            &["metadata", "--locked", "--offline", "--format-version", "1"],
+        )
+        .status
+        .success()
+    }
+
+    #[test]
+    fn version_bump_makes_lock_stale_and_sync_fixes_it() {
+        let dir = tempfile::tempdir().unwrap();
+        crate_with_lock(dir.path(), "1.0.0");
+        assert!(lock_is_in_sync(dir.path()));
+
+        CargoManifest
+            .write_version(dir.path(), &Version::parse("1.1.0").unwrap())
+            .unwrap();
+        // Precondition: this is the state that used to get committed and
+        // tagged, with `cargo publish` rewriting the lock file afterwards.
+        assert!(
+            !lock_is_in_sync(dir.path()),
+            "a version bump should leave the lock stale"
+        );
+
+        CargoManifest.sync_lockfile(dir.path()).unwrap();
+        assert!(lock_is_in_sync(dir.path()));
+        let lock = fs::read_to_string(dir.path().join("Cargo.lock")).unwrap();
+        assert!(lock.contains("version = \"1.1.0\""), "{lock}");
+        assert!(!lock.contains("version = \"1.0.0\""), "{lock}");
+    }
+
+    #[test]
+    fn sync_lockfile_leaves_a_synced_lock_untouched() {
+        let dir = tempfile::tempdir().unwrap();
+        crate_with_lock(dir.path(), "1.0.0");
+        let before = fs::read(dir.path().join("Cargo.lock")).unwrap();
+
+        CargoManifest.sync_lockfile(dir.path()).unwrap();
+
+        assert_eq!(fs::read(dir.path().join("Cargo.lock")).unwrap(), before);
+    }
+
+    #[test]
+    fn sync_lockfile_without_a_lockfile_does_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Cargo.toml"), BASIC).unwrap();
+
+        CargoManifest.sync_lockfile(dir.path()).unwrap();
+
+        // Must not create a lock file the project doesn't track.
+        assert!(!dir.path().join("Cargo.lock").exists());
+    }
+
+    #[test]
+    fn sync_lockfile_reports_cargo_failures() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Cargo.toml"), "this is not toml [").unwrap();
+        fs::write(dir.path().join("Cargo.lock"), "").unwrap();
+
+        let err = CargoManifest.sync_lockfile(dir.path()).unwrap_err();
+        assert!(
+            err.to_string().contains("cargo update --workspace failed"),
+            "{err}"
+        );
     }
 
     #[test]

@@ -18,9 +18,8 @@ pub use cargo::{CargoManifest, bump_workspace_dependency, read_name};
 pub use go::GoManifest;
 pub use npm::NpmManifest;
 
-pub use workspace::WorkspaceManifest;
-// Kept for API compatibility: these moved to `crate::bump`.
 pub use crate::bump::{apply_replacements, bump_flake_nix};
+pub use workspace::WorkspaceManifest;
 
 use crate::errors::Result;
 
@@ -57,6 +56,19 @@ pub trait ManifestBackend {
     /// Returns an error if the manifest file cannot be read or written due to
     /// permissions, or if serialization of the new version fails.
     fn write_version(&self, root: &Path, version: &Version) -> Result<()>;
+
+    /// Brings generated lock files back in line with the manifests after
+    /// [`write_version`](Self::write_version) and any dependency-version bumps.
+    ///
+    /// The default implementation does nothing, which is correct for backends
+    /// with no lock file to maintain.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the lock file exists but cannot be refreshed.
+    fn sync_lockfile(&self, _root: &Path) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Detect and return the appropriate manifest backend for the given root.

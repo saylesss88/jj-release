@@ -25,11 +25,20 @@ impl ManifestBackend for GoManifest {
 mod tests {
     use super::*;
 
+    use std::fs;
+
     #[test]
     fn read_returns_zero() {
         let dir = tempfile::tempdir().unwrap();
         let v = GoManifest.read_version(dir.path()).unwrap();
         assert_eq!(v, Version::new(0, 0, 0));
+    }
+
+    #[test]
+    fn sync_lockfile_is_noop() {
+        let dir = tempfile::tempdir().unwrap();
+        GoManifest.sync_lockfile(dir.path()).unwrap();
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
     }
 
     #[test]

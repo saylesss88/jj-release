@@ -49,4 +49,60 @@ impl ManifestBackend for WorkspaceManifest {
 
         Ok(())
     }
+
+    fn sync_lockfile(&self, root: &Path) -> Result<()> {
+        super::cargo::sync_lockfile(root)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::process::Command;
+
+    use super::*;
+
+    #[test]
+    fn sync_lockfile_updates_members_inheriting_the_workspace_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"member\"]\nresolver = \"3\"\n\n\
+             [workspace.package]\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("member/src")).unwrap();
+        fs::write(
+            root.join("member/Cargo.toml"),
+            "[package]\nname = \"member\"\nversion.workspace = true\nedition.workspace = true\n",
+        )
+        .unwrap();
+        fs::write(root.join("member/src/lib.rs"), "").unwrap();
+
+        let cargo = |args: &[&str]| {
+            Command::new("cargo")
+                .args(args)
+                .current_dir(root)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        };
+        assert!(cargo(&["generate-lockfile", "--offline"]));
+        let in_sync = || cargo(&["metadata", "--locked", "--offline", "--format-version", "1"]);
+        assert!(in_sync());
+
+        WorkspaceManifest
+            .write_version(root, &Version::parse("0.2.0").unwrap())
+            .unwrap();
+        assert!(!in_sync(), "a version bump should leave the lock stale");
+
+        WorkspaceManifest.sync_lockfile(root).unwrap();
+        assert!(in_sync());
+        let lock = fs::read_to_string(root.join("Cargo.lock")).unwrap();
+        assert!(
+            lock.contains("name = \"member\"\nversion = \"0.2.0\""),
+            "{lock}"
+        );
+    }
 }
