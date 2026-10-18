@@ -25,6 +25,10 @@ publish = true
 depends_on = ["mylib"]   # publish lib before cli
 ```
 
+<!--prettier-ignore-->
+> [!NOTE]
+> You need to add the `depends_on` yourself after running `jj-release init`.
+
 Cross-member dependency versions are updated automatically during the release.
 You do not need to manually update `Cargo.toml` dependency versions between
 workspace members before releasing.
