@@ -273,7 +273,7 @@ pub(super) fn publish_unified(
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::RefCell, process::Command, rc::Rc};
+    use std::{cell::RefCell, collections::HashMap, process::Command, rc::Rc};
 
     use super::*;
     use crate::{
@@ -412,7 +412,8 @@ mod tests {
             tag_name: "v0.2.0".into(),
             commits: vec![],
             bump: BumpKind::Minor,
-            member_bumps: Some([("a".to_owned(), (old, new))].into_iter().collect()),
+            // member_bumps: Some(std::iter::once(("a".to_owned(), (old, new))).collect()),
+            member_bumps: Some(HashMap::from([("a".to_owned(), (old, new))])),
         };
 
         publish_independent(&ctx, &config, &prepared, root).unwrap();
