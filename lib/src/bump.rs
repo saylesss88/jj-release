@@ -4,9 +4,32 @@
 use std::{fs, path::Path};
 
 use regex::Regex;
+use semver::{Prerelease, Version};
 
-use crate::config::Replacement;
 use crate::errors::{ReleaseError, Result};
+use crate::{BumpKind, commits, config::Replacement};
+
+/// Calculates the next version based on the last tag and the manifest.
+/// Never falls below a manually-bumped manifest version.
+#[must_use]
+pub fn next_version(
+    last_release: Option<&Version>,
+    manifest: &Version,
+    level: BumpKind,
+) -> Version {
+    let base = last_release.unwrap_or(manifest);
+    let mut next = commits::apply_bump(base, level);
+
+    // Manifest ahead of the last tag means the user bumped it on purpose
+    // (0.10.1, 0.10.1-dev, 1.0.0). Treat that as a minimum, not a base.
+    if last_release.is_some() && manifest > base && *manifest > next {
+        next = manifest.clone();
+    }
+
+    // Ensure the resulting version drops any -dev or prerelease suffixes
+    next.pre = Prerelease::EMPTY;
+    next
+}
 
 /// Executes regex-based text replacements across arbitrary files (e.g. README.md).
 /// Replaces `{{version}}`, `{{crate_name}}`, and `{{date}}` with the provided values.
