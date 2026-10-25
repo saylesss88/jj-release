@@ -8,7 +8,9 @@
 use std::{env, path::Path};
 
 use crate::{
-    Config, PublishBackend, ReleaseContext, Tag, commits, detect, distro,
+    Config, PublishBackend, ReleaseContext, Tag,
+    commits::{self, BumpKind},
+    detect, distro,
     errors::{ReleaseError, Result},
     manifest,
     pipeline::{self, prepare},
@@ -216,11 +218,7 @@ pub(super) fn check_publish(publisher: &dyn PublishBackend, root: &Path) -> Chec
         .map_err(|e| e.to_string())
 }
 
-fn check_bump(
-    ctx: &crate::pipeline::ReleaseContext<'_>,
-    config: &crate::config::Config,
-    since: &str,
-) -> Result<String, String> {
+fn check_bump(ctx: &ReleaseContext<'_>, config: &Config, since: &str) -> Result<String, String> {
     // If it's a first release, we bypass the bump check completely!
     if since == "root()" {
         return Ok("first release mode (version frozen)".to_owned());
@@ -231,10 +229,10 @@ fn check_bump(
         .log_commits(&format!("{since}..@"))
         .map_err(|e| e.to_string())?;
 
-    let bump = crate::commits::resolve_bump(config.bump.force.as_ref(), &commits)
-        .map_err(|e| e.to_string())?;
+    let bump =
+        commits::resolve_bump(config.bump.force.as_ref(), &commits).map_err(|e| e.to_string())?;
 
-    if bump == crate::commits::BumpKind::None {
+    if bump == BumpKind::None {
         Err("no releasable commits (feat/fix/BREAKING) found since last tag".to_owned())
     } else {
         Ok("releasable commits found".to_owned())
