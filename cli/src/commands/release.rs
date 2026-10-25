@@ -97,7 +97,7 @@ fn print_nothing_to_release(config: &Config, quiet: bool) {
 }
 
 fn print_versions(prepared: &PreparedRelease, is_independent: bool, quiet: bool) {
-    info!(quiet, "  Current version: {}", prepared.current_version);
+    info!(quiet, "  Current version: {}", prepared.baseline_version);
     if !is_independent && prepared.baseline_version != prepared.current_version {
         info!(quiet, "  crates.io version: {}", prepared.baseline_version);
         info!(quiet, "  (using crates.io version as bump baseline)");

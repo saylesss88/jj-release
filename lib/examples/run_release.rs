@@ -45,7 +45,7 @@ fn main() -> Result<()> {
         return Ok(());
     };
 
-    println!("  Current version: {}", prepared.current_version);
+    println!("  Current version: {}", prepared.baseline_version);
     println!("  Next version:    {}", prepared.next_version);
     println!("  Tag:             {}", prepared.tag_name);
 

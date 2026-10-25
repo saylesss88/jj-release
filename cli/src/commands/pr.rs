@@ -37,7 +37,7 @@ pub fn release_pr(
     };
 
     info!(quiet, "  Found trigger commit.");
-    info!(quiet, "  Current version: {}", prepared.current_version);
+    info!(quiet, "  Current version: {}", prepared.baseline_version);
     info!(
         quiet,
         "  Bump: {:?} → {}  (tag: {})", prepared.bump, prepared.next_version, prepared.tag_name
