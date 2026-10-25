@@ -40,6 +40,7 @@ pub mod manifest;
 pub mod pipeline;
 pub mod publish;
 pub mod registry;
+pub mod vcs;
 pub mod workspace;
 
 #[cfg(test)]
