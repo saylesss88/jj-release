@@ -16,14 +16,25 @@ const CHANGELOG_HEADER: &str = "# Changelog\n\n\
 #[must_use]
 pub fn render_changelog_section(
     commits: &[CommitInfo],
-    version: &Version,
+    version: Option<&Version>,
     config: &ChangelogConfig,
     compare_url: Option<&str>,
 ) -> String {
-    let date = Zoned::now().date();
-    let heading = compare_url.map_or_else(
-        || format!("## [{version}] - {date}\n"),
-        |url| format!("## [{version}]({url}) - {date}\n"),
+    // Format [Unreleased] without a date, or the specific version with a date
+    let heading = version.map_or_else(
+        || {
+            compare_url.map_or_else(
+                || "## [Unreleased]\n".to_owned(),
+                |url| format!("## [Unreleased]({url})\n"),
+            )
+        },
+        |v| {
+            let date = Zoned::now().date();
+            compare_url.map_or_else(
+                || format!("## [{v}] - {date}\n"),
+                |url| format!("## [{v}]({url}) - {date}\n"),
+            )
+        },
     );
     let mut out = heading;
 
@@ -175,7 +186,7 @@ pub fn prepend_to_file(existing: &str, new_section: &str) -> String {
 #[must_use]
 pub fn render_full_changelog(
     sections: &[(String, Vec<CommitInfo>)],
-    versions: &[Version],
+    versions: &[Option<Version>],
     config: &ChangelogConfig,
     urls: &[Option<String>],
 ) -> String {
@@ -183,7 +194,7 @@ pub fn render_full_changelog(
 
     // Render newest first.
     for (i, (_, commits)) in sections.iter().enumerate().rev() {
-        let version = &versions[i];
+        let version = versions[i].as_ref();
         let url = urls.get(i).and_then(|u| u.as_deref());
         out.push_str(&render_changelog_section(commits, version, config, url));
         out.push('\n');
@@ -242,9 +253,34 @@ pub fn forge_base_url(config: &Config) -> Option<String> {
     }
 }
 
+#[must_use]
+pub fn compare_unreleased_url(
+    base_url: &str,
+    owner_repo: &str,
+    prev: &Version,
+    tag_prefix: &str,
+) -> String {
+    format!("{base_url}/{owner_repo}/compare/{tag_prefix}{prev}...HEAD")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commits::CommitInfo;
+    use semver::Version;
+
+    fn test_config() -> ChangelogConfig {
+        ChangelogConfig {
+            enabled: true,
+            emoji_headers: true,
+            link_headers: false,
+            file: String::new(),
+            strict: false,
+            exclude_prefixes: vec![],
+            prefix_mapping: HashMap::new(),
+            emoji_mapping: HashMap::new(),
+        }
+    }
 
     #[test]
     fn renders_scoped_commit() {
@@ -253,8 +289,8 @@ mod tests {
             description: "feat(cli): add init subcommand".into(),
         }];
         let config = ChangelogConfig::default();
-        let section =
-            render_changelog_section(&commits, &Version::parse("0.2.0").unwrap(), &config, None);
+        let version = Version::parse("0.2.0").unwrap();
+        let section = render_changelog_section(&commits, Some(&version), &config, None);
         assert!(section.contains("**(cli)**"));
         assert!(section.contains("add init subcommand"));
     }
@@ -266,8 +302,8 @@ mod tests {
             description: "fix: prevent crash on empty dir".into(),
         }];
         let config = ChangelogConfig::default();
-        let section =
-            render_changelog_section(&commits, &Version::parse("0.1.1").unwrap(), &config, None);
+        let version = Version::parse("0.1.1").unwrap();
+        let section = render_changelog_section(&commits, Some(&version), &config, None);
         assert!(section.contains("### Fixed"));
         assert!(section.contains("- prevent crash on empty dir"));
     }
@@ -279,8 +315,8 @@ mod tests {
             description: "chore: bump deps".into(),
         }];
         let config = ChangelogConfig::default();
-        let section =
-            render_changelog_section(&commits, &Version::parse("0.1.1").unwrap(), &config, None);
+        let version = Version::parse("0.1.1").unwrap();
+        let section = render_changelog_section(&commits, Some(&version), &config, None);
         assert!(!section.contains("### Added"));
         assert!(!section.contains("### Fixed"));
     }
@@ -292,8 +328,8 @@ mod tests {
             description: "feat!: redesign IPC protocol".into(),
         }];
         let config = ChangelogConfig::default();
-        let section =
-            render_changelog_section(&commits, &Version::parse("1.0.0").unwrap(), &config, None);
+        let version = Version::parse("1.0.0").unwrap();
+        let section = render_changelog_section(&commits, Some(&version), &config, None);
         assert!(section.contains("### Added"));
         assert!(section.contains("**BREAKING**"));
     }
@@ -396,8 +432,8 @@ mod tests {
             ),
         ];
         let versions = vec![
-            Version::parse("0.1.0").unwrap(),
-            Version::parse("0.2.0").unwrap(),
+            Some(Version::parse("0.1.0").unwrap()),
+            Some(Version::parse("0.2.0").unwrap()),
         ];
         let config = ChangelogConfig::default();
         let urls: Vec<Option<String>> = vec![None; sections.len()];
@@ -419,7 +455,7 @@ mod tests {
                 description: "random work that forgot conventional format".into(),
             }],
         )];
-        let versions = vec![Version::parse("0.1.0").unwrap()];
+        let versions = vec![Some(Version::parse("0.1.0").unwrap())];
         let config = ChangelogConfig {
             strict: false,
             ..Default::default()
@@ -457,8 +493,12 @@ mod tests {
         }];
         let version = Version::parse("0.9.0").unwrap();
         let url = "https://github.com/saylesss88/jj-release/compare/v0.8.0...v0.9.0";
-        let out =
-            render_changelog_section(&commits, &version, &ChangelogConfig::default(), Some(url));
+        let out = render_changelog_section(
+            &commits,
+            Some(&version),
+            &ChangelogConfig::default(),
+            Some(url),
+        );
         assert!(out.contains(&format!("## [0.9.0]({url})")));
     }
 
@@ -469,8 +509,50 @@ mod tests {
             description: "feat: add thing".into(),
         }];
         let version = Version::parse("0.9.0").unwrap();
-        let out = render_changelog_section(&commits, &version, &ChangelogConfig::default(), None);
+        let out =
+            render_changelog_section(&commits, Some(&version), &ChangelogConfig::default(), None);
         assert!(out.contains("## [0.9.0] -"));
         assert!(!out.contains("http"));
+    }
+
+    #[test]
+    fn renders_unreleased_header_without_url() {
+        let commits = vec![CommitInfo {
+            change_id: "abc12345".into(),
+            description: "feat(core): add shiny new feature".into(),
+        }];
+
+        let out = render_changelog_section(&commits, None, &test_config(), None);
+
+        // Should start with [Unreleased] and contain no dates or links
+        assert!(out.starts_with("## [Unreleased]\n"));
+        // Verify it still parsed the commit under the correct emoji header
+        assert!(out.contains("### ✨ Added\n"));
+        assert!(out.contains("- **(core)** add shiny new feature\n"));
+    }
+
+    #[test]
+    fn renders_unreleased_header_with_compare_url() {
+        let commits = vec![];
+        let url = "https://github.com/saylesss88/jj-release/compare/v0.10.0...HEAD";
+
+        let out = render_changelog_section(&commits, None, &test_config(), Some(url));
+
+        // Should inject the markdown link pointing to HEAD
+        assert!(out.starts_with(
+            "## [Unreleased](https://github.com/saylesss88/jj-release/compare/v0.10.0...HEAD)\n"
+        ));
+    }
+
+    #[test]
+    fn generates_correct_unreleased_compare_url() {
+        let prev = Version::parse("0.10.0").unwrap();
+
+        let url = compare_unreleased_url("https://github.com", "saylesss88/jj-release", &prev, "v");
+
+        assert_eq!(
+            url,
+            "https://github.com/saylesss88/jj-release/compare/v0.10.0...HEAD"
+        );
     }
 }

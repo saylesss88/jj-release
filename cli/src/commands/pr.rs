@@ -46,7 +46,7 @@ pub fn release_pr(
     // Generate changelog preview for PR body, no file write.
     let body = changelog::render_changelog_section(
         &prepared.commits,
-        &prepared.next_version,
+        Some(&prepared.next_version),
         &config.changelog,
         None,
     );

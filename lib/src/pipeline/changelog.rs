@@ -4,7 +4,7 @@ use std::{fs, path::Path};
 
 use semver::Version;
 
-use crate::{Config, ReleaseContext, Tag, changelog, commits, detect, errors::Result};
+use crate::{Config, ReleaseContext, Tag, bump, changelog, commits, detect, errors::Result};
 
 /// Renders and prints the changelog section for the pending release to standard output.
 ///
@@ -24,34 +24,54 @@ pub fn print_changelog(
     }
 
     let current = ctx.manifest.read_version(root)?;
+    let latest_tag = commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)?;
 
-    let since = match commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)? {
-        Some(tag) => tag.name,
-        None => "root()".to_owned(),
-    };
+    let since = latest_tag.as_ref().map_or("root()", |t| t.name.as_str());
     let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
-    let next = commits::apply_bump(&current, commits::compute_bump(&commits));
+
+    // Determine if we should render [Unreleased] or a hard version.
+    // If the manifest matches the tag, the user hasn't bumped it yet.
+    let is_unreleased = latest_tag.as_ref().is_some_and(|t| current <= t.version);
+
+    let bump = commits::compute_bump(&commits);
+
+    let next = bump::next_version(latest_tag.as_ref().map(|t| &t.version), &current, bump);
+
+    let target_version = if is_unreleased { None } else { Some(&next) };
 
     let url: Option<String> = if config.changelog.link_headers {
         changelog::forge_base_url(config).and_then(|base| {
             detect::remote_url(root)
                 .and_then(|url| detect::parse_remote_owner_repo(&url))
                 .map(|(owner, repo)| {
-                    changelog::compare_url(
-                        &base,
-                        &format!("{owner}/{repo}"),
-                        &current,
-                        &next,
-                        &config.release.tag_prefix,
-                    )
+                    if let (true, Some(tag)) = (is_unreleased, &latest_tag) {
+                        changelog::compare_unreleased_url(
+                            &base,
+                            &format!("{owner}/{repo}"),
+                            &tag.version,
+                            &config.release.tag_prefix,
+                        )
+                    } else {
+                        changelog::compare_url(
+                            &base,
+                            &format!("{owner}/{repo}"),
+                            &current,
+                            &next,
+                            &config.release.tag_prefix,
+                        )
+                    }
                 })
         })
     } else {
         None
     };
 
-    let section =
-        changelog::render_changelog_section(&commits, &next, &config.changelog, url.as_deref());
+    let section = changelog::render_changelog_section(
+        &commits,
+        target_version,
+        &config.changelog,
+        url.as_deref(),
+    );
 
     match output {
         Some(path) => {
@@ -86,7 +106,7 @@ pub fn print_full_changelog(
     // Resolve remote base and repo only once
     let remote_info: Option<(String, String)> = if config.changelog.link_headers {
         changelog::forge_base_url(config).and_then(|base| {
-            detect::remote_url(root) // 1. Fetch the git URL string
+            detect::remote_url(root) // Fetch the git URL string
                 .and_then(|url| detect::parse_remote_owner_repo(&url)) // 2. Parse it
                 .map(|(owner, repo)| (base, format!("{owner}/{repo}")))
         })
@@ -108,7 +128,7 @@ pub fn print_full_changelog(
 
     // Build sections, one per tag range.
     let mut sections = Vec::new();
-    let mut versions = Vec::new();
+    let mut versions: Vec<Option<Version>> = Vec::new();
     let mut urls = Vec::new();
 
     let mut prev = "root()".to_owned();
@@ -131,30 +151,24 @@ pub fn print_full_changelog(
         };
 
         sections.push((tag.name.clone(), tag_commits));
-        versions.push(tag.version.clone());
+        versions.push(Some(tag.version.clone()));
         urls.push(url);
 
         prev.clone_from(&tag.name);
         previous_version = Some(tag.version.clone());
     }
 
-    // Include commits since last tag.
-    let current = ctx.manifest.read_version(root)?;
     let since = all_tags
         .last()
         .map_or_else(|| "root()".to_owned(), |t| t.name.clone());
     let tip_commits = ctx.backend.log_commits(&format!("{since}..@"))?;
 
     if !tip_commits.is_empty() {
-        let bump = commits::compute_bump(&tip_commits);
-        let next = commits::apply_bump(&current, bump);
-
         let url = if let (Some(prev_v), Some((base, repo))) = (&previous_version, &remote_info) {
-            Some(changelog::compare_url(
+            Some(changelog::compare_unreleased_url(
                 base,
                 repo,
                 prev_v,
-                &next,
                 &config.release.tag_prefix,
             ))
         } else {
@@ -162,7 +176,7 @@ pub fn print_full_changelog(
         };
 
         sections.push(("unreleased".to_owned(), tip_commits));
-        versions.push(next);
+        versions.push(None);
         urls.push(url);
     }
 

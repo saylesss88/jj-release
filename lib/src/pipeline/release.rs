@@ -78,7 +78,7 @@ pub fn update_changelog(
 
     let section = changelog::render_changelog_section(
         &prepared.commits,
-        &prepared.next_version,
+        Some(&prepared.next_version),
         &config.changelog,
         None,
     );
