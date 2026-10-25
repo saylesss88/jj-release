@@ -4,15 +4,15 @@ use std::{collections::HashMap, path::Path};
 
 use semver::Version;
 
-use crate::errors::Result;
 use crate::{
-    PreparedRelease,
+    PreparedRelease, bump,
     commits::{self, BumpKind},
     config::{Config, Versioning, WorkspaceConfig},
     detect,
+    errors::Result,
     jj::JjBackend,
-    manifest::{self, ManifestBackend},
-    publish, registry, workspace,
+    manifest::ManifestBackend,
+    publish, workspace,
 };
 
 /// Prepares a new release by evaluating recent commits, checking for release triggers,
@@ -54,11 +54,16 @@ pub fn prepare_release(
 
     let current_version = manifest.read_version(root)?;
 
+    // Fetch the baseline from local VCS tags
+    let latest_tag = commits::latest_version_tag(backend, "v")?;
+
     // Use crates.io version as baseline if available, more reliable than manifest.
-    let baseline_version = if config.publish.cargo && !is_first_release {
-        crates_io_version(root).unwrap_or_else(|| current_version.clone())
-    } else {
+    let baseline_version = if is_first_release {
         current_version.clone()
+    } else {
+        latest_tag
+            .as_ref()
+            .map_or_else(|| current_version.clone(), |t| t.version.clone())
     };
 
     let commits = backend.log_commits(&format!("{since}..@"))?;
@@ -76,7 +81,11 @@ pub fn prepare_release(
     let next_version = if is_first_release {
         current_version.clone()
     } else {
-        commits::apply_bump(&baseline_version, bump)
+        bump::next_version(
+            latest_tag.as_ref().map(|t| &t.version),
+            &current_version,
+            bump,
+        )
     };
 
     let tag_name = config.tag_name(&next_version);
@@ -100,12 +109,6 @@ pub fn independent_workspace(config: &Config) -> Option<&WorkspaceConfig> {
         .workspace
         .as_ref()
         .filter(|ws| ws.enabled && matches!(ws.versioning, Versioning::Independent))
-}
-
-/// Latest published version on crates.io, if the crate is published and reachable.
-fn crates_io_version(root: &Path) -> Option<Version> {
-    let name = manifest::read_name(&root.join("Cargo.toml")).ok()?;
-    registry::latest_version_on_crates_io(&name).ok().flatten()
 }
 
 /// Upgrade to a major bump if cargo-semver-checks finds breaking API changes.

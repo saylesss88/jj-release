@@ -6,6 +6,13 @@ use semver::Version;
 use crate::errors::{ReleaseError, Result};
 
 /// Fetches the latest stable release tag for the given prefix (e.g., "v" or "my-crate-v").
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The `jj` executable cannot be found or spawned by the system.
+/// - The `jj tag list` command returns a non-zero exit status (e.g., if the
+///   `root` directory is not a valid Jujutsu repository).
 pub fn latest_release_tag(root: &Path, prefix: &str) -> Result<Option<Version>> {
     let out = Command::new("jj")
         .args(["tag", "list", "-T", r#"name ++ "\n""#])

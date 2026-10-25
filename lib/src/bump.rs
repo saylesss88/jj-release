@@ -115,6 +115,12 @@ pub fn bump_flake_nix(root: &Path, new_version: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::BumpKind;
+    use semver::Version;
+
+    fn v(s: &str) -> Version {
+        Version::parse(s).unwrap()
+    }
 
     #[test]
     fn test_bump_flake_nix() {
@@ -232,5 +238,55 @@ mod tests {
 
         let updated = fs::read_to_string(&config_path).unwrap();
         assert_eq!(updated, "version = \"2.0.0\"\nversion = \"2.0.0\"");
+    }
+
+    #[test]
+    fn standard_bump_from_tag() {
+        let last = v("0.10.0");
+        let manifest = v("0.10.0");
+
+        let next = next_version(Some(&last), &manifest, BumpKind::Minor);
+        assert_eq!(next, v("0.11.0"));
+    }
+
+    #[test]
+    fn user_manual_bump_overrides_smaller_computed_bump() {
+        let last = v("0.10.0");
+        let manifest = v("1.0.0"); // User manually set manifest far ahead
+
+        // Computed minor bump from tag would be 0.11.0, but manifest is 1.0.0
+        let next = next_version(Some(&last), &manifest, BumpKind::Minor);
+        assert_eq!(next, v("1.0.0"));
+    }
+
+    #[test]
+    fn larger_computed_bump_overrides_manual_bump() {
+        let last = v("0.10.0");
+        let manifest = v("0.10.1"); // User manually patched
+
+        // Commits dictate a Major bump, which is 1.0.0, overriding the manual 0.10.1
+        let next = next_version(Some(&last), &manifest, BumpKind::Major);
+        assert_eq!(next, v("1.0.0"));
+    }
+
+    #[test]
+    fn first_release_uses_manifest_as_base() {
+        let manifest = v("0.1.0");
+
+        // No previous tags. Base becomes 0.1.0. Patch bump -> 0.1.1.
+        let next = next_version(None, &manifest, BumpKind::Patch);
+        assert_eq!(next, v("0.1.1"));
+    }
+
+    #[test]
+    fn strips_prerelease_identifiers() {
+        let last = v("0.10.0");
+        let manifest = v("0.12.0-dev");
+
+        // Computed minor bump is 0.11.0.
+        // Manifest (0.12.0-dev) > 0.11.0, so manifest wins.
+        // Then the prerelease should be stripped for the final output.
+        let next = next_version(Some(&last), &manifest, BumpKind::Patch);
+        assert_eq!(next, v("0.12.0"));
     }
 }
