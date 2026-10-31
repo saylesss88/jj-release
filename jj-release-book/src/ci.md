@@ -4,8 +4,10 @@
 
 <!-- prettier-ignore -->
 > [!NOTE]
-> This action takes a while to finish since it compiles `jj` and `jj-release`
-> from source. Use `jj-release` locally if you're in a hurry.
+> This workflow installs `jj` and `jj-release` as prebuilt binaries with
+> `cargo binstall`, so it runs in about a minute plus your build time. If a
+> prebuilt binary isn't available for the runner, binstall falls back to
+> compiling from source, which takes much longer.
 
 Add this workflow to your consumer repo at `.github/workflows/release.yml`:
 
@@ -22,6 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
 
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +32,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Still needed: `cargo publish` and cargo-semver-checks run during the release.
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -38,16 +42,17 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            ~/.cargo/bin
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Install jj
-        run: cargo install jj-cli --locked
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
 
-      - name: Install jj-release
-        run: cargo install jj-release --locked
+      - name: Install jj, jj-release and cargo-semver-checks
+        run:
+          cargo binstall --no-confirm --disable-telemetry jj-cli jj-release
+          cargo-semver-checks
 
       - name: Attach jj to colocated git repo
         run: jj git init --colocate
@@ -57,7 +62,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Build release binaries
+        if: success()
+        run: |
+          tag=$(git describe --tags --abbrev=0)
+          gh workflow run release_binaries.yml -f tag="$tag"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
+
+<!-- prettier-ignore -->
+> [!NOTE]
+> The last step triggers `release_binaries.yml` (see
+> [Cargo Binstall support](#cargo-binstall-support-for-your-crate) below).
+> If you don't publish prebuilt binaries, delete that step and remove
+> `actions: write` from `permissions`.
 
 ## Cargo Binstall support for your Crate
 
@@ -125,7 +145,9 @@ jobs:
       # release and a normal manual run both get it; only an explicit
       # `unlocked` opt-out skips it.
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }} ${{ inputs.unlocked != true && '--locked' || '' }}
+        run:
+          cargo build --release --target ${{ matrix.target }} ${{
+          inputs.unlocked != true && '--locked' || '' }}
 
       - name: Package and upload
         shell: bash
