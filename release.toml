@@ -13,6 +13,7 @@ strict = true
 emoji_headers = true
 # exclude_prefixes = ["chore", "ci", "test"]
 link_headers = true
+layout = "per-member"
 
 [publish.aur]
 package = "jj-release"

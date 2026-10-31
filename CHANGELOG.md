@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- **(changelog)** support one changelog for each workspace or a single root changelog
 - **(changelog)** add code to support ## Unreleased header
 - **(bump)** use latest tag as the baseline for version calculation
 - **(vcs)** fetch release tags directly via jj
@@ -16,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ♻️ Changed
 
+- **(changelog)** create a new jj_release_changelog workspace member and move the changelog logic there
 - **(pipeline)** transition from registry checks to tag boundaries
 
 ### 🛠️ Fixed
@@ -29,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - update jj-release-book
 
-## [0.10.0](https://github.com/saylesss88/jj-release/compare/v0.9.0...v0.10.0) - 2026-10-25
+## [0.10.0](https://github.com/saylesss88/jj-release/compare/v0.9.0...v0.10.0) - 2026-10-31
 
 ### ✨ Added
 
@@ -59,7 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - fix aur.md dry run explaination in jj-release-book
 - update install section of mdBook
 
-## [0.9.0](https://github.com/saylesss88/jj-release/compare/v0.8.0...v0.9.0) - 2026-10-25
+## [0.9.0](https://github.com/saylesss88/jj-release/compare/v0.8.0...v0.9.0) - 2026-10-31
 
 ### ✨ Added
 
@@ -117,7 +119,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - updates
 - finish empty mdBook chapters
 
-## [0.8.0](https://github.com/saylesss88/jj-release/compare/v0.7.0...v0.8.0) - 2026-10-25
+## [0.8.0](https://github.com/saylesss88/jj-release/compare/v0.7.0...v0.8.0) - 2026-10-31
 
 ### ✨ Added
 
@@ -143,7 +145,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - add logo to README
 
-## [0.7.0](https://github.com/saylesss88/jj-release/compare/v0.6.0...v0.7.0) - 2026-10-25
+## [0.7.0](https://github.com/saylesss88/jj-release/compare/v0.6.0...v0.7.0) - 2026-10-31
 
 ### ✨ Added
 
@@ -169,7 +171,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - add `prepare_release` example
 - add `full_changelog` example
 
-## [0.6.0](https://github.com/saylesss88/jj-release/compare/v0.5.2...v0.6.0) - 2026-10-25
+## [0.6.0](https://github.com/saylesss88/jj-release/compare/v0.5.2...v0.6.0) - 2026-10-31
 
 ### ✨ Added
 
@@ -189,13 +191,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **(changelog)** prepend_to_file was duplicating the header info per release
 
-## [0.5.2](https://github.com/saylesss88/jj-release/compare/v0.5.1...v0.5.2) - 2026-10-25
+## [0.5.2](https://github.com/saylesss88/jj-release/compare/v0.5.1...v0.5.2) - 2026-10-31
 
 ### 🛠️ Fixed
 
 - explicitly define readme path for crates.io
 
-## [0.5.1](https://github.com/saylesss88/jj-release/compare/v0.5.0...v0.5.1) - 2026-10-25
+## [0.5.1](https://github.com/saylesss88/jj-release/compare/v0.5.0...v0.5.1) - 2026-10-31
 
 ### ♻️ Changed
 
@@ -210,7 +212,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **(forge)** move helper functions only used in tests into the test module and drop unused ones
 - tests to use new default of not publishing to cargo
 
-## [0.5.0](https://github.com/saylesss88/jj-release/compare/v0.4.0...v0.5.0) - 2026-10-25
+## [0.5.0](https://github.com/saylesss88/jj-release/compare/v0.4.0...v0.5.0) - 2026-10-31
 
 ### ✨ Added
 
@@ -268,7 +270,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - update README
 - update README
 
-## [0.4.0](https://github.com/saylesss88/jj-release/compare/v0.3.0...v0.4.0) - 2026-10-25
+## [0.4.0](https://github.com/saylesss88/jj-release/compare/v0.3.0...v0.4.0) - 2026-10-31
 
 ### ✨ Added
 
@@ -292,7 +294,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - update README
 - update README
 
-## [0.3.0](https://github.com/saylesss88/jj-release/compare/v0.2.0...v0.3.0) - 2026-10-25
+## [0.3.0](https://github.com/saylesss88/jj-release/compare/v0.2.0...v0.3.0) - 2026-10-31
 
 ### ✨ Added
 
@@ -327,7 +329,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - document behavior when there are only conventional commits that don't warrant a bump
 - remove readme from Cargo.toml, it can be inferred
 
-## [0.2.0](https://github.com/saylesss88/jj-release/compare/v0.1.0...v0.2.0) - 2026-10-25
+## [0.2.0](https://github.com/saylesss88/jj-release/compare/v0.1.0...v0.2.0) - 2026-10-31
 
 ### ✨ Added
 
@@ -383,7 +385,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **(jj)** remove JJ_CONFIG= line in ShellBackend::run
 - private/public items in crate
 
-## [0.1.0] - 2026-10-25
+## [0.1.0] - 2026-10-31
 
 ### ✨ Added
 
