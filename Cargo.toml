@@ -1,6 +1,6 @@
 [workspace]
-members = ["lib", "cli"]
-default-members = ["lib", "cli"]
+members = ["lib", "cli", "changelog"]
+default-members = ["lib", "cli", "changelog"]
 resolver = "3"
 
 [workspace.package]

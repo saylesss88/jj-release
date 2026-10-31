@@ -9,10 +9,9 @@ use std::{
     process::Command,
 };
 
-use crate::{
-    commits::CommitInfo,
-    errors::{ReleaseError, Result},
-};
+use crate::errors::{ReleaseError, Result};
+
+use jj_release_changelog::CommitInfo;
 
 /// Everything jj-release needs from the VCS layer.
 pub trait JjBackend {

@@ -1,7 +1,6 @@
 //! `release.toml` config loading.
 
 use std::{
-    collections::HashMap,
     fmt::Write,
     fs,
     path::{Path, PathBuf},
@@ -15,6 +14,8 @@ use crate::{
     errors::{ReleaseError, Result},
     workspace,
 };
+
+use jj_release_changelog::ChangelogConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -118,23 +119,6 @@ pub struct PublishConfig {
     pub copr: Option<CoprConfig>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[non_exhaustive]
-#[serde(default)]
-#[allow(clippy::struct_excessive_bools)]
-pub struct ChangelogConfig {
-    pub enabled: bool,
-    pub file: String,
-    /// If true, silently drops commits that don't pass strict Conventional Commits parsing.
-    /// If false, unformatted commits are placed in an "Other Changes" section.
-    pub strict: bool,
-    pub prefix_mapping: HashMap<String, String>,
-    pub exclude_prefixes: Vec<String>,
-    pub emoji_headers: bool,
-    pub emoji_mapping: HashMap<String, String>,
-    pub link_headers: bool,
-}
-
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Versioning {
@@ -185,21 +169,6 @@ impl Default for Config {
             manifest_backend: "cargo".to_owned(),
             workspace: None,
             replacements: vec![],
-        }
-    }
-}
-
-impl Default for ChangelogConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            file: "CHANGELOG.md".to_owned(),
-            strict: true,
-            prefix_mapping: HashMap::new(),
-            exclude_prefixes: vec![],
-            emoji_headers: false,
-            emoji_mapping: HashMap::new(),
-            link_headers: false,
         }
     }
 }

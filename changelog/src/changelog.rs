@@ -1,17 +1,54 @@
 //! Changelog generation following Keep a Changelog format.
-
 use std::{collections::HashMap, fmt::Write};
 
 use git_conventional::Commit;
 use jiff::Zoned;
 use semver::Version;
 
-use crate::{Config, changelog, commits::CommitInfo, config::ChangelogConfig};
-
 const CHANGELOG_HEADER: &str = "# Changelog\n\n\
     All notable changes to this project will be documented in this file.\n\n\
     The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\n\
     and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n";
+
+/// Flat representation of a jj commit, as returned by the backend.
+#[derive(Debug, Clone)]
+pub struct CommitInfo {
+    pub change_id: String,
+    pub description: String,
+}
+
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
+#[non_exhaustive]
+#[allow(clippy::struct_excessive_bools)]
+pub struct ChangelogConfig {
+    pub enabled: bool,
+    pub file: String,
+    /// If true, silently drops commits that don't pass strict Conventional Commits parsing.
+    /// If false, unformatted commits are placed in an "Other Changes" section.
+    pub strict: bool,
+    pub prefix_mapping: HashMap<String, String>,
+    pub exclude_prefixes: Vec<String>,
+    pub emoji_headers: bool,
+    pub emoji_mapping: HashMap<String, String>,
+    pub link_headers: bool,
+}
+
+impl Default for ChangelogConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            file: "CHANGELOG.md".to_owned(),
+            strict: true,
+            prefix_mapping: HashMap::new(),
+            exclude_prefixes: vec![],
+            emoji_headers: false,
+            emoji_mapping: HashMap::new(),
+            link_headers: false,
+        }
+    }
+}
 
 #[must_use]
 pub fn render_changelog_section(
@@ -111,7 +148,7 @@ pub fn render_changelog_section(
 
     for header in standard_headers {
         if let Some(entries) = groups.get(header) {
-            let display_header = changelog::format_header(header, config);
+            let display_header = format_header(header, config);
             let _ = write!(out, "\n### {display_header}\n\n");
             for entry in entries {
                 let _ = writeln!(out, "- {entry}");
@@ -127,7 +164,7 @@ pub fn render_changelog_section(
 
     for header in custom_headers {
         if let Some(entries) = groups.get(header) {
-            let display_header = changelog::format_header(header, config);
+            let display_header = format_header(header, config);
             let _ = write!(out, "\n### {display_header}\n\n");
             for entry in entries {
                 let _ = writeln!(out, "- {entry}");
@@ -241,11 +278,11 @@ pub fn compare_url(
 }
 
 #[must_use]
-pub fn forge_base_url(config: &Config) -> Option<String> {
-    if !config.release.forge_url.is_empty() {
-        return Some(config.release.forge_url.clone());
+pub fn forge_base_url(forge: &str, forge_url: &str) -> Option<String> {
+    if !forge_url.is_empty() {
+        return Some(forge_url.to_owned());
     }
-    match config.release.forge.as_str() {
+    match forge {
         "github" => Some("https://github.com".to_owned()),
         "gitlab" => Some("https://gitlab.com".to_owned()),
         "forgejo" | "codeberg" => Some("https://codeberg.org".to_owned()),
@@ -266,7 +303,6 @@ pub fn compare_unreleased_url(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::commits::CommitInfo;
     use semver::Version;
 
     fn test_config() -> ChangelogConfig {

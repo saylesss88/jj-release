@@ -28,7 +28,6 @@
 //! ```
 
 pub mod bump;
-pub mod changelog;
 pub mod commits;
 pub mod config;
 pub mod detect;
@@ -46,7 +45,7 @@ pub mod workspace;
 #[cfg(test)]
 pub(crate) mod test_helpers;
 
-pub use commits::{BumpKind, CommitInfo, Tag};
+pub use commits::{BumpKind, Tag};
 pub use config::Config;
 pub use forge::ForgeBackend;
 pub use jj::JjBackend;

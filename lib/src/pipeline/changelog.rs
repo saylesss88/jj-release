@@ -4,7 +4,9 @@ use std::{fs, path::Path};
 
 use semver::Version;
 
-use crate::{Config, ReleaseContext, Tag, bump, changelog, commits, detect, errors::Result};
+use crate::{Config, ReleaseContext, Tag, bump, commits, detect, errors::Result};
+
+use jj_release_changelog::changelog;
 
 /// Renders and prints the changelog section for the pending release to standard output.
 ///
@@ -40,28 +42,29 @@ pub fn print_changelog(
     let target_version = if is_unreleased { None } else { Some(&next) };
 
     let url: Option<String> = if config.changelog.link_headers {
-        changelog::forge_base_url(config).and_then(|base| {
-            detect::remote_url(root)
-                .and_then(|url| detect::parse_remote_owner_repo(&url))
-                .map(|(owner, repo)| {
-                    if let (true, Some(tag)) = (is_unreleased, &latest_tag) {
-                        changelog::compare_unreleased_url(
-                            &base,
-                            &format!("{owner}/{repo}"),
-                            &tag.version,
-                            &config.release.tag_prefix,
-                        )
-                    } else {
-                        changelog::compare_url(
-                            &base,
-                            &format!("{owner}/{repo}"),
-                            &current,
-                            &next,
-                            &config.release.tag_prefix,
-                        )
-                    }
-                })
-        })
+        jj_release_changelog::forge_base_url(&config.release.forge, &config.release.forge_url)
+            .and_then(|base| {
+                detect::remote_url(root)
+                    .and_then(|url| detect::parse_remote_owner_repo(&url))
+                    .map(|(owner, repo)| {
+                        if let (true, Some(tag)) = (is_unreleased, &latest_tag) {
+                            changelog::compare_unreleased_url(
+                                &base,
+                                &format!("{owner}/{repo}"),
+                                &tag.version,
+                                &config.release.tag_prefix,
+                            )
+                        } else {
+                            changelog::compare_url(
+                                &base,
+                                &format!("{owner}/{repo}"),
+                                &current,
+                                &next,
+                                &config.release.tag_prefix,
+                            )
+                        }
+                    })
+            })
     } else {
         None
     };
@@ -105,11 +108,12 @@ pub fn print_full_changelog(
 ) -> Result<()> {
     // Resolve remote base and repo only once
     let remote_info: Option<(String, String)> = if config.changelog.link_headers {
-        changelog::forge_base_url(config).and_then(|base| {
-            detect::remote_url(root) // Fetch the git URL string
-                .and_then(|url| detect::parse_remote_owner_repo(&url)) // 2. Parse it
-                .map(|(owner, repo)| (base, format!("{owner}/{repo}")))
-        })
+        jj_release_changelog::forge_base_url(&config.release.forge, &config.release.forge_url)
+            .and_then(|base| {
+                detect::remote_url(root) // Fetch the git URL string
+                    .and_then(|url| detect::parse_remote_owner_repo(&url)) // 2. Parse it
+                    .map(|(owner, repo)| (base, format!("{owner}/{repo}")))
+            })
     } else {
         None
     };

@@ -195,13 +195,14 @@ mod tests {
     use semver::Version;
 
     use crate::{
-        commits::CommitInfo,
         config,
         errors::{ReleaseError, Result},
         manifest,
         pipeline::validate,
         test_helpers::mock::MockBackend,
     };
+
+    use jj_release_changelog::CommitInfo;
 
     struct MockManifest {
         version: Version,

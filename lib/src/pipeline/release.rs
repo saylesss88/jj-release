@@ -4,7 +4,6 @@ use semver::Version;
 use toml_edit::DocumentMut;
 
 use crate::{
-    changelog,
     config::{Config, Versioning},
     distro,
     errors::ReleaseError,
@@ -13,6 +12,8 @@ use crate::{
     pipeline::{self, PreparedRelease, ReleaseContext},
     workspace,
 };
+
+use jj_release_changelog::changelog;
 
 /// Executes pre-flight validation checks before mutating the repository.
 ///
@@ -277,13 +278,15 @@ mod tests {
 
     use super::*;
     use crate::{
-        commits::{BumpKind, CommitInfo},
+        commits::BumpKind,
         config::{WorkspaceConfig, WorkspaceMember},
         forge::NoForge,
         jj::JjBackend,
         manifest::{ManifestBackend, WorkspaceManifest},
         publish::NoPublish,
     };
+
+    use jj_release_changelog::CommitInfo;
 
     type Log = Rc<RefCell<Vec<String>>>;
 

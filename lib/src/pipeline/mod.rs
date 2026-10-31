@@ -4,7 +4,9 @@ use std::collections::HashMap;
 
 use semver::Version;
 
-use crate::commits::{BumpKind, CommitInfo};
+use jj_release_changelog::CommitInfo;
+
+use crate::commits::BumpKind;
 use crate::forge::ForgeBackend;
 use crate::jj::JjBackend;
 use crate::manifest::ManifestBackend;

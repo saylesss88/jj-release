@@ -6,14 +6,7 @@ use semver::{BuildMetadata, Prerelease, Version};
 use crate::errors::{ReleaseError, Result};
 use crate::jj::JjBackend;
 
-// -- Types --
-
-/// Flat representation of a jj commit, as returned by the backend.
-#[derive(Debug, Clone)]
-pub struct CommitInfo {
-    pub change_id: String,
-    pub description: String,
-}
+pub use jj_release_changelog::CommitInfo;
 
 /// The kind of semver bump a commit implies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

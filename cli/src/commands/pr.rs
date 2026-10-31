@@ -1,12 +1,13 @@
 use std::path::Path;
 
 use jj_release_core::{
-    changelog,
     config::Config,
     errors::Result,
     forge::PrRequest,
     pipeline::{self, ReleaseContext},
 };
+
+use jj_release_changelog::changelog;
 
 macro_rules! info {
     ($quiet:expr, $($t:tt)*) => { if !$quiet { println!($($t)*); } };

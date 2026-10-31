@@ -534,8 +534,19 @@ version = "0.10.0"
 dependencies = [
  "clap",
  "jiff",
+ "jj_release_changelog",
  "jj_release_core",
  "semver",
+]
+
+[[package]]
+name = "jj_release_changelog"
+version = "0.10.0"
+dependencies = [
+ "git-conventional",
+ "jiff",
+ "semver",
+ "serde",
 ]
 
 [[package]]
@@ -547,6 +558,7 @@ dependencies = [
  "dirs",
  "git-conventional",
  "jiff",
+ "jj_release_changelog",
  "regex",
  "semver",
  "serde",
