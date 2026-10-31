@@ -15,9 +15,7 @@ exclude.workspace = true
 git-conventional = "1.1.0"
 jiff = { version = "0.2.37", default-features = false, features = ["std"] }
 semver = { version = "1.0.28", default-features = false }
-serde = { version = "1.0.229", default-features = false, features = [
-  "derive",
-], optional = true }
+serde = { version = "1.0.229", features = ["derive"], optional = true }
 
 [lints]
 workspace = true

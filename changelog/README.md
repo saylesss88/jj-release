@@ -1,4 +1,4 @@
-# jj_release_changelog
+# `jj_release_changelog`
 
 Render [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) sections from
 [Conventional Commits](https://www.conventionalcommits.org/) messages.

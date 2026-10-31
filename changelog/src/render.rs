@@ -1,121 +1,16 @@
-//! Changelog generation following Keep a Changelog format.
-use std::{collections::HashMap, fmt::Write};
+use std::collections::HashMap;
+use std::fmt::Write;
 
 use git_conventional::Commit;
 use jiff::Zoned;
 use semver::Version;
 
-const CHANGELOG_HEADER: &str = "# Changelog\n\n\
+use crate::{ChangelogConfig, CommitInfo, Release};
+
+pub const CHANGELOG_HEADER: &str = "# Changelog\n\n\
     All notable changes to this project will be documented in this file.\n\n\
     The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\n\
     and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n";
-
-/// Flat representation of a jj commit, as returned by the backend.
-#[derive(Debug, Clone)]
-pub struct CommitInfo {
-    pub change_id: String,
-    pub description: String,
-}
-
-impl CommitInfo {
-    /// A commit with just a message. `change_id` is optional metadata
-    /// (a jj change ID, git hash, etc.) and isn't used for rendering.
-    #[must_use]
-    pub fn new(description: impl Into<String>) -> Self {
-        Self {
-            change_id: String::new(),
-            description: description.into(),
-        }
-    }
-}
-
-impl From<&str> for CommitInfo {
-    fn from(s: &str) -> Self {
-        Self::new(s)
-    }
-}
-
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(default))]
-#[non_exhaustive]
-#[allow(clippy::struct_excessive_bools)]
-pub struct ChangelogConfig {
-    pub enabled: bool,
-    pub file: String,
-    /// If true, silently drops commits that don't pass strict Conventional Commits parsing.
-    /// If false, unformatted commits are placed in an "Other Changes" section.
-    pub strict: bool,
-    pub prefix_mapping: HashMap<String, String>,
-    pub exclude_prefixes: Vec<String>,
-    pub emoji_headers: bool,
-    pub emoji_mapping: HashMap<String, String>,
-    pub link_headers: bool,
-    pub layout: ChangelogLayout,
-}
-
-impl ChangelogConfig {
-    #[must_use]
-    pub const fn strict(mut self, strict: bool) -> Self {
-        self.strict = strict;
-        self
-    }
-    #[must_use]
-    pub const fn emoji_headers(mut self, on: bool) -> Self {
-        self.emoji_headers = on;
-        self
-    }
-    #[must_use]
-    pub fn map_prefix(mut self, prefix: &str, header: &str) -> Self {
-        self.prefix_mapping
-            .insert(prefix.to_owned(), header.to_owned());
-        self
-    }
-    #[must_use]
-    pub fn exclude_prefix(mut self, prefix: &str) -> Self {
-        self.exclude_prefixes.push(prefix.to_owned());
-        self
-    }
-}
-
-impl Default for ChangelogConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            file: "CHANGELOG.md".to_owned(),
-            strict: true,
-            prefix_mapping: HashMap::new(),
-            exclude_prefixes: vec![],
-            emoji_headers: false,
-            emoji_mapping: HashMap::new(),
-            link_headers: false,
-            layout: ChangelogLayout::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
-pub enum ChangelogLayout {
-    /// One changelog at the repository root.
-    #[default]
-    Root,
-    /// One changelog in each workspace member's directory.
-    PerMember,
-}
-
-/// One release in a changelog.
-#[derive(Debug, Clone, Default)]
-pub struct Release {
-    /// `None` renders `[Unreleased]`.
-    pub version: Option<Version>,
-    /// `YYYY-MM-DD`. `None` uses today's date (ignored for unreleased).
-    pub date: Option<String>,
-    /// Link for the version heading, e.g. a forge compare URL.
-    pub compare_url: Option<String>,
-    pub commits: Vec<CommitInfo>,
-}
 
 /// The `## [x.y.z] - date` line, optionally prefixed with a member name.
 #[must_use]
@@ -278,48 +173,6 @@ pub fn render_changelog_section(
     out
 }
 
-// Splits a changelog into its header and the release sections after it.
-///
-/// The header is everything from the `# Changelog` title (any letter case)
-/// up to, but not including, the first `## ` heading, so custom intro text
-/// is preserved. Returns `None` if the file doesn't start with that title.
-fn split_header(existing: &str) -> Option<(&str, &str)> {
-    let starts_with_title = existing
-        .trim_start()
-        .get(..11)
-        .is_some_and(|t| t.eq_ignore_ascii_case("# changelog"));
-    if !starts_with_title {
-        return None;
-    }
-
-    let mut offset = 0;
-    for line in existing.split_inclusive('\n') {
-        if line.starts_with("## ") {
-            return Some(existing.split_at(offset));
-        }
-        offset += line.len();
-    }
-    // No release sections yet: the whole file is header.
-    Some((existing, ""))
-}
-
-#[must_use]
-pub fn prepend_to_file(existing: &str, new_section: &str) -> String {
-    if existing.trim().is_empty() {
-        return format!("{CHANGELOG_HEADER}{new_section}");
-    }
-
-    match split_header(existing) {
-        Some((header, body)) => {
-            // Normalise to exactly one blank line before the first section.
-            let header = header.trim_end();
-            format!("{header}\n\n{new_section}\n{body}")
-        }
-        // No changelog title: add the default header and keep the file as is.
-        None => format!("{CHANGELOG_HEADER}{new_section}\n{existing}"),
-    }
-}
-
 fn format_header(header: &str, config: &ChangelogConfig) -> String {
     if !config.emoji_headers {
         return header.to_owned();
@@ -346,44 +199,12 @@ fn format_header(header: &str, config: &ChangelogConfig) -> String {
     format!("{emoji} {header}")
 }
 
-#[must_use]
-pub fn compare_url(
-    base_url: &str,
-    owner_repo: &str,
-    prev: &Version,
-    next: &Version,
-    tag_prefix: &str,
-) -> String {
-    format!("{base_url}/{owner_repo}/compare/{tag_prefix}{prev}...{tag_prefix}{next}")
-}
-
-#[must_use]
-pub fn forge_base_url(forge: &str, forge_url: &str) -> Option<String> {
-    if !forge_url.is_empty() {
-        return Some(forge_url.to_owned());
-    }
-    match forge {
-        "github" => Some("https://github.com".to_owned()),
-        "gitlab" => Some("https://gitlab.com".to_owned()),
-        "forgejo" | "codeberg" => Some("https://codeberg.org".to_owned()),
-        _ => None,
-    }
-}
-
-#[must_use]
-pub fn compare_unreleased_url(
-    base_url: &str,
-    owner_repo: &str,
-    prev: &Version,
-    tag_prefix: &str,
-) -> String {
-    format!("{base_url}/{owner_repo}/compare/{tag_prefix}{prev}...HEAD")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{ChangelogConfig, ChangelogLayout, CommitInfo, Release};
     use semver::Version;
+    use std::collections::HashMap;
 
     fn test_config() -> ChangelogConfig {
         ChangelogConfig {
@@ -452,85 +273,6 @@ mod tests {
     }
 
     #[test]
-    fn prepend_inserts_after_header() {
-        let new_section = "## [0.2.0] - 2024-06-01\n\n### Added\n- new thing\n";
-        let existing =
-            format!("{CHANGELOG_HEADER}## [0.1.0] - 2024-05-01\n\n### Added\n- old thing\n");
-        let result = prepend_to_file(&existing, new_section);
-        assert!(result.contains("## [0.2.0]"));
-        assert!(result.contains("## [0.1.0]"));
-        // New section should come before old.
-        assert!(result.find("## [0.2.0]") < result.find("## [0.1.0]"));
-    }
-
-    #[test]
-    fn prepend_creates_header_if_missing() {
-        let result = prepend_to_file("", "## [0.1.0] - 2024-01-01\n\n### Added\n- thing\n");
-        assert!(result.starts_with("# Changelog\n\nAll notable"));
-        assert!(result.contains("Keep a Changelog"));
-    }
-
-    #[test]
-    fn prepend_does_not_duplicate_header() {
-        let existing =
-            format!("{CHANGELOG_HEADER}## [0.1.0] - 2024-01-01\n\n### Added\n- initial release\n");
-        let new_section = "## [0.2.0] - 2024-06-01\n\n### Added\n- new thing\n";
-        let result = prepend_to_file(&existing, new_section);
-        assert_eq!(result.matches("# Changelog").count(), 1);
-    }
-
-    const SECTION: &str = "## [0.2.0] - 2024-06-01\n\n### Added\n- new thing\n";
-
-    #[test]
-    fn prepend_keeps_a_custom_header() {
-        let existing = "# Changelog\n\nOur own intro, not the Keep a Changelog text.\n\n\
-                        ## [0.1.0] - 2024-05-01\n\n### Added\n- old thing\n";
-        let result = prepend_to_file(existing, SECTION);
-        assert_eq!(result.matches("# Changelog").count(), 1);
-        assert!(result.contains("Our own intro"));
-        assert!(!result.contains("All notable changes"));
-        assert!(result.find("Our own intro") < result.find("## [0.2.0]"));
-        assert!(result.find("## [0.2.0]") < result.find("## [0.1.0]"));
-    }
-
-    #[test]
-    fn prepend_accepts_title_in_any_case_without_blank_line() {
-        let existing = "# CHANGELOG\n## [0.1.0] - 2024-05-01\n- old\n";
-        let result = prepend_to_file(existing, SECTION);
-        assert_eq!(result.to_lowercase().matches("# changelog").count(), 1);
-        assert!(result.starts_with("# CHANGELOG\n\n## [0.2.0]"));
-        assert!(result.contains("## [0.1.0]"));
-    }
-
-    #[test]
-    fn prepend_to_header_only_file() {
-        let result = prepend_to_file("# Changelog\n\nIntro.\n", SECTION);
-        assert_eq!(result, format!("# Changelog\n\nIntro.\n\n{SECTION}\n"));
-    }
-
-    #[test]
-    fn prepend_does_not_mistake_h3_for_a_release() {
-        let existing = "# Changelog\n\n### Notes\nstuff\n\n## [0.1.0]\n- old\n";
-        let result = prepend_to_file(existing, SECTION);
-        assert!(result.find("### Notes") < result.find("## [0.2.0]"));
-    }
-
-    #[test]
-    fn prepend_adds_header_to_a_file_without_one() {
-        let result = prepend_to_file("## [0.1.0] - 2024-05-01\n- old\n", SECTION);
-        assert!(result.starts_with(CHANGELOG_HEADER));
-        assert!(result.contains("## [0.1.0]"));
-    }
-
-    #[test]
-    fn prepend_is_idempotent_for_the_default_header() {
-        let once = prepend_to_file("", "## [0.1.0] - 2024-05-01\n- a\n");
-        let twice = prepend_to_file(&once, SECTION);
-        assert_eq!(twice.matches("# Changelog").count(), 1);
-        assert_eq!(twice.matches("All notable changes").count(), 1);
-    }
-
-    #[test]
     fn full_changelog_generates_all_sections() {
         let releases = vec![
             Release {
@@ -560,22 +302,6 @@ mod tests {
         let result = render_changelog(&releases, &ChangelogConfig::default().strict(false));
         assert!(result.contains("### Other Changes"));
         assert!(result.contains("- random work that forgot conventional format"));
-    }
-
-    #[test]
-    fn compare_url_github() {
-        let prev = Version::parse("0.8.0").unwrap();
-        let next = Version::parse("0.9.0").unwrap();
-        assert_eq!(
-            compare_url(
-                "https://github.com",
-                "saylesss88/jj-release",
-                &prev,
-                &next,
-                "v"
-            ),
-            "https://github.com/saylesss88/jj-release/compare/v0.8.0...v0.9.0"
-        );
     }
 
     #[test]
@@ -635,18 +361,6 @@ mod tests {
         assert!(out.starts_with(
             "## [Unreleased](https://github.com/saylesss88/jj-release/compare/v0.10.0...HEAD)\n"
         ));
-    }
-
-    #[test]
-    fn generates_correct_unreleased_compare_url() {
-        let prev = Version::parse("0.10.0").unwrap();
-
-        let url = compare_unreleased_url("https://github.com", "saylesss88/jj-release", &prev, "v");
-
-        assert_eq!(
-            url,
-            "https://github.com/saylesss88/jj-release/compare/v0.10.0...HEAD"
-        );
     }
 
     #[test]
