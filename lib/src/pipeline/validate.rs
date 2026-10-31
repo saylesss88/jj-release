@@ -14,7 +14,7 @@ use crate::{
     errors::{ReleaseError, Result},
     manifest,
     pipeline::{self, prepare},
-    publish, registry,
+    publish, registry, workspace,
 };
 
 type CheckResult = Result<String, String>;
@@ -68,6 +68,7 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
     run_check("jj identity", check_jj_identity(ctx));
     run_check("forge CLI", check_forge_cli(config));
     run_check("manifest", check_manifest(ctx, root));
+    run_check("workspace members", check_workspace_members(config, root));
     run_check("version tag", check_version_tag(&tag));
 
     if config.publish.cargo {
@@ -118,6 +119,34 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
         return Err(ReleaseError::Message(format!("{failed} check(s) failed")));
     }
     Ok(())
+}
+
+fn check_workspace_members(config: &Config, root: &Path) -> CheckResult {
+    let Some(ws) = config.workspace.as_ref().filter(|w| w.enabled) else {
+        return Ok("not a workspace".to_owned());
+    };
+    let Ok(Some(detected)) = workspace::detect_workspace(root) else {
+        return Err(
+            "workspace enabled in release.toml but no [workspace] in Cargo.toml".to_owned(),
+        );
+    };
+
+    let configured: Vec<&str> = ws.members.iter().map(|m| m.name.as_str()).collect();
+    let missing: Vec<&str> = detected
+        .members
+        .iter()
+        .map(|m| m.name.as_str())
+        .filter(|name| !configured.contains(name))
+        .collect();
+
+    if missing.is_empty() {
+        Ok(format!("{} members match Cargo.toml", configured.len()))
+    } else {
+        Err(format!(
+            "in Cargo.toml but not release.toml: {} (add a [[workspace.members]] entry)",
+            missing.join(", ")
+        ))
+    }
 }
 
 fn check_jj_identity(ctx: &ReleaseContext<'_>) -> CheckResult {
@@ -236,5 +265,46 @@ fn check_bump(ctx: &ReleaseContext<'_>, config: &Config, since: &str) -> Result<
         Err("no releasable commits (feat/fix/BREAKING) found since last tag".to_owned())
     } else {
         Ok("releasable commits found".to_owned())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{Versioning, WorkspaceConfig, WorkspaceMember};
+    use std::fs;
+
+    #[test]
+    fn detects_member_missing_from_config() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            "[workspace]\nmembers = [\"a\", \"b\"]\n",
+        )
+        .unwrap();
+        for name in ["a", "b"] {
+            fs::create_dir(dir.path().join(name)).unwrap();
+            fs::write(
+                dir.path().join(name).join("Cargo.toml"),
+                format!("[package]\nname = \"{name}\"\nversion = \"0.1.0\"\n"),
+            )
+            .unwrap();
+        }
+
+        let config = Config {
+            workspace: Some(WorkspaceConfig {
+                enabled: true,
+                versioning: Versioning::Unified,
+                members: vec![WorkspaceMember {
+                    name: "a".into(),
+                    path: "a".into(),
+                    ..Default::default()
+                }],
+            }),
+            ..Default::default()
+        };
+
+        let err = check_workspace_members(&config, dir.path()).unwrap_err();
+        assert!(err.contains('b'));
     }
 }
