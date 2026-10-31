@@ -33,6 +33,7 @@ pub struct ChangelogConfig {
     pub emoji_headers: bool,
     pub emoji_mapping: HashMap<String, String>,
     pub link_headers: bool,
+    pub layout: ChangelogLayout,
 }
 
 impl Default for ChangelogConfig {
@@ -46,34 +47,43 @@ impl Default for ChangelogConfig {
             emoji_headers: false,
             emoji_mapping: HashMap::new(),
             link_headers: false,
+            layout: ChangelogLayout::default(),
         }
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
+pub enum ChangelogLayout {
+    /// One changelog at the repository root.
+    #[default]
+    Root,
+    /// One changelog in each workspace member's directory.
+    PerMember,
+}
+
+/// The `## [x.y.z] - date` line, optionally prefixed with a member name.
 #[must_use]
-pub fn render_changelog_section(
-    commits: &[CommitInfo],
+pub fn render_heading(
+    name: Option<&str>,
     version: Option<&Version>,
-    config: &ChangelogConfig,
     compare_url: Option<&str>,
 ) -> String {
-    // Format [Unreleased] without a date, or the specific version with a date
-    let heading = version.map_or_else(
-        || {
-            compare_url.map_or_else(
-                || "## [Unreleased]\n".to_owned(),
-                |url| format!("## [Unreleased]({url})\n"),
-            )
-        },
-        |v| {
-            let date = Zoned::now().date();
-            compare_url.map_or_else(
-                || format!("## [{v}] - {date}\n"),
-                |url| format!("## [{v}]({url}) - {date}\n"),
-            )
-        },
-    );
-    let mut out = heading;
+    let label = version.map_or_else(|| "Unreleased".to_owned(), ToString::to_string);
+    let linked =
+        compare_url.map_or_else(|| format!("[{label}]"), |url| format!("[{label}]({url})"));
+    let prefix = name.map_or_else(String::new, |n| format!("{n} "));
+    match version {
+        Some(_) => format!("## {prefix}{linked} - {}\n", Zoned::now().date()),
+        None => format!("## {prefix}{linked}\n"),
+    }
+}
+
+/// The grouped `### Added` / `### Fixed` / ... sections, without a heading.
+#[must_use]
+pub fn render_body(commits: &[CommitInfo], config: &ChangelogConfig) -> String {
+    let mut out = String::new();
 
     // Dynamically group commits by their target header
     let mut groups: HashMap<String, Vec<String>> = HashMap::new();
@@ -171,7 +181,18 @@ pub fn render_changelog_section(
             }
         }
     }
+    out
+}
 
+#[must_use]
+pub fn render_changelog_section(
+    commits: &[CommitInfo],
+    version: Option<&Version>,
+    config: &ChangelogConfig,
+    compare_url: Option<&str>,
+) -> String {
+    let mut out = render_heading(None, version, compare_url);
+    out.push_str(&render_body(commits, config));
     out
 }
 
@@ -315,6 +336,7 @@ mod tests {
             exclude_prefixes: vec![],
             prefix_mapping: HashMap::new(),
             emoji_mapping: HashMap::new(),
+            layout: ChangelogLayout::default(),
         }
     }
 
@@ -590,5 +612,30 @@ mod tests {
             url,
             "https://github.com/saylesss88/jj-release/compare/v0.10.0...HEAD"
         );
+    }
+
+    #[test]
+    fn heading_with_member_name() {
+        let v = Version::parse("0.4.0").unwrap();
+        let h = render_heading(Some("jj_release_core"), Some(&v), None);
+        assert!(h.starts_with("## jj_release_core [0.4.0] - "));
+    }
+
+    #[test]
+    fn heading_without_name_matches_old_format() {
+        let v = Version::parse("0.4.0").unwrap();
+        assert!(render_heading(None, Some(&v), None).starts_with("## [0.4.0] - "));
+        assert_eq!(render_heading(None, None, None), "## [Unreleased]\n");
+    }
+
+    #[test]
+    fn body_has_no_heading() {
+        let commits = vec![CommitInfo {
+            change_id: "a".into(),
+            description: "feat: thing".into(),
+        }];
+        let body = render_body(&commits, &ChangelogConfig::default());
+        assert!(!body.contains("## ["));
+        assert!(body.contains("### Added"));
     }
 }

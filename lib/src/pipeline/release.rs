@@ -4,7 +4,8 @@ use semver::Version;
 use toml_edit::DocumentMut;
 
 use crate::{
-    config::{Config, Versioning},
+    commits,
+    config::{Config, Versioning, WorkspaceConfig, WorkspaceMember},
     distro,
     errors::ReleaseError,
     errors::Result,
@@ -13,7 +14,7 @@ use crate::{
     workspace,
 };
 
-use jj_release_changelog::changelog;
+use jj_release_changelog::{self, ChangelogLayout, CommitInfo};
 
 /// Executes pre-flight validation checks before mutating the repository.
 ///
@@ -66,25 +67,128 @@ pub fn run_preflight_checks(
 ///
 /// Returns an error if the changelog file cannot be read from or written to disk.
 pub fn update_changelog(
+    ctx: &ReleaseContext<'_>,
     root: &Path,
     config: &Config,
     prepared: &pipeline::PreparedRelease,
 ) -> Result<()> {
-    let changelog_path = root.join(&config.changelog.file);
-    let existing = if changelog_path.exists() {
-        fs::read_to_string(&changelog_path)?
-    } else {
-        String::new()
+    let single = || {
+        write_section(
+            root,
+            config,
+            &jj_release_changelog::render_changelog_section(
+                &prepared.commits,
+                Some(&prepared.next_version),
+                &config.changelog,
+                None,
+            ),
+        )
     };
 
-    let section = changelog::render_changelog_section(
-        &prepared.commits,
-        Some(&prepared.next_version),
-        &config.changelog,
-        None,
-    );
-    let updated = changelog::prepend_to_file(&existing, &section);
-    fs::write(&changelog_path, updated)?;
+    let Some(ws) = config.workspace.as_ref().filter(|w| w.enabled) else {
+        return single();
+    };
+
+    match (config.changelog.layout, &ws.versioning) {
+        // One shared version, one file: same as a single crate.
+        (ChangelogLayout::Root, Versioning::Unified) => single(),
+
+        // One file per member, each with only its own commits.
+        (ChangelogLayout::PerMember, _) => {
+            for (member, version, commits) in releasing_members(ctx, config, ws, prepared)? {
+                let section = jj_release_changelog::render_changelog_section(
+                    &commits,
+                    Some(&version),
+                    &config.changelog,
+                    None,
+                );
+                write_section(&root.join(&member.path), config, &section)?;
+            }
+            Ok(())
+        }
+
+        // One root file with a named section per bumped member.
+        (ChangelogLayout::Root, Versioning::Independent) => {
+            let sections: Vec<String> = releasing_members(ctx, config, ws, prepared)?
+                .into_iter()
+                .map(|(member, version, commits)| {
+                    let mut s = jj_release_changelog::render_heading(
+                        Some(&member.name),
+                        Some(&version),
+                        None,
+                    );
+                    s.push_str(&jj_release_changelog::render_body(
+                        &commits,
+                        &config.changelog,
+                    ));
+                    s
+                })
+                .collect();
+            if sections.is_empty() {
+                return Ok(());
+            }
+            write_section(root, config, &sections.join("\n"))
+        }
+    }
+}
+
+/// Members being released in this run, with their next version and the
+/// commits that touched their path. Members with no bump or no commits are
+/// skipped.
+fn releasing_members<'a>(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    ws: &'a WorkspaceConfig,
+    prepared: &PreparedRelease,
+) -> Result<Vec<(&'a WorkspaceMember, Version, Vec<CommitInfo>)>> {
+    // Unified members share the root tag; look it up once.
+    let root_since = commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)?
+        .map_or_else(|| "root()".to_owned(), |t| t.name);
+
+    let mut out = Vec::new();
+    for member in &ws.members {
+        let Some(version) = member_next_version(ws, member, prepared) else {
+            continue;
+        };
+        let since = match ws.versioning {
+            Versioning::Unified => root_since.clone(),
+            Versioning::Independent => {
+                workspace::member_since(ctx.backend, member, &config.release.tag_prefix, "root()")?
+            }
+        };
+        let commits = ctx
+            .backend
+            .log_commits_for_path(&format!("{since}..@"), &member.path)?;
+        if !commits.is_empty() {
+            out.push((member, version, commits));
+        }
+    }
+    Ok(out)
+}
+
+/// The version `member` is being released as, or `None` if it isn't
+/// being released (independent mode, no changes).
+fn member_next_version(
+    ws: &WorkspaceConfig,
+    member: &WorkspaceMember,
+    prepared: &PreparedRelease,
+) -> Option<Version> {
+    match ws.versioning {
+        Versioning::Unified => Some(prepared.next_version.clone()),
+        Versioning::Independent => {
+            let (current, next) = prepared.member_bumps.as_ref()?.get(&member.name)?;
+            (current != next).then(|| next.clone())
+        }
+    }
+}
+
+fn write_section(dir: &Path, config: &Config, section: &str) -> Result<()> {
+    let path = dir.join(&config.changelog.file);
+    let existing = fs::read_to_string(&path).unwrap_or_default();
+    fs::write(
+        &path,
+        jj_release_changelog::prepend_to_file(&existing, section),
+    )?;
     Ok(())
 }
 

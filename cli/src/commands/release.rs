@@ -130,7 +130,7 @@ fn create_release_commit(
 ) -> Result<()> {
     if config.changelog.enabled {
         info!(quiet, "→ Writing changelog…");
-        pipeline::update_changelog(root, config, prepared)?;
+        pipeline::update_changelog(ctx, root, config, prepared)?;
     }
 
     info!(quiet, "→ Bumping version to {}…", prepared.next_version);

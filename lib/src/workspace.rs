@@ -4,7 +4,6 @@ use std::{borrow::ToOwned, collections::HashMap, fs, path::Path};
 
 use cargo_metadata::MetadataCommand;
 use semver::Version;
-// use toml_edit::DocumentMut;
 
 use crate::{
     commits::{self, BumpKind},
@@ -16,44 +15,6 @@ use crate::{
 };
 
 pub use crate::manifest::WorkspaceManifest;
-
-// pub struct WorkspaceManifest;
-//
-// impl ManifestBackend for WorkspaceManifest {
-//     fn read_version(&self, root: &Path) -> Result<Version> {
-//         let path = root.join("Cargo.toml");
-//         let raw = fs::read_to_string(&path)
-//             .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", path.display())))?;
-//         let doc: DocumentMut = raw
-//             .parse()
-//             .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", path.display())))?;
-//         let version_str = doc
-//             .get("workspace")
-//             .and_then(|w| w.get("package"))
-//             .and_then(|p| p.get("version"))
-//             .and_then(|v| v.as_str())
-//             .ok_or_else(|| ReleaseError::Message("missing [workspace.package].version".into()))?;
-//         Version::parse(version_str)
-//             .map_err(|e| ReleaseError::Message(format!("invalid semver {version_str:?}: {e}")))
-//     }
-//
-//     fn write_version(&self, root: &Path, version: &Version) -> Result<()> {
-//         let path = root.join("Cargo.toml");
-//
-//         let raw = fs::read_to_string(&path)
-//             .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", path.display())))?;
-//
-//         let mut doc: DocumentMut = raw
-//             .parse()
-//             .map_err(|e| ReleaseError::Message(format!("parsing {}: {e}", path.display())))?;
-//
-//         doc["workspace"]["package"]["version"] = toml_edit::value(version.to_string());
-//         fs::write(&path, doc.to_string())
-//             .map_err(|e| ReleaseError::Message(format!("writing {}: {e}", path.display())))?;
-//
-//         Ok(())
-//     }
-// }
 
 pub struct DetectedWorkspace {
     pub members: Vec<WorkspaceMember>,
@@ -276,24 +237,37 @@ pub fn member_bumps(
 ) -> Result<HashMap<String, BumpKind>> {
     let mut bumps = HashMap::new();
     for member in members {
-        // Use member's tag_prefix if set, otherwise workspace default.
-        let prefix = member.tag_prefix.as_deref().unwrap_or(tag_prefix);
-        let all_tags = backend.list_tags()?;
-        let member_since = all_tags
-            .iter()
-            .filter_map(|name| {
-                let stripped = name.strip_prefix(prefix)?;
-                let version = Version::parse(stripped).ok()?;
-                Some((name.clone(), version))
-            })
-            .max_by(|a, b| a.1.cmp(&b.1))
-            .map_or_else(|| since.to_owned(), |(name, _)| name);
+        let member_since = member_since(backend, member, tag_prefix, since)?;
         let member_commits =
             backend.log_commits_for_path(&format!("{member_since}..@"), &member.path)?;
         let bump = commits::resolve_bump(force, &member_commits)?;
         bumps.insert(member.name.clone(), bump);
     }
     Ok(bumps)
+}
+
+/// The latest tag for `member`, using its own `tag_prefix` if set, or
+/// `fallback` (usually `"root()"`) if it has never been tagged.
+///
+/// # Errors
+///
+/// Returns an error if listing tags fails.
+pub fn member_since(
+    backend: &dyn JjBackend,
+    member: &WorkspaceMember,
+    tag_prefix: &str,
+    fallback: &str,
+) -> Result<String> {
+    let prefix = member.tag_prefix.as_deref().unwrap_or(tag_prefix);
+    Ok(backend
+        .list_tags()?
+        .into_iter()
+        .filter_map(|name| {
+            let version = Version::parse(name.strip_prefix(prefix)?).ok()?;
+            Some((name, version))
+        })
+        .max_by(|a, b| a.1.cmp(&b.1))
+        .map_or_else(|| fallback.to_owned(), |(name, _)| name))
 }
 
 /// Get the effective tag name for a member version.

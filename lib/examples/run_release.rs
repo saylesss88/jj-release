@@ -56,7 +56,7 @@ fn main() -> Result<()> {
     // Write changelog
     if config.changelog.enabled {
         println!("→ Writing changelog...");
-        pipeline::update_changelog(root, &config, &prepared)?;
+        pipeline::update_changelog(&ctx, root, &config, &prepared)?;
     }
 
     // Bump version
