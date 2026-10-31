@@ -1,6 +1,9 @@
 //! Changelog generation
 
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use semver::Version;
 
@@ -9,11 +12,39 @@ use crate::{
     commits::{self, CommitInfo},
     config::{Versioning, WorkspaceConfig},
     detect,
-    errors::Result,
+    errors::{ReleaseError, Result},
     manifest::{CargoManifest, ManifestBackend},
 };
 
 use jj_release_changelog::{ChangelogLayout, changelog};
+
+/// Where `print_changelog` sends its output.
+#[derive(Debug, Clone, Copy)]
+pub enum ChangelogOutput<'a> {
+    /// Print to stdout.
+    Stdout,
+    /// Write to this exact file. Root layout only.
+    Path(&'a Path),
+    /// Write to the configured file(s): `[changelog].file` at the root,
+    /// or in each member directory with `layout = "per-member"`.
+    Configured,
+}
+
+fn per_member_ws(config: &Config) -> Option<&WorkspaceConfig> {
+    config
+        .workspace
+        .as_ref()
+        .filter(|w| w.enabled && config.changelog.layout == ChangelogLayout::PerMember)
+}
+
+/// The single file to write in root layout, or `None` for stdout.
+fn root_target(config: &Config, root: &Path, target: ChangelogOutput<'_>) -> Option<PathBuf> {
+    match target {
+        ChangelogOutput::Stdout => None,
+        ChangelogOutput::Path(p) => Some(p.to_path_buf()),
+        ChangelogOutput::Configured => Some(root.join(&config.changelog.file)),
+    }
+}
 
 /// Renders and prints the changelog section for the pending release to standard output.
 ///
@@ -25,11 +56,16 @@ pub fn print_changelog(
     ctx: &ReleaseContext<'_>,
     config: &Config,
     root: &Path,
-    output: Option<&Path>,
+    target: ChangelogOutput<'_>,
     full: bool,
 ) -> Result<()> {
+    if per_member_ws(config).is_some() && matches!(target, ChangelogOutput::Path(_)) {
+        return Err(ReleaseError::Message(
+            "--output writes a single file; with layout = \"per-member\" use --write".into(),
+        ));
+    }
     if full {
-        return print_full_changelog(ctx, config, root, output);
+        return print_full_changelog(ctx, config, root, target);
     }
 
     if let Some(ws) = config
@@ -37,7 +73,7 @@ pub fn print_changelog(
         .as_ref()
         .filter(|w| w.enabled && config.changelog.layout == ChangelogLayout::PerMember)
     {
-        return print_member_changelogs(ctx, config, root, ws, output);
+        return print_member_changelogs(ctx, config, root, ws, target);
     }
 
     let current = ctx.manifest.read_version(root)?;
@@ -91,15 +127,10 @@ pub fn print_changelog(
         url.as_deref(),
     );
 
-    match output {
+    match root_target(config, root, target) {
         Some(path) => {
-            let existing = if path.exists() {
-                fs::read_to_string(path)?
-            } else {
-                String::new()
-            };
-            let updated = changelog::prepend_to_file(&existing, &section);
-            fs::write(path, updated)?;
+            let existing = fs::read_to_string(&path).unwrap_or_default();
+            fs::write(&path, changelog::prepend_to_file(&existing, &section))?;
             println!("✓ Written to {}", path.display());
         }
         None => print!("{section}"),
@@ -119,7 +150,7 @@ pub fn print_full_changelog(
     ctx: &ReleaseContext<'_>,
     config: &Config,
     root: &Path,
-    output: Option<&Path>,
+    target: ChangelogOutput<'_>,
 ) -> Result<()> {
     // Resolve remote base and repo only once
     let remote: Option<(String, String)> = if config.changelog.link_headers {
@@ -133,12 +164,7 @@ pub fn print_full_changelog(
         None
     };
 
-    let per_member = config
-        .workspace
-        .as_ref()
-        .filter(|w| w.enabled && config.changelog.layout == ChangelogLayout::PerMember);
-
-    let Some(ws) = per_member else {
+    let Some(ws) = per_member_ws(config) else {
         // Root layout: unchanged behavior.
         let tags = sorted_tags(ctx, &config.release.tag_prefix)?;
         let result = build_full_changelog(
@@ -149,7 +175,7 @@ pub fn print_full_changelog(
             None,
             remote.as_ref(),
         )?;
-        return emit(output, &result);
+        return emit(root_target(config, root, target).as_deref(), &result);
     };
 
     for member in &ws.members {
@@ -170,7 +196,7 @@ pub fn print_full_changelog(
             remote.as_ref(),
         )?;
 
-        if output.is_some() {
+        if matches!(target, ChangelogOutput::Configured) {
             let path = root.join(&member.path).join(&config.changelog.file);
             fs::write(&path, &result)?;
             println!("✓ Written to {}", path.display());
@@ -305,7 +331,7 @@ fn print_member_changelogs(
     config: &Config,
     root: &Path,
     ws: &WorkspaceConfig,
-    output: Option<&Path>,
+    target: ChangelogOutput<'_>,
 ) -> Result<()> {
     // Unified members share one version, computed from the whole repo.
     let unified_version = if matches!(ws.versioning, Versioning::Unified) {
@@ -350,7 +376,7 @@ fn print_member_changelogs(
         );
 
         let file = root.join(&member.path).join(&config.changelog.file);
-        if output.is_some() {
+        if matches!(target, ChangelogOutput::Configured) {
             let existing = fs::read_to_string(&file).unwrap_or_default();
             fs::write(&file, changelog::prepend_to_file(&existing, &section))?;
             println!("✓ Written to {}", file.display());

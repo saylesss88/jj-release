@@ -6,12 +6,12 @@ use std::env;
 use std::path::PathBuf;
 
 use jj_release_core::{
-    config::Config,
+    config,
     errors::Result,
     forge::NoForge,
     jj::ShellBackend,
     manifest::detect_manifest,
-    pipeline::{self, ReleaseContext},
+    pipeline::{self, ChangelogOutput, ReleaseContext},
     publish::NoPublish,
 };
 
@@ -26,12 +26,12 @@ fn main() -> Result<()> {
     let forge = NoForge;
     let publisher = NoPublish;
     let ctx = ReleaseContext::new(&backend, manifest.as_ref(), &forge, &publisher);
-    let config = Config::default();
+    let config = config::load(root)?;
 
     println!("Generating changelog for commits since the last tag...\n---\n");
-    pipeline::print_changelog(&ctx, &config, root, None, false)?;
+    pipeline::print_changelog(&ctx, &config, root, ChangelogOutput::Stdout, false)?;
     // Actually create the CHANGELOG.md from the latest tag in /path/to/repo
-    // pipeline::print_changelog(&ctx, &config, root, Some(&root.join("CHANGELOG.md")), false)?;
+    // pipeline::print_changelog(&ctx, &config, root, ChangelogOutput::Configured, false)?;
 
     println!("\n---\nDone.");
 

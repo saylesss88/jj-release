@@ -14,7 +14,9 @@ jj-release changelog -o CHANGELOG.md
 jj-release changelog --full -o CHANGELOG.md
 ```
 
-### Basic Changelog Example:
+Changes between releases are placed in `## Unreleased`.
+
+### Basic Changelog Example
 
 ```markdown
 # Changelog
@@ -24,6 +26,8 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## Unreleased
 
 ## [0.2.0] - 2026-09-08
 
@@ -37,7 +41,7 @@ and this project adheres to
 - prevent daemon crash on empty directory
 ```
 
-## Customized Example with emoji headers & Compare links:
+## Customized Example with emoji headers & Compare links
 
 ```markdown
 # Changelog
@@ -47,6 +51,8 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased](https://github.com/saylesss88/jj-release/compare/v0.2.0...HEAD)
 
 ## [0.2.0](https://github.com/saylesss88/jj-release/compare/v0.1.0...v0.2.0) - 2026-09-08
 
@@ -76,6 +82,7 @@ file = "CHANGELOG.md"
 emoji_headers = true
 # Add a link to the Compare changes page for your changelog headers
 link_headers = true
+layout = "per-member" # or "root" (default)
 # If true (default), commits that do not strictly match Conventional Commits
 # or your prefix_mapping are silently dropped from the changelog.
 # If false, unformatted commits are collected in an "Other Changes" section.
@@ -98,4 +105,20 @@ Testing = "🧪"
 [changelog.prefix_mapping]
 revert = "Reverted"
 test = "Testing"
+```
+
+- `layout`: gives you the option of generating a changelog for each workspace
+  member with `"per-member"`, or add all changes to the root changelog with
+  `"root"`.
+
+`-o` can't be one path when there are several files. In `"per-member"` mode, `-o` means "write the files" instead of "print". Each members file goes to `<member path>/<changelog.file>`, so the path you pass is ignored. Without `-o`,
+each member prints to stdout under a `==> lib/CHANGELOG.md <==` header so you
+can preview first:
+
+```bash
+# Preview every member's changelog
+jj-release changelog --full
+
+# Write lib/CHANGELOG.md, cli/CHANGELOG.md, changelog/CHANGELOG.md
+jj-release changelog --full -o CHANGELOG.md
 ```

@@ -33,3 +33,12 @@ jj-release changelog --full -o CHANGELOG.md
 # Open a PR for review before publishing
 jj-release pr
 ```
+
+For a more integrated feel, you can add the following to your `~/.config/jj/config.toml`:
+
+```toml
+[aliases]
+release = ["util", "exec", "--", "jj-release"]
+```
+
+Now `jj release` will work to run `jj-release`.

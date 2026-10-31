@@ -5,12 +5,12 @@
 use std::{env, path::PathBuf};
 
 use jj_release_core::{
-    config::Config,
+    config,
     errors::Result,
     forge::NoForge,
     jj::ShellBackend,
     manifest,
-    pipeline::{self, ReleaseContext},
+    pipeline::{self, ChangelogOutput, ReleaseContext},
     publish::NoPublish,
 };
 
@@ -25,13 +25,13 @@ fn main() -> Result<()> {
     let forge = NoForge;
     let publisher = NoPublish;
     let ctx = ReleaseContext::new(&backend, manifest.as_ref(), &forge, &publisher);
-    let config = Config::default();
+    let config = config::load(root)?;
 
     println!("Generating full changelog from all tags...\n");
     // Print the full changelog to stdout
-    pipeline::print_full_changelog(&ctx, &config, root, None)?;
+    pipeline::print_full_changelog(&ctx, &config, root, ChangelogOutput::Stdout)?;
     // Actually create the CHANGELOG.md in the /path/to/repo
-    // pipeline::print_full_changelog(&ctx, &config, root, Some(&root.join("CHANGELOG.md")))?;
+    // pipeline::print_full_changelog(&ctx, &config, root, ChangelogOutput::Configured)?;
 
     Ok(())
 }

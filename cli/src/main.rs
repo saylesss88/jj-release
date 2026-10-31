@@ -6,6 +6,8 @@ use std::{env, path::PathBuf, process};
 
 use clap::Parser;
 
+use crate::pipeline::ChangelogOutput;
+
 #[cfg(feature = "forgejo")]
 use jj_release_core::forge::ForgejoForge;
 #[cfg(feature = "gitea")]
@@ -58,10 +60,13 @@ enum Subcommand {
     /// Generate changelog for commits since last tag and print to stdout.
     #[command(name = "changelog")]
     Changelog {
-        /// Write to a file instead of stdout. Creates or prepends to the file.
+        /// Write to this file instead of stdout. Creates or prepends to the file.
+        /// Root layout only; use --write for per-member changelogs.
         #[arg(short, long)]
         output: Option<PathBuf>,
-        // Generate changelog for all tags, not just since the last one.
+        #[arg(short, long)]
+        write: bool,
+        /// Generate changelog for all tags, not just since the last one.
         #[arg(long)]
         full: bool,
     },
@@ -193,13 +198,20 @@ fn run() -> Result<(), errors::ReleaseError> {
             cli.quiet,
         )?),
         Subcommand::NextVersion => Ok(pipeline::print_next_version(&ctx, &config, &root)?),
-        Subcommand::Changelog { output, full } => Ok(pipeline::print_changelog(
-            &ctx,
-            &config,
-            &root,
-            output.as_deref(),
+        Subcommand::Changelog {
+            output,
+            write,
             full,
-        )?),
+        } => {
+            let target = match (output.as_deref(), write) {
+                (Some(path), _) => ChangelogOutput::Path(path),
+                (None, true) => ChangelogOutput::Configured,
+                (None, false) => ChangelogOutput::Stdout,
+            };
+            Ok(pipeline::print_changelog(
+                &ctx, &config, &root, target, full,
+            )?)
+        }
         Subcommand::Pr => Ok(commands::pr(&ctx, &config, &root, cli.quiet)?),
         Subcommand::Init => Ok(commands::init(&root)?),
         Subcommand::Validate => Ok(pipeline::validate(&ctx, &config, &root)?),
