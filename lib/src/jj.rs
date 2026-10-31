@@ -88,6 +88,16 @@ pub trait JjBackend {
     /// * The provided `revset` string is invalid or malformed.
     /// * Querying the underlying version control backend for commit logs fails.
     fn log_commits_for_path(&self, revset: &str, path: &str) -> Result<Vec<CommitInfo>>;
+
+    /// Committer date of `rev` as `YYYY-MM-DD`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the revision doesn't exist or `jj` fails.
+    fn commit_date(&self, rev: &str) -> Result<String> {
+        let _ = rev;
+        Ok(jiff::Zoned::now().date().to_string())
+    }
 }
 
 // Shell implementation
@@ -259,6 +269,18 @@ impl JjBackend for ShellBackend {
             });
         }
         Ok(commits)
+    }
+
+    fn commit_date(&self, rev: &str) -> Result<String> {
+        let out = self.run(&[
+            "log",
+            "-r",
+            rev,
+            "--no-graph",
+            "-T",
+            r#"committer.timestamp().format("%Y-%m-%d")"#,
+        ])?;
+        Ok(out.trim().to_owned())
     }
 }
 

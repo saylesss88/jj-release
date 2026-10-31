@@ -17,6 +17,24 @@ pub struct CommitInfo {
     pub description: String,
 }
 
+impl CommitInfo {
+    /// A commit with just a message. `change_id` is optional metadata
+    /// (a jj change ID, git hash, etc.) and isn't used for rendering.
+    #[must_use]
+    pub fn new(description: impl Into<String>) -> Self {
+        Self {
+            change_id: String::new(),
+            description: description.into(),
+        }
+    }
+}
+
+impl From<&str> for CommitInfo {
+    fn from(s: &str) -> Self {
+        Self::new(s)
+    }
+}
+
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(default))]
@@ -34,6 +52,30 @@ pub struct ChangelogConfig {
     pub emoji_mapping: HashMap<String, String>,
     pub link_headers: bool,
     pub layout: ChangelogLayout,
+}
+
+impl ChangelogConfig {
+    #[must_use]
+    pub const fn strict(mut self, strict: bool) -> Self {
+        self.strict = strict;
+        self
+    }
+    #[must_use]
+    pub const fn emoji_headers(mut self, on: bool) -> Self {
+        self.emoji_headers = on;
+        self
+    }
+    #[must_use]
+    pub fn map_prefix(mut self, prefix: &str, header: &str) -> Self {
+        self.prefix_mapping
+            .insert(prefix.to_owned(), header.to_owned());
+        self
+    }
+    #[must_use]
+    pub fn exclude_prefix(mut self, prefix: &str) -> Self {
+        self.exclude_prefixes.push(prefix.to_owned());
+        self
+    }
 }
 
 impl Default for ChangelogConfig {
@@ -63,11 +105,24 @@ pub enum ChangelogLayout {
     PerMember,
 }
 
+/// One release in a changelog.
+#[derive(Debug, Clone, Default)]
+pub struct Release {
+    /// `None` renders `[Unreleased]`.
+    pub version: Option<Version>,
+    /// `YYYY-MM-DD`. `None` uses today's date (ignored for unreleased).
+    pub date: Option<String>,
+    /// Link for the version heading, e.g. a forge compare URL.
+    pub compare_url: Option<String>,
+    pub commits: Vec<CommitInfo>,
+}
+
 /// The `## [x.y.z] - date` line, optionally prefixed with a member name.
 #[must_use]
 pub fn render_heading(
     name: Option<&str>,
     version: Option<&Version>,
+    date: Option<&str>,
     compare_url: Option<&str>,
 ) -> String {
     let label = version.map_or_else(|| "Unreleased".to_owned(), ToString::to_string);
@@ -75,7 +130,10 @@ pub fn render_heading(
         compare_url.map_or_else(|| format!("[{label}]"), |url| format!("[{label}]({url})"));
     let prefix = name.map_or_else(String::new, |n| format!("{n} "));
     match version {
-        Some(_) => format!("## {prefix}{linked} - {}\n", Zoned::now().date()),
+        Some(_) => {
+            let date = date.map_or_else(|| Zoned::now().date().to_string(), ToOwned::to_owned);
+            format!("## {prefix}{linked} - {date}\n")
+        }
         None => format!("## {prefix}{linked}\n"),
     }
 }
@@ -184,6 +242,30 @@ pub fn render_body(commits: &[CommitInfo], config: &ChangelogConfig) -> String {
     out
 }
 
+/// Render one release section.
+#[must_use]
+pub fn render_release(release: &Release, config: &ChangelogConfig) -> String {
+    let mut out = render_heading(
+        None,
+        release.version.as_ref(),
+        release.date.as_deref(),
+        release.compare_url.as_deref(),
+    );
+    out.push_str(&render_body(&release.commits, config));
+    out
+}
+
+/// Render a complete changelog. `releases` are oldest first; output is newest first.
+#[must_use]
+pub fn render_changelog(releases: &[Release], config: &ChangelogConfig) -> String {
+    let mut out = CHANGELOG_HEADER.to_owned();
+    for release in releases.iter().rev() {
+        out.push_str(&render_release(release, config));
+        out.push('\n');
+    }
+    out
+}
+
 #[must_use]
 pub fn render_changelog_section(
     commits: &[CommitInfo],
@@ -191,7 +273,7 @@ pub fn render_changelog_section(
     config: &ChangelogConfig,
     compare_url: Option<&str>,
 ) -> String {
-    let mut out = render_heading(None, version, compare_url);
+    let mut out = render_heading(None, version, None, compare_url);
     out.push_str(&render_body(commits, config));
     out
 }
@@ -236,29 +318,6 @@ pub fn prepend_to_file(existing: &str, new_section: &str) -> String {
         // No changelog title: add the default header and keep the file as is.
         None => format!("{CHANGELOG_HEADER}{new_section}\n{existing}"),
     }
-}
-
-/// Render a full changelog from all tag ranges, newest first.
-/// `sections` is a list of `(tag_name, commits)` pairs in chronological order.
-/// `versions` is the corresponding list of versions.
-#[must_use]
-pub fn render_full_changelog(
-    sections: &[(String, Vec<CommitInfo>)],
-    versions: &[Option<Version>],
-    config: &ChangelogConfig,
-    urls: &[Option<String>],
-) -> String {
-    let mut out = CHANGELOG_HEADER.to_owned();
-
-    // Render newest first.
-    for (i, (_, commits)) in sections.iter().enumerate().rev() {
-        let version = versions[i].as_ref();
-        let url = urls.get(i).and_then(|u| u.as_deref());
-        out.push_str(&render_changelog_section(commits, version, config, url));
-        out.push('\n');
-    }
-
-    out
 }
 
 fn format_header(header: &str, config: &ChangelogConfig) -> String {
@@ -473,32 +532,19 @@ mod tests {
 
     #[test]
     fn full_changelog_generates_all_sections() {
-        let sections = vec![
-            (
-                "v0.1.0".to_string(),
-                vec![CommitInfo {
-                    change_id: "a".into(),
-                    description: "feat: initial implementation".into(),
-                }],
-            ),
-            (
-                "v0.2.0".to_string(),
-                vec![CommitInfo {
-                    change_id: "b".into(),
-                    description: "fix: handle edge case".into(),
-                }],
-            ),
+        let releases = vec![
+            Release {
+                version: Some(Version::new(0, 1, 0)),
+                commits: vec!["feat: initial implementation".into()],
+                ..Default::default()
+            },
+            Release {
+                version: Some(Version::new(0, 2, 0)),
+                commits: vec!["fix: handle edge case".into()],
+                ..Default::default()
+            },
         ];
-        let versions = vec![
-            Some(Version::parse("0.1.0").unwrap()),
-            Some(Version::parse("0.2.0").unwrap()),
-        ];
-        let config = ChangelogConfig::default();
-        let urls: Vec<Option<String>> = vec![None; sections.len()];
-        let result = render_full_changelog(&sections, &versions, &config, &urls);
-        assert!(result.contains("## [0.1.0]"));
-        assert!(result.contains("## [0.2.0]"));
-        // 0.2.0 should come before 0.1.0 (newest first)
+        let result = render_changelog(&releases, &ChangelogConfig::default());
         assert!(result.find("## [0.2.0]") < result.find("## [0.1.0]"));
         assert!(result.contains("### Added"));
         assert!(result.contains("### Fixed"));
@@ -506,23 +552,12 @@ mod tests {
 
     #[test]
     fn changelog_strict_false_captures_unformatted_commits() {
-        let sections = vec![(
-            "v0.1.0".to_string(),
-            vec![CommitInfo {
-                change_id: "a".into(),
-                description: "random work that forgot conventional format".into(),
-            }],
-        )];
-        let versions = vec![Some(Version::parse("0.1.0").unwrap())];
-        let config = ChangelogConfig {
-            strict: false,
+        let releases = vec![Release {
+            version: Some(Version::new(0, 1, 0)),
+            commits: vec!["random work that forgot conventional format".into()],
             ..Default::default()
-        };
-        let urls: Vec<Option<String>> = vec![None; sections.len()];
-        // Pass false to disable strict mode
-        let result = render_full_changelog(&sections, &versions, &config, &urls);
-
-        assert!(result.contains("## [0.1.0]"));
+        }];
+        let result = render_changelog(&releases, &ChangelogConfig::default().strict(false));
         assert!(result.contains("### Other Changes"));
         assert!(result.contains("- random work that forgot conventional format"));
     }
@@ -617,15 +652,15 @@ mod tests {
     #[test]
     fn heading_with_member_name() {
         let v = Version::parse("0.4.0").unwrap();
-        let h = render_heading(Some("jj_release_core"), Some(&v), None);
+        let h = render_heading(Some("jj_release_core"), Some(&v), None, None);
         assert!(h.starts_with("## jj_release_core [0.4.0] - "));
     }
 
     #[test]
     fn heading_without_name_matches_old_format() {
         let v = Version::parse("0.4.0").unwrap();
-        assert!(render_heading(None, Some(&v), None).starts_with("## [0.4.0] - "));
-        assert_eq!(render_heading(None, None, None), "## [Unreleased]\n");
+        assert!(render_heading(None, Some(&v), None, None).starts_with("## [0.4.0] - "));
+        assert_eq!(render_heading(None, None, None, None), "## [Unreleased]\n");
     }
 
     #[test]

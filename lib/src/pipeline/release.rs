@@ -116,6 +116,7 @@ pub fn update_changelog(
                         Some(&member.name),
                         Some(&version),
                         None,
+                        None,
                     );
                     s.push_str(&jj_release_changelog::render_body(
                         &commits,
@@ -460,6 +461,9 @@ mod tests {
         }
         fn log_commits_for_path(&self, _: &str, _: &str) -> Result<Vec<CommitInfo>> {
             Ok(vec![])
+        }
+        fn commit_date(&self, _rev: &str) -> Result<String> {
+            Ok("2026-01-01".to_owned())
         }
     }
 

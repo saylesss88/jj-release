@@ -42,5 +42,8 @@ pub mod mock {
         fn check_identity(&self) -> Result<()> {
             Ok(())
         }
+        fn commit_date(&self, _rev: &str) -> Result<String> {
+            Ok("2026-01-01".to_owned())
+        }
     }
 }

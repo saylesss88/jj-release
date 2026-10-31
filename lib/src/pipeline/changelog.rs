@@ -14,6 +14,7 @@ use crate::{
     detect,
     errors::{ReleaseError, Result},
     manifest::{CargoManifest, ManifestBackend},
+    pipeline::changelog::changelog::Release,
 };
 
 use jj_release_changelog::{ChangelogLayout, changelog};
@@ -257,9 +258,7 @@ fn build_full_changelog(
     path: Option<&str>,
     remote: Option<&(String, String)>,
 ) -> Result<String> {
-    let mut sections = Vec::new();
-    let mut versions = Vec::new();
-    let mut urls = Vec::new();
+    let mut releases = Vec::new();
 
     let mut prev = "root()".to_owned();
     let mut previous_version: Option<Version> = None;
@@ -268,7 +267,7 @@ fn build_full_changelog(
         let commits = log_commits(ctx, &format!("{prev}..{}", tag.name), path)?;
 
         if !(path.is_some() && commits.is_empty()) {
-            let url = match (&previous_version, remote) {
+            let compare_url = match (&previous_version, remote) {
                 (Some(pv), Some((base, repo))) => Some(changelog::compare_url(
                     base,
                     repo,
@@ -278,9 +277,12 @@ fn build_full_changelog(
                 )),
                 _ => None,
             };
-            sections.push((tag.name.clone(), commits));
-            versions.push(Some(tag.version.clone()));
-            urls.push(url);
+            releases.push(Release {
+                version: Some(tag.version.clone()),
+                date: Some(ctx.backend.commit_date(&tag.name)?),
+                compare_url,
+                commits,
+            });
         }
 
         prev.clone_from(&tag.name);
@@ -289,23 +291,21 @@ fn build_full_changelog(
 
     let tip = log_commits(ctx, &format!("{prev}..@"), path)?;
     if !tip.is_empty() {
-        let url = match (&previous_version, remote) {
+        let compare_url = match (&previous_version, remote) {
             (Some(pv), Some((base, repo))) => Some(changelog::compare_unreleased_url(
                 base, repo, pv, tag_prefix,
             )),
             _ => None,
         };
-        sections.push(("unreleased".to_owned(), tip));
-        versions.push(None);
-        urls.push(url);
+        releases.push(Release {
+            version: None,
+            compare_url,
+            commits: tip,
+            ..Default::default()
+        });
     }
 
-    Ok(changelog::render_full_changelog(
-        &sections,
-        &versions,
-        &config.changelog,
-        &urls,
-    ))
+    Ok(changelog::render_changelog(&releases, &config.changelog))
 }
 
 /// `None` renders `[Unreleased]` (manifest not bumped past the latest tag),
