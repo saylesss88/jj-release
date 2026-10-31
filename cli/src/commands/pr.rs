@@ -7,8 +7,6 @@ use jj_release_core::{
     pipeline::{self, ReleaseContext},
 };
 
-use jj_release_changelog::changelog;
-
 macro_rules! info {
     ($quiet:expr, $($t:tt)*) => { if !$quiet { println!($($t)*); } };
 }
@@ -45,7 +43,7 @@ pub fn release_pr(
     );
 
     // Generate changelog preview for PR body, no file write.
-    let body = changelog::render_changelog_section(
+    let body = jj_release_changelog::render_changelog_section(
         &prepared.commits,
         Some(&prepared.next_version),
         &config.changelog,

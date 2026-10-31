@@ -14,10 +14,9 @@ use crate::{
     detect,
     errors::{ReleaseError, Result},
     manifest::{CargoManifest, ManifestBackend},
-    pipeline::changelog::changelog::Release,
 };
 
-use jj_release_changelog::{ChangelogLayout, changelog};
+use jj_release_changelog::{self, ChangelogLayout, Release};
 
 /// Where `print_changelog` sends its output.
 #[derive(Debug, Clone, Copy)]
@@ -100,14 +99,14 @@ pub fn print_changelog(
                     .and_then(|url| detect::parse_remote_owner_repo(&url))
                     .map(|(owner, repo)| {
                         if let (true, Some(tag)) = (is_unreleased, &latest_tag) {
-                            changelog::compare_unreleased_url(
+                            jj_release_changelog::compare_unreleased_url(
                                 &base,
                                 &format!("{owner}/{repo}"),
                                 &tag.version,
                                 &config.release.tag_prefix,
                             )
                         } else {
-                            changelog::compare_url(
+                            jj_release_changelog::compare_url(
                                 &base,
                                 &format!("{owner}/{repo}"),
                                 &current,
@@ -121,7 +120,7 @@ pub fn print_changelog(
         None
     };
 
-    let section = changelog::render_changelog_section(
+    let section = jj_release_changelog::render_changelog_section(
         &commits,
         target_version,
         &config.changelog,
@@ -131,7 +130,10 @@ pub fn print_changelog(
     match root_target(config, root, target) {
         Some(path) => {
             let existing = fs::read_to_string(&path).unwrap_or_default();
-            fs::write(&path, changelog::prepend_to_file(&existing, &section))?;
+            fs::write(
+                &path,
+                jj_release_changelog::prepend_to_file(&existing, &section),
+            )?;
             println!("✓ Written to {}", path.display());
         }
         None => print!("{section}"),
@@ -268,7 +270,7 @@ fn build_full_changelog(
 
         if !(path.is_some() && commits.is_empty()) {
             let compare_url = match (&previous_version, remote) {
-                (Some(pv), Some((base, repo))) => Some(changelog::compare_url(
+                (Some(pv), Some((base, repo))) => Some(jj_release_changelog::compare_url(
                     base,
                     repo,
                     pv,
@@ -292,7 +294,7 @@ fn build_full_changelog(
     let tip = log_commits(ctx, &format!("{prev}..@"), path)?;
     if !tip.is_empty() {
         let compare_url = match (&previous_version, remote) {
-            (Some(pv), Some((base, repo))) => Some(changelog::compare_unreleased_url(
+            (Some(pv), Some((base, repo))) => Some(jj_release_changelog::compare_unreleased_url(
                 base, repo, pv, tag_prefix,
             )),
             _ => None,
@@ -305,7 +307,10 @@ fn build_full_changelog(
         });
     }
 
-    Ok(changelog::render_changelog(&releases, &config.changelog))
+    Ok(jj_release_changelog::render_changelog(
+        &releases,
+        &config.changelog,
+    ))
 }
 
 /// `None` renders `[Unreleased]` (manifest not bumped past the latest tag),
@@ -368,7 +373,7 @@ fn print_member_changelogs(
             section_version(latest.as_ref(), &current, &commits)
         };
 
-        let section = changelog::render_changelog_section(
+        let section = jj_release_changelog::render_changelog_section(
             &commits,
             version.as_ref(),
             &config.changelog,
@@ -378,7 +383,10 @@ fn print_member_changelogs(
         let file = root.join(&member.path).join(&config.changelog.file);
         if matches!(target, ChangelogOutput::Configured) {
             let existing = fs::read_to_string(&file).unwrap_or_default();
-            fs::write(&file, changelog::prepend_to_file(&existing, &section))?;
+            fs::write(
+                &file,
+                jj_release_changelog::prepend_to_file(&existing, &section),
+            )?;
             println!("✓ Written to {}", file.display());
         } else {
             println!("==> {}/{} <==", member.path, config.changelog.file);
