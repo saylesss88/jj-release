@@ -42,3 +42,13 @@ let section = render_changelog_section(
   under "Other Changes"
 - Compare-URL links on version headings for GitHub, GitLab, Forgejo, and Gitea
 - `prepend_to_file` inserts a new section while preserving custom header text
+
+## Examples
+
+See the [`examples/`](examples/) directory for runnable demos:
+
+- `basic`: one section from a list of messages
+- `from_git`: a section built from `git log`
+- `custom_config`: emoji headers, prefix mapping, non-strict mode
+- `history`: a complete changelog with dates and compare links
+- `prepend`: update an existing file in place
