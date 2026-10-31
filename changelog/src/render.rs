@@ -387,4 +387,25 @@ mod tests {
         assert!(!body.contains("## ["));
         assert!(body.contains("### Added"));
     }
+
+    #[test]
+    fn history_keeps_release_dates() {
+        let releases = vec![
+            Release {
+                version: Some(Version::new(0, 1, 0)),
+                date: Some("2026-01-05".into()),
+                commits: vec!["feat: a".into()],
+                ..Default::default()
+            },
+            Release {
+                version: Some(Version::new(0, 2, 0)),
+                date: Some("2026-03-10".into()),
+                commits: vec!["fix: b".into()],
+                ..Default::default()
+            },
+        ];
+        let out = render_changelog(&releases, &ChangelogConfig::default());
+        assert!(out.contains("## [0.1.0] - 2026-01-05"));
+        assert!(out.contains("## [0.2.0] - 2026-03-10"));
+    }
 }
