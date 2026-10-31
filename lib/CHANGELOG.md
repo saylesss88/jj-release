@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- **(changelog)** tie in support for a changelog per workspace member
 - **(changelog)** support one changelog for each workspace or a single root changelog
 - **(changelog)** add code to support ## Unreleased header
 - **(bump)** use latest tag as the baseline for version calculation
