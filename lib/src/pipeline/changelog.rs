@@ -14,6 +14,7 @@ use crate::{
     detect,
     errors::{ReleaseError, Result},
     manifest::{CargoManifest, ManifestBackend},
+    workspace,
 };
 
 use jj_release_changelog::{self, ChangelogLayout, Release};
@@ -190,14 +191,9 @@ pub fn print_full_changelog(
                 .unwrap_or(&config.release.tag_prefix),
         };
         let tags = sorted_tags(ctx, prefix)?;
-        let result = build_full_changelog(
-            ctx,
-            config,
-            &tags,
-            prefix,
-            Some(&member.path),
-            remote.as_ref(),
-        )?;
+        let fileset = workspace::member_fileset(member, &ws.members);
+        let result =
+            build_full_changelog(ctx, config, &tags, prefix, Some(&fileset), remote.as_ref())?;
 
         if matches!(target, ChangelogOutput::Configured) {
             let path = root.join(&member.path).join(&config.changelog.file);
@@ -359,9 +355,10 @@ fn print_member_changelogs(
         };
         let latest = sorted_tags(ctx, prefix)?.pop();
         let since = latest.as_ref().map_or("root()", |t| t.name.as_str());
+        let fileset = workspace::member_fileset(member, &ws.members);
         let commits = ctx
             .backend
-            .log_commits_for_path(&format!("{since}..@"), &member.path)?;
+            .log_commits_for_path(&format!("{since}..@"), &fileset)?;
         if commits.is_empty() {
             continue;
         }

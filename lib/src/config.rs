@@ -304,16 +304,25 @@ strict = true
 
         let mut member_config = String::new();
         for member in &ws.members {
-            let tag_prefix = if versioning == "independent" {
-                format!("\ntag_prefix = \"{}-v\"", member.name)
-            } else {
-                String::new()
-            };
             let _ = write!(
                 member_config,
-                "\n[[workspace.members]]\nname = \"{}\"\npath = \"{}\"\npublish = true{tag_prefix}\n# depends_on = []\n",
+                "\n[[workspace.members]]\nname = \"{}\"\npath = \"{}\"\n",
                 member.name, member.path
             );
+            if !member.publish {
+                member_config.push_str("publish = false\n");
+            }
+            if !member.depends_on.is_empty() {
+                let deps: Vec<String> = member
+                    .depends_on
+                    .iter()
+                    .map(|d| format!("\"{d}\""))
+                    .collect();
+                let _ = writeln!(member_config, "depends_on = [{}]", deps.join(", "));
+            }
+            if versioning == "independent" {
+                let _ = writeln!(member_config, "tag_prefix = \"{}-v\"", member.name);
+            }
         }
 
         let _ = write!(
@@ -426,5 +435,45 @@ tag_prefix = "mylib-v"
         fs::write(dir.path().join("package.json"), "{}").unwrap();
         let cfg: Config = toml::from_str(&generate_release_toml(dir.path())).unwrap();
         assert_eq!(cfg.manifest_backend, "npm");
+    }
+
+    #[test]
+    fn resolves_glob_members_under_crates() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+        dir.path().join("Cargo.toml"),
+        "[workspace]\nmembers = [\"crates/*\"]\nexclude = [\"crates/scratch\"]\nresolver = \"2\"\n",
+    ).unwrap();
+
+        let crate_toml = |name: &str, extra: &str| {
+            format!(
+                "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n{extra}"
+            )
+        };
+        for (dir_name, manifest) in [
+            ("core", crate_toml("core", "")),
+            (
+                "cli",
+                crate_toml("cli", "\n[dependencies]\ncore = { path = \"../core\" }\n"),
+            ),
+            ("xtask", crate_toml("xtask", "publish = false\n")),
+            ("scratch", crate_toml("scratch", "")),
+        ] {
+            let d = dir.path().join("crates").join(dir_name);
+            fs::create_dir_all(d.join("src")).unwrap();
+            fs::write(d.join("Cargo.toml"), manifest).unwrap();
+            fs::write(d.join("src/lib.rs"), "").unwrap();
+        }
+
+        let mut members =
+            workspace::parse_workspace_members(&dir.path().join("Cargo.toml")).unwrap();
+        members.sort_by(|a, b| a.name.cmp(&b.name));
+        let names: Vec<&str> = members.iter().map(|m| m.name.as_str()).collect();
+
+        assert_eq!(names, ["cli", "core", "xtask"]); // scratch excluded
+        let cli = members.iter().find(|m| m.name == "cli").unwrap();
+        assert_eq!(cli.path, "crates/cli");
+        assert_eq!(cli.depends_on, ["core"]);
+        assert!(!members.iter().find(|m| m.name == "xtask").unwrap().publish);
     }
 }

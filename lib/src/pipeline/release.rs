@@ -157,9 +157,10 @@ fn releasing_members<'a>(
                 workspace::member_since(ctx.backend, member, &config.release.tag_prefix, "root()")?
             }
         };
+        let fileset = workspace::member_fileset(member, &ws.members);
         let commits = ctx
             .backend
-            .log_commits_for_path(&format!("{since}..@"), &member.path)?;
+            .log_commits_for_path(&format!("{since}..@"), &fileset)?;
         if !commits.is_empty() {
             out.push((member, version, commits));
         }

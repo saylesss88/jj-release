@@ -1,8 +1,13 @@
 //! Workspace support for multi-crate projects.
 
-use std::{borrow::ToOwned, collections::HashMap, fs, path::Path};
+use std::{
+    borrow::ToOwned,
+    collections::{HashMap, HashSet},
+    fs,
+    path::Path,
+};
 
-use cargo_metadata::MetadataCommand;
+use cargo_metadata::{DependencyKind, MetadataCommand};
 use semver::Version;
 
 use crate::{
@@ -54,55 +59,52 @@ pub fn detect_workspace(root: &Path) -> Result<Option<DetectedWorkspace>> {
         versioning,
     }))
 }
-/// Parses the `workspace.members` array from a root `Cargo.toml` and resolves their package names.
+
+/// Workspace members as Cargo resolves them (globs and `exclude` included),
+/// with `publish` and `depends_on` filled in from each member's manifest.
 ///
 /// # Errors
 ///
-/// Returns an error if the root `Cargo.toml` cannot be read or contains invalid TOML.
+/// Returns an error if `cargo metadata` fails, e.g. on an invalid manifest.
 pub fn parse_workspace_members(cargo_toml: &Path) -> Result<Vec<WorkspaceMember>> {
-    let raw = fs::read_to_string(cargo_toml)
-        .map_err(|e| ReleaseError::Message(format!("reading {}: {e}", cargo_toml.display())))?;
+    let metadata = MetadataCommand::new()
+        .manifest_path(cargo_toml)
+        .no_deps()
+        .exec()?;
 
-    let doc = raw
-        .parse::<toml_edit::DocumentMut>()
-        .map_err(|e| ReleaseError::Message(format!("parsing {}: {e}", cargo_toml.display())))?;
-
-    let Some(members) = doc
-        .get("workspace")
-        .and_then(|w| w.get("members"))
-        .and_then(|m| m.as_array())
-    else {
-        return Ok(vec![]);
-    };
-
-    let parent_dir = cargo_toml.parent().unwrap_or_else(|| Path::new(""));
+    let root = metadata.workspace_root.as_std_path();
+    let members: Vec<_> = metadata.workspace_packages();
+    let names: HashSet<&str> = members.iter().map(|p| p.name.as_str()).collect();
 
     Ok(members
         .iter()
-        .filter_map(|m| m.as_str())
-        .map(|path| {
-            let member_toml = parent_dir.join(path).join("Cargo.toml");
-            let raw = fs::read_to_string(&member_toml).ok();
-            let doc = raw
-                .as_deref()
-                .and_then(|r| r.parse::<toml_edit::DocumentMut>().ok());
+        .map(|p| {
+            let dir = p.manifest_path.parent().map_or(root, |d| d.as_std_path());
+            let rel = dir.strip_prefix(root).unwrap_or(dir);
+            let path = if rel.as_os_str().is_empty() {
+                ".".to_owned() // root package that is also a member
+            } else {
+                rel.to_string_lossy().replace('\\', "/")
+            };
 
-            let name = doc
-                .as_ref()
-                .and_then(|d: &toml_edit::DocumentMut| {
-                    d.get("package")
-                        .and_then(|p| p.get("name"))
-                        .and_then(|n| n.as_str())
-                        .map(ToOwned::to_owned)
-                })
-                .unwrap_or_else(|| path.split('/').next_back().unwrap_or(path).to_owned());
+            // Publish order only depends on normal and build deps; dev-deps
+            // with a path are stripped by `cargo publish`.
+            let depends_on = p
+                .dependencies
+                .iter()
+                .filter(|d| matches!(d.kind, DependencyKind::Normal | DependencyKind::Build))
+                .filter(|d| d.path.is_some() && names.contains(d.name.as_str()))
+                .map(|d| d.name.clone())
+                .collect();
 
             WorkspaceMember {
-                name,
-                path: path.to_owned(),
-                publish: true,
-                depends_on: vec![],
+                name: p.name.to_string(),
+                path,
+                // `publish = false` in Cargo.toml shows up as Some(empty list).
+                publish: !matches!(&p.publish, Some(registries) if registries.is_empty()),
+                depends_on,
                 tag_prefix: None,
+                ..Default::default()
             }
         })
         .collect())
@@ -238,8 +240,9 @@ pub fn member_bumps(
     let mut bumps = HashMap::new();
     for member in members {
         let member_since = member_since(backend, member, tag_prefix, since)?;
+        let fileset = member_fileset(member, members);
         let member_commits =
-            backend.log_commits_for_path(&format!("{member_since}..@"), &member.path)?;
+            backend.log_commits_for_path(&format!("{member_since}..@"), &fileset)?;
         let bump = commits::resolve_bump(force, &member_commits)?;
         bumps.insert(member.name.clone(), bump);
     }
@@ -279,6 +282,24 @@ pub fn member_tag_name(
 ) -> String {
     let prefix = member.tag_prefix.as_deref().unwrap_or(default_prefix);
     format!("{prefix}{version}")
+}
+
+/// The jj fileset covering `member`'s files, minus any other members nested
+/// inside it. For a root member at "." this is "everything except the
+/// other crates".
+#[must_use]
+pub fn member_fileset(member: &WorkspaceMember, members: &[WorkspaceMember]) -> String {
+    let base = if member.path == "." {
+        "all()".to_owned()
+    } else {
+        format!("root:{:?}", member.path)
+    };
+
+    members
+        .iter()
+        .filter(|other| other.name != member.name)
+        .filter(|other| member.path == "." || other.path.starts_with(&format!("{}/", member.path)))
+        .fold(base, |acc, other| format!("{acc} ~ root:{:?}", other.path))
 }
 
 #[cfg(test)]
