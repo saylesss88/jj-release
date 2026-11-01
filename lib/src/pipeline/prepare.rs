@@ -47,6 +47,12 @@ pub fn prepare_release(
         }
         let commits = backend.log_commits(&format!("{since}..@"))?;
         let members = plan_member_versions(backend, config, ws, root)?;
+
+        // If no individual members have pending releases, abort the release early.
+        if !members.values().any(super::MemberPlan::is_released) {
+            return Ok(None);
+        }
+
         return Ok(Some(PreparedRelease {
             since,
             commits,
