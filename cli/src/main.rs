@@ -163,6 +163,7 @@ fn build_manifest(config: &Config) -> Box<dyn ManifestBackend> {
     }
 }
 
+#[allow(unused_variables)]
 fn build_forge(config: &Config, root: &Path) -> Result<Box<dyn ForgeBackend>, ReleaseError> {
     match config.release.forge.as_str() {
         "github" => {
