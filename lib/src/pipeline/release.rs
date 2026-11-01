@@ -618,6 +618,7 @@ mod tests {
         assert_eq!(
             calls,
             [
+                "tag_exists v0.2.0",
                 "sync_lockfile",
                 "new_commit chore: release v0.2.0",
                 "create_tag v0.2.0",
