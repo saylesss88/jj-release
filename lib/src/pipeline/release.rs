@@ -311,6 +311,21 @@ pub(super) fn publish_independent(
     prepared: &PreparedRelease,
     root: &Path,
 ) -> Result<()> {
+    commit_and_tag_members(ctx, config, prepared, root)?;
+
+    if config.publish.cargo {
+        publish_members(ctx, config, prepared, root)?;
+    }
+
+    Ok(())
+}
+
+fn commit_and_tag_members(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    prepared: &PreparedRelease,
+    root: &Path,
+) -> Result<()> {
     let ws = config.workspace.as_ref().ok_or_else(|| {
         ReleaseError::Message("workspace config required for independent publishing".into())
     })?;
@@ -318,21 +333,40 @@ pub(super) fn publish_independent(
         ReleaseError::Message("member bumps required for independent publishing".into())
     })?;
 
-    for member in workspace::ordered_members(&ws.members)? {
+    let members = workspace::ordered_members(&ws.members)?;
+
+    // PRE-FLIGHT CHECK: Ensure no tags we plan to create already exist.
+    // This loops through all crates first, failing fast before touching any files.
+    for member in &members {
+        if let Some(plan) = bumps.get(&member.name)
+            && plan.is_released()
+        {
+            let tag = workspace::member_tag_name(member, &plan.next, &config.release.tag_prefix);
+
+            if ctx.backend.tag_exists(&tag)? {
+                return Err(ReleaseError::Message(format!(
+                    "Refusing to proceed: Tag '{tag}' already exists for member '{}'.",
+                    member.name
+                )));
+            }
+        }
+    }
+
+    // Phase 1: Bump versions, commit, tag, and push to VCS.
+    for member in members {
         let Some(plan) = bumps.get(&member.name) else {
             continue;
         };
         if !plan.is_released() {
             continue;
         }
+
         let next = &plan.next;
         let tag = workspace::member_tag_name(member, next, &config.release.tag_prefix);
         let member_root = root.join(&member.path);
 
-        // Bump version
         workspace::bump_member_version(root, &member.name, next)?;
 
-        // Update cross-member dependencies
         let cargo_toml = member_root.join("Cargo.toml");
         if cargo_toml.exists() {
             let raw = fs::read_to_string(&cargo_toml)?;
@@ -351,16 +385,39 @@ pub(super) fn publish_independent(
             fs::write(&cargo_toml, doc.to_string())?;
         }
 
-        // Keep the lock file in step with the bumped manifests so it is part
-        // of the release commit, not rewritten by `cargo publish` afterwards.
         ctx.manifest.sync_lockfile(root)?;
 
-        // Commit, tag, export, push tag
         ctx.backend.new_commit(&format!("chore: release {tag}"))?;
         ctx.backend.create_tag(&tag, "@")?;
         ctx.backend.git_export()?;
         ctx.backend.git_push(None, Some(&tag))?;
+    }
 
+    Ok(())
+}
+
+fn publish_members(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    prepared: &PreparedRelease,
+    root: &Path,
+) -> Result<()> {
+    let ws = config.workspace.as_ref().ok_or_else(|| {
+        ReleaseError::Message("workspace config required for independent publishing".into())
+    })?;
+    let bumps = prepared.members().ok_or_else(|| {
+        ReleaseError::Message("member bumps required for independent publishing".into())
+    })?;
+
+    for member in workspace::ordered_members(&ws.members)? {
+        let Some(plan) = bumps.get(&member.name) else {
+            continue;
+        };
+        if !plan.is_released() {
+            continue;
+        }
+
+        let member_root = root.join(&member.path);
         ctx.publisher
             .publish(&member_root, &config.publish.cargo_flags)?;
     }
@@ -485,6 +542,14 @@ mod tests {
         }
         fn commit_date(&self, _rev: &str) -> Result<String> {
             Ok("2026-01-01".to_owned())
+        }
+        fn tag_exists(&self, tag: &str) -> Result<bool> {
+            // Record that the pre-flight check happened
+            self.log.borrow_mut().push(format!("tag_exists {tag}"));
+
+            // Return false so the release process continues.
+            // (If it returned true, commit_and_tag_members would abort!)
+            Ok(false)
         }
     }
 
