@@ -4,6 +4,8 @@ use std::{fs, path::Path, process::Command};
 
 use toml_edit::DocumentMut;
 
+use crate::workspace;
+
 /// Detect the forge from a git remote URL.
 #[must_use]
 pub fn forge_from_url(url: &str) -> Option<&'static str> {
@@ -78,25 +80,15 @@ pub fn detect_language(root: &Path) -> Option<&'static str> {
 /// Detect unified vs. independent versioning in workspace
 #[must_use]
 pub fn detect_versioning(workspace_toml: &Path) -> &'static str {
-    let Ok(raw) = fs::read_to_string(workspace_toml) else {
-        return "unified";
-    };
-    let Ok(doc) = raw.parse::<DocumentMut>() else {
-        return "unified";
-    };
-    let Some(members) = doc
-        .get("workspace")
-        .and_then(|w| w.get("members"))
-        .and_then(|m| m.as_array())
-    else {
+    let Ok(members) = workspace::parse_workspace_members(workspace_toml) else {
         return "unified";
     };
     let Some(workspace_dir) = workspace_toml.parent() else {
         return "unified";
     };
 
-    for member in members.iter().filter_map(|m| m.as_str()) {
-        let member_toml = workspace_dir.join(member).join("Cargo.toml");
+    for member in &members {
+        let member_toml = workspace_dir.join(&member.path).join("Cargo.toml");
 
         let Ok(raw) = fs::read_to_string(&member_toml) else {
             continue;
@@ -109,7 +101,7 @@ pub fn detect_versioning(workspace_toml: &Path) -> &'static str {
         let has_own_version = doc
             .get("package")
             .and_then(|p| p.get("version"))
-            .is_some_and(|version| !version.is_inline_table() && version.as_str().is_some());
+            .is_some_and(|version| version.as_str().is_some());
 
         if has_own_version {
             return "independent";
@@ -142,6 +134,14 @@ pub fn parse_remote_owner_repo(url: &str) -> Option<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Write a minimal member crate that `cargo metadata` accepts.
+    fn write_member(root: &Path, dir: &str, manifest: &str) {
+        let d = root.join(dir);
+        fs::create_dir_all(d.join("src")).unwrap();
+        fs::write(d.join("Cargo.toml"), manifest).unwrap();
+        fs::write(d.join("src/lib.rs"), "").unwrap();
+    }
 
     #[test]
     fn detect_forge_from_github_url() {
@@ -256,17 +256,16 @@ members = ["lib"]
 "#,
         )
         .unwrap();
-        fs::create_dir(dir.path().join("lib")).unwrap();
-        fs::write(
-            dir.path().join("lib/Cargo.toml"),
+        write_member(
+            dir.path(),
+            "lib",
             r#"
 [package]
 name = "mylib"
 version = "0.3.0"
 edition = "2024"
 "#,
-        )
-        .unwrap();
+        );
         assert_eq!(
             detect_versioning(&dir.path().join("Cargo.toml")),
             "independent"
@@ -281,36 +280,39 @@ edition = "2024"
             r#"
 [workspace]
 members = ["lib", "cli"]
+resolver = "2"
+
+[workspace.package]
+version = "0.3.0"
 "#,
         )
         .unwrap();
-        fs::create_dir(dir.path().join("lib")).unwrap();
-        fs::write(
-            dir.path().join("lib/Cargo.toml"),
+        write_member(
+            dir.path(),
+            "lib",
             r#"
 [package]
 name = "mylib"
 version.workspace = true
 edition = "2024"
 "#,
-        )
-        .unwrap();
-        fs::create_dir(dir.path().join("cli")).unwrap();
-        fs::write(
-            dir.path().join("cli/Cargo.toml"),
+        );
+        write_member(
+            dir.path(),
+            "cli",
             r#"
 [package]
 name = "mycli"
 version = "0.7.0"
 edition = "2024"
 "#,
-        )
-        .unwrap();
+        );
         assert_eq!(
             detect_versioning(&dir.path().join("Cargo.toml")),
             "independent"
         );
     }
+
     #[test]
     fn parses_https_remote() {
         let (owner, repo) =
