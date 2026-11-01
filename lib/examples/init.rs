@@ -20,7 +20,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let content = config::generate_release_toml(root);
+    let content = config::generate_release_toml(root, &[]);
     println!("{content}");
 
     // Uncomment to write to disk:

@@ -246,7 +246,7 @@ impl Config {
 /// Generate a `release.toml` configuration string by auto-detecting
 /// the forge, language, and workspace from the given root path.
 #[must_use]
-pub fn generate_release_toml(root: &Path) -> String {
+pub fn generate_release_toml(root: &Path, tags: &[String]) -> String {
     let forge = detect::detect_forge(root).unwrap_or("github");
     let language = detect::detect_language(root).unwrap_or("cargo");
 
@@ -321,7 +321,9 @@ strict = true
                 let _ = writeln!(member_config, "depends_on = [{}]", deps.join(", "));
             }
             if versioning == "independent" {
-                let _ = writeln!(member_config, "tag_prefix = \"{}-v\"", member.name);
+                let prefix = workspace::detect_tag_prefix(member, tags)
+                    .unwrap_or_else(|| format!("{}-v", member.name));
+                let _ = writeln!(member_config, "tag_prefix = {prefix:?}");
             }
         }
 
@@ -415,7 +417,10 @@ tag_prefix = "mylib-v"
     #[test]
     fn generate_release_toml_contains_forge() {
         let dir = tempfile::tempdir().unwrap();
-        let toml = generate_release_toml(dir.path());
+        let tags: Vec<String> = ["globset-0.4.21", "grep-0.4.1", "grep-cli-0.1.12", "15.2.0"]
+            .map(String::from)
+            .to_vec();
+        let toml = generate_release_toml(dir.path(), &tags);
         assert!(toml.contains("forge ="));
         assert!(toml.contains("create_release = false"));
     }
@@ -423,17 +428,19 @@ tag_prefix = "mylib-v"
     #[test]
     fn generate_release_toml_detects_workspace() {
         let dir = tempfile::tempdir().unwrap();
+        let tags: Vec<String> = ["v-0.4.21", "v-0.4.1", "v-0.1.12", "v-15.2.0"]
+            .map(String::from)
+            .to_vec();
         fs::write(dir.path().join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
-        let toml = generate_release_toml(dir.path());
+        let toml = generate_release_toml(dir.path(), &tags);
         assert!(toml.contains("[workspace]"));
         assert!(toml.contains("enabled = true"));
     }
-
     #[test]
     fn generated_toml_sets_top_level_manifest_backend() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("package.json"), "{}").unwrap();
-        let cfg: Config = toml::from_str(&generate_release_toml(dir.path())).unwrap();
+        let cfg: Config = toml::from_str(&generate_release_toml(dir.path(), &[])).unwrap();
         assert_eq!(cfg.manifest_backend, "npm");
     }
 
