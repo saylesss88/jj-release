@@ -16,7 +16,7 @@ pub use changelog::{ChangelogOutput, print_changelog, print_full_changelog};
 pub use next_version::print_next_version;
 pub use prepare::{independent_workspace, prepare_release};
 pub use release::{
-    run_preflight_checks, run_publish, update_changelog, update_workspace_dependencies,
+    run_distro, run_preflight_checks, run_publish, update_changelog, update_workspace_dependencies,
 };
 pub use validate::validate;
 
@@ -26,16 +26,63 @@ mod prepare;
 mod release;
 mod validate;
 
+/// A release that's ready to run
+#[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct PreparedRelease {
+    /// Revset the release range starts from (a tag name or `root()`).
     pub since: String,
+    /// Every commit in `since..@`, across the whole repository.
+    pub commits: Vec<CommitInfo>,
+    /// What gets versioned and tagged.
+    pub plan: ReleasePlan,
+}
+
+/// How a release is versioned.
+#[derive(Debug, Clone)]
+pub enum ReleasePlan {
+    /// One shared version and tag: a single crate or a unified workspace.
+    Unified(UnifiedPlan),
+    /// Per-member versions in an independent workspace: name -> (current, next).
+    /// Members whose current and next versions are equal aren't released.
+    Independent(HashMap<String, MemberPlan>),
+}
+
+/// Version details for a unified release.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct UnifiedPlan {
     pub current_version: Version,
     pub baseline_version: Version,
     pub next_version: Version,
     pub tag_name: String,
-    pub commits: Vec<CommitInfo>,
     pub bump: BumpKind,
-    pub member_bumps: Option<HashMap<String, (Version, Version)>>,
+}
+
+impl PreparedRelease {
+    /// The unified plan, or `None` for an independent release.
+    #[must_use]
+    pub const fn unified(&self) -> Option<&UnifiedPlan> {
+        match &self.plan {
+            ReleasePlan::Unified(plan) => Some(plan),
+            ReleasePlan::Independent(_) => None,
+        }
+    }
+
+    /// Per-member `(current, next)` versions, or `None` for a unified release.
+    #[must_use]
+    pub const fn members(&self) -> Option<&HashMap<String, MemberPlan>> {
+        match &self.plan {
+            ReleasePlan::Independent(members) => Some(members),
+            ReleasePlan::Unified(_) => None,
+        }
+    }
+
+    /// Whether this is an independent workspace release.
+    #[must_use]
+    pub const fn is_independent(&self) -> bool {
+        matches!(self.plan, ReleasePlan::Independent(_))
+    }
 }
 
 #[non_exhaustive]
@@ -59,5 +106,23 @@ impl<'a> ReleaseContext<'a> {
             forge,
             publisher,
         }
+    }
+}
+
+/// Version plan for one member of an independent workspace.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct MemberPlan {
+    pub current: Version,
+    pub next: Version,
+    /// No tag exists for this member yet; `next == current` but it is still released.
+    pub first_release: bool,
+}
+
+impl MemberPlan {
+    /// Whether this member is released in this run.
+    #[must_use]
+    pub fn is_released(&self) -> bool {
+        self.first_release || self.current != self.next
     }
 }

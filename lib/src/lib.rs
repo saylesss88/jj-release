@@ -46,9 +46,9 @@ pub mod workspace;
 pub(crate) mod test_helpers;
 
 pub use commits::{BumpKind, Tag};
-pub use config::Config;
+pub use config::{Config, Versioning, WorkspaceConfig};
 pub use forge::ForgeBackend;
 pub use jj::JjBackend;
 pub use manifest::ManifestBackend;
-pub use pipeline::{PreparedRelease, ReleaseContext};
+pub use pipeline::{MemberPlan, PreparedRelease, ReleaseContext, ReleasePlan, UnifiedPlan};
 pub use publish::PublishBackend;

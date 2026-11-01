@@ -5,14 +5,9 @@ use std::{collections::HashMap, path::Path};
 use semver::Version;
 
 use crate::{
-    PreparedRelease, bump,
-    commits::{self, BumpKind},
-    config::{Config, Versioning, WorkspaceConfig},
-    detect,
-    errors::Result,
-    jj::JjBackend,
-    manifest::ManifestBackend,
-    publish, workspace,
+    BumpKind, Config, ManifestBackend, MemberPlan, PreparedRelease, ReleasePlan, UnifiedPlan,
+    Versioning, WorkspaceConfig, bump, commits, detect, errors::Result, jj::JjBackend, publish,
+    workspace,
 };
 
 /// Prepares a new release by evaluating recent commits, checking for release triggers,
@@ -44,6 +39,21 @@ pub fn prepare_release(
 ) -> Result<Option<PreparedRelease>> {
     backend.check_identity()?;
 
+    // Independent: no repo-wide version is read at all.
+    if let Some(ws) = independent_workspace(config) {
+        let since = independent_since(backend, config, ws)?;
+        if commits::find_trigger(backend, &config.release.trigger, &since)?.is_none() {
+            return Ok(None);
+        }
+        let commits = backend.log_commits(&format!("{since}..@"))?;
+        let members = plan_member_versions(backend, config, ws, root)?;
+        return Ok(Some(PreparedRelease {
+            since,
+            commits,
+            plan: ReleasePlan::Independent(members),
+        }));
+    }
+
     let since = resolve_since(backend, config)?;
     let is_first_release = since == "root()";
 
@@ -55,7 +65,7 @@ pub fn prepare_release(
     let current_version = manifest.read_version(root)?;
 
     // Fetch the baseline from local VCS tags
-    let latest_tag = commits::latest_version_tag(backend, "v")?;
+    let latest_tag = commits::latest_version_tag(backend, &config.release.tag_prefix)?;
 
     // Use crates.io version as baseline if available, more reliable than manifest.
     let baseline_version = if is_first_release {
@@ -73,10 +83,6 @@ pub fn prepare_release(
         bump = upgrade_for_breaking_changes(config, root, &current_version, bump)?;
     }
 
-    let member_bumps = independent_workspace(config)
-        .map(|ws| plan_member_versions(backend, config, ws, root, &since, is_first_release))
-        .transpose()?;
-
     // Compute next_version. If it's the first release, freeze the current version.
     let next_version = if is_first_release {
         current_version.clone()
@@ -92,16 +98,42 @@ pub fn prepare_release(
 
     Ok(Some(PreparedRelease {
         since,
-        current_version,
-        baseline_version,
-        next_version,
-        tag_name,
         commits,
-        bump,
-        member_bumps,
+        plan: ReleasePlan::Unified(UnifiedPlan {
+            current_version,
+            baseline_version,
+            next_version,
+            tag_name,
+            bump,
+        }),
     }))
 }
 
+/// Trigger search range for independent workspaces: since the most recent
+/// release of any member, or the whole history if nothing has been tagged.
+fn independent_since(
+    backend: &dyn JjBackend,
+    config: &Config,
+    ws: &WorkspaceConfig,
+) -> Result<String> {
+    let tags = backend.list_tags()?;
+    Ok(ws
+        .members
+        .iter()
+        .filter_map(|m| {
+            let prefix = m
+                .tag_prefix
+                .as_deref()
+                .unwrap_or(&config.release.tag_prefix);
+            tags.iter()
+                .filter_map(|t| Some((t, Version::parse(t.strip_prefix(prefix)?).ok()?)))
+                .max_by(|a, b| a.1.cmp(&b.1))
+                .map(|(t, _)| t.clone())
+        })
+        // Pick the member tag that's newest in history, not highest version.
+        .max_by_key(|t| backend.commit_date(t).unwrap_or_default())
+        .unwrap_or_else(|| "root()".to_owned()))
+}
 /// The workspace config, if independent versioning is enabled.
 #[must_use]
 pub fn independent_workspace(config: &Config) -> Option<&WorkspaceConfig> {
@@ -144,35 +176,46 @@ fn plan_member_versions(
     config: &Config,
     ws: &WorkspaceConfig,
     root: &Path,
-    since: &str,
-    is_first_release: bool,
-) -> Result<HashMap<String, (Version, Version)>> {
+) -> Result<HashMap<String, MemberPlan>> {
     let versions = workspace::member_versions(root)?;
     let bumps = workspace::member_bumps(
         backend,
         &ws.members,
-        since,
+        "root()",
         config.bump.force.as_ref(),
         &config.release.tag_prefix,
     )?;
 
-    Ok(ws
-        .members
-        .iter()
-        .map(|member| {
-            let current = versions
-                .get(&member.name)
-                .cloned()
-                .unwrap_or_else(|| Version::new(0, 0, 0));
-            let next = if is_first_release {
-                current.clone()
-            } else {
-                let bump = bumps.get(&member.name).copied().unwrap_or(BumpKind::None);
-                commits::apply_bump(&current, bump)
-            };
-            (member.name.clone(), (current, next))
-        })
-        .collect())
+    let mut plans = HashMap::new();
+    for member in &ws.members {
+        let current = versions
+            .get(&member.name)
+            .cloned()
+            .unwrap_or_else(|| Version::new(0, 0, 0));
+
+        // A member with no tags of its own is on its first release:
+        // publish its current version as-is instead of bumping.
+        let first_release =
+            workspace::member_since(backend, member, &config.release.tag_prefix, "root()")?
+                == "root()";
+
+        let next = if first_release {
+            current.clone()
+        } else {
+            let bump = bumps.get(&member.name).copied().unwrap_or(BumpKind::None);
+            commits::apply_bump(&current, bump)
+        };
+
+        plans.insert(
+            member.name.clone(),
+            MemberPlan {
+                current,
+                next,
+                first_release,
+            },
+        );
+    }
+    Ok(plans)
 }
 
 pub(super) fn resolve_since(backend: &dyn JjBackend, config: &Config) -> Result<String> {
@@ -251,11 +294,16 @@ mod tests {
             version: Version::parse("0.1.0").unwrap(),
         };
         let config = config::Config::default();
-        let prepared = prepare_release(&backend, &manifest, &config, Path::new("/tmp")).unwrap();
-        assert!(prepared.is_some());
-        let p = prepared.unwrap();
-        assert_eq!(p.next_version, Version::parse("0.2.0").unwrap());
-        assert_eq!(p.tag_name, "v0.2.0");
+
+        let prepared = prepare_release(&backend, &manifest, &config, Path::new("/tmp"))
+            .unwrap()
+            .expect("a release should be pending");
+        let plan = prepared
+            .unified()
+            .expect("default config should give a unified plan");
+
+        assert_eq!(plan.next_version, Version::parse("0.2.0").unwrap());
+        assert_eq!(plan.tag_name, "v0.2.0");
     }
 
     #[test]

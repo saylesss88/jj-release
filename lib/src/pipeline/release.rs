@@ -4,7 +4,7 @@ use semver::Version;
 use toml_edit::DocumentMut;
 
 use crate::{
-    commits,
+    ReleasePlan, UnifiedPlan, commits,
     config::{Config, Versioning, WorkspaceConfig, WorkspaceMember},
     distro,
     errors::ReleaseError,
@@ -73,12 +73,13 @@ pub fn update_changelog(
     prepared: &pipeline::PreparedRelease,
 ) -> Result<()> {
     let single = || {
+        let plan = unified_plan(prepared)?;
         write_section(
             root,
             config,
             &jj_release_changelog::render_changelog_section(
                 &prepared.commits,
-                Some(&prepared.next_version),
+                Some(&plan.next_version),
                 &config.changelog,
                 None,
             ),
@@ -148,7 +149,7 @@ fn releasing_members<'a>(
 
     let mut out = Vec::new();
     for member in &ws.members {
-        let Some(version) = member_next_version(ws, member, prepared) else {
+        let Some(version) = member_next_version(member, prepared) else {
             continue;
         };
         let since = match ws.versioning {
@@ -170,16 +171,12 @@ fn releasing_members<'a>(
 
 /// The version `member` is being released as, or `None` if it isn't
 /// being released (independent mode, no changes).
-fn member_next_version(
-    ws: &WorkspaceConfig,
-    member: &WorkspaceMember,
-    prepared: &PreparedRelease,
-) -> Option<Version> {
-    match ws.versioning {
-        Versioning::Unified => Some(prepared.next_version.clone()),
-        Versioning::Independent => {
-            let (current, next) = prepared.member_bumps.as_ref()?.get(&member.name)?;
-            (current != next).then(|| next.clone())
+fn member_next_version(member: &WorkspaceMember, prepared: &PreparedRelease) -> Option<Version> {
+    match &prepared.plan {
+        ReleasePlan::Unified(plan) => Some(plan.next_version.clone()),
+        ReleasePlan::Independent(members) => {
+            let plan = members.get(&member.name)?;
+            plan.is_released().then(|| plan.next.clone())
         }
     }
 }
@@ -254,23 +251,41 @@ pub fn run_publish(
     root: &Path,
     prepared: &PreparedRelease,
 ) -> Result<()> {
-    if config.publish.cargo {
-        let is_independent = config
-            .workspace
-            .as_ref()
-            .is_some_and(|ws| matches!(ws.versioning, Versioning::Independent));
-
-        if is_independent {
-            publish_independent(ctx, config, prepared, root)?;
-        } else {
-            publish_unified(ctx, config, root)?;
-        }
+    if !config.publish.cargo {
+        return Ok(());
     }
-    // Distro targets run after crates.io succeeds.
+
+    match &prepared.plan {
+        ReleasePlan::Independent(_) => publish_independent(ctx, config, prepared, root),
+        ReleasePlan::Unified(_) => publish_unified(ctx, config, root),
+    }?;
+
+    Ok(())
+}
+
+/// Update AUR and COPR packages for a released version. Runs after the
+/// crates.io publish and git push, since the packages download the
+/// published crate.
+///
+/// # Errors
+///
+/// Returns an error if a target with `fail_on_error = true` fails.
+#[allow(unused_variables)] // unused when no distro features are enabled
+pub fn run_distro(config: &Config, root: &Path, prepared: &PreparedRelease) -> Result<()> {
     #[cfg(any(feature = "publish-aur", feature = "publish-copr"))]
-    if distro::any_configured(config) {
+    {
+        if !distro::any_configured(config) {
+            return Ok(());
+        }
+        let Some(plan) = prepared.unified() else {
+            eprintln!(
+                "warning: AUR/COPR publishing isn't supported for independent workspaces yet; skipping"
+            );
+            return Ok(());
+        };
+
         let mut fatal = Vec::new();
-        for (target, required, result) in distro::update_all(config, root, &prepared.next_version) {
+        for (target, required, result) in distro::update_all(config, root, &plan.next_version) {
             match result {
                 Ok(()) => eprintln!("✓ {target} updated"),
                 Err(e) if required => {
@@ -287,7 +302,6 @@ pub fn run_publish(
             )));
         }
     }
-
     Ok(())
 }
 
@@ -300,18 +314,18 @@ pub(super) fn publish_independent(
     let ws = config.workspace.as_ref().ok_or_else(|| {
         ReleaseError::Message("workspace config required for independent publishing".into())
     })?;
-    let bumps = prepared.member_bumps.as_ref().ok_or_else(|| {
+    let bumps = prepared.members().ok_or_else(|| {
         ReleaseError::Message("member bumps required for independent publishing".into())
     })?;
 
     for member in workspace::ordered_members(&ws.members)? {
-        let Some((current, next)) = bumps.get(&member.name) else {
+        let Some(plan) = bumps.get(&member.name) else {
             continue;
         };
-        // Only publish if the topological member actually received a bump
-        if current == next {
+        if !plan.is_released() {
             continue;
         }
+        let next = &plan.next;
         let tag = workspace::member_tag_name(member, next, &config.release.tag_prefix);
         let member_root = root.join(&member.path);
 
@@ -326,11 +340,11 @@ pub(super) fn publish_independent(
                 ReleaseError::Message(format!("parsing {}: {e}", cargo_toml.display()))
             })?;
             for other in &ws.members {
-                if let Some((_, other_next)) = bumps.get(&other.name) {
+                if let Some(other_plan) = bumps.get(&other.name) {
                     manifest::bump_workspace_dependency(
                         &mut doc,
                         &other.name,
-                        &other_next.to_string(),
+                        &other_plan.next.to_string(),
                     );
                 }
             }
@@ -378,13 +392,19 @@ pub(super) fn publish_unified(
     ctx.publisher.publish(root, &config.publish.cargo_flags)
 }
 
+fn unified_plan(prepared: &PreparedRelease) -> Result<&UnifiedPlan> {
+    prepared.unified().ok_or_else(|| {
+        ReleaseError::Message("internal error: expected a unified release plan".into())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::{cell::RefCell, collections::HashMap, process::Command, rc::Rc};
 
     use super::*;
     use crate::{
-        commits::BumpKind,
+        MemberPlan,
         config::{WorkspaceConfig, WorkspaceMember},
         forge::NoForge,
         jj::JjBackend,
@@ -514,18 +534,17 @@ mod tests {
             ..Config::default()
         };
 
-        let old = Version::new(0, 1, 0);
-        let new = Version::new(0, 2, 0);
         let prepared = PreparedRelease {
             since: "v0.1.0".into(),
-            current_version: old.clone(),
-            baseline_version: old.clone(),
-            next_version: new.clone(),
-            tag_name: "v0.2.0".into(),
             commits: vec![],
-            bump: BumpKind::Minor,
-            // member_bumps: Some(std::iter::once(("a".to_owned(), (old, new))).collect()),
-            member_bumps: Some(HashMap::from([("a".to_owned(), (old, new))])),
+            plan: ReleasePlan::Independent(HashMap::from([(
+                "a".to_owned(),
+                MemberPlan {
+                    current: Version::new(0, 1, 0),
+                    next: Version::new(0, 2, 0),
+                    first_release: false,
+                },
+            )])),
         };
 
         publish_independent(&ctx, &config, &prepared, root).unwrap();

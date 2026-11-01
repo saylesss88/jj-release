@@ -5,7 +5,7 @@
 use std::env;
 use std::path::PathBuf;
 
-use jj_release_core::{config::Config, errors::Result, jj::ShellBackend, manifest, pipeline};
+use jj_release_core::{ReleasePlan, config, errors::Result, jj::ShellBackend, manifest, pipeline};
 
 fn main() -> Result<()> {
     let root = env::args()
@@ -15,18 +15,41 @@ fn main() -> Result<()> {
 
     let backend = ShellBackend::new(root)?;
     let manifest = manifest::detect_manifest(root);
-    let config = Config::default();
+    let config = config::load(root)?;
 
-    match pipeline::prepare_release(&backend, manifest.as_ref(), &config, root)? {
-        Some(prepared) => {
-            println!("Release pending:");
-            println!("  Current version: {}", prepared.current_version);
-            println!("  Next version:    {}", prepared.next_version);
-            println!("  Tag:             {}", prepared.tag_name);
-            println!("  Bump:            {:?}", prepared.bump);
-            println!("  Commits:         {}", prepared.commits.len());
+    let Some(prepared) = pipeline::prepare_release(&backend, manifest.as_ref(), &config, root)?
+    else {
+        println!("No release pending.");
+        return Ok(());
+    };
+
+    println!(
+        "Release pending ({} commits since {}):",
+        prepared.commits.len(),
+        prepared.since
+    );
+
+    match &prepared.plan {
+        ReleasePlan::Unified(plan) => {
+            println!("  Current version: {}", plan.current_version);
+            println!("  Next version:    {}", plan.next_version);
+            println!("  Tag:             {}", plan.tag_name);
+            println!("  Bump:            {:?}", plan.bump);
         }
-        None => println!("No release pending."),
+        ReleasePlan::Independent(members) => {
+            let mut names: Vec<_> = members.keys().collect();
+            names.sort();
+            for name in names {
+                let plan = &members[name];
+                if plan.first_release {
+                    println!("  {name}: {} (first release)", plan.next);
+                } else if plan.is_released() {
+                    println!("  {name}: {} → {}", plan.current, plan.next);
+                } else {
+                    println!("  {name}: {} (no changes)", plan.current);
+                }
+            }
+        }
     }
     Ok(())
 }

@@ -1,14 +1,14 @@
 use std::{
+    collections::HashMap,
     io::{self, IsTerminal, Write},
     path::Path,
 };
 
 use jiff::Zoned;
-use semver::Version;
 
 use jj_release_core::{
-    bump,
-    config::{Config, Versioning, WorkspaceConfig, WorkspaceMember},
+    MemberPlan, ReleasePlan, UnifiedPlan, bump,
+    config::{Config, WorkspaceMember},
     distro,
     errors::Result,
     manifest,
@@ -32,9 +32,7 @@ pub fn release_pipeline(
         return Ok(());
     };
 
-    let is_independent = pipeline::independent_workspace(config).is_some();
-
-    print_versions(&prepared, is_independent, quiet);
+    print_plan(&prepared, config, dry_run, quiet)?;
 
     if dry_run {
         return print_dry_run(&prepared, config);
@@ -42,7 +40,7 @@ pub fn release_pipeline(
 
     // Run pre-flight checks on all targets before touching anything
     info!(quiet, " → Running pre-flight checks (dry-run)...");
-    pipeline::run_preflight_checks(ctx, root, config, is_independent)?;
+    pipeline::run_preflight_checks(ctx, root, config, prepared.is_independent())?;
 
     // Warn if publishing is disabled, prompt interactively, skip in CI.
     if !config.publish.cargo && confirm_skip_cargo_publish()? {
@@ -50,32 +48,99 @@ pub fn release_pipeline(
         return Ok(());
     }
 
-    if !is_independent {
-        create_release_commit(ctx, config, root, &prepared, quiet)?;
+    // Mode-specific steps: decided once, by what prepare_release produced.
+    match &prepared.plan {
+        ReleasePlan::Unified(plan) => release_unified(ctx, config, root, &prepared, plan, quiet),
+        ReleasePlan::Independent(_) => release_independent(ctx, config, root, &prepared, quiet),
+    }
+}
+
+fn release_unified(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    root: &Path,
+    prepared: &PreparedRelease,
+    plan: &UnifiedPlan,
+    quiet: bool,
+) -> Result<()> {
+    create_release_commit(ctx, config, root, prepared, plan, quiet)?;
+
+    pipeline::run_publish(ctx, config, root, prepared)?;
+
+    info!(quiet, "→ Pushing bookmark and tags...");
+    ctx.backend
+        .git_push(Some(&config.release.bookmark), Some(&plan.tag_name))?;
+
+    if config.release.create_release {
+        info!(quiet, "→ Creating forge release {}…", plan.tag_name);
+        ctx.forge.create_release(&plan.tag_name)?;
     }
 
-    // Publish to registry
-    pipeline::run_publish(ctx, config, root, &prepared)?;
+    pipeline::run_distro(config, root, prepared)?;
 
-    // Push to remote
-    if is_independent {
-        move_bookmark_and_export(ctx, config, quiet)?;
-        info!(quiet, "→ Pushing bookmark…");
-        ctx.backend.git_push(Some(&config.release.bookmark), None)?;
-    } else {
-        info!(quiet, "→ Pushing bookmark and tags...");
-        ctx.backend
-            .git_push(Some(&config.release.bookmark), Some(&prepared.tag_name))?;
+    info!(quiet, "✓ Released {}", plan.tag_name);
+    Ok(())
+}
 
-        if config.release.create_release {
-            info!(quiet, "→ Creating forge release {}…", prepared.tag_name);
-            ctx.forge.create_release(&prepared.tag_name)?;
+fn release_independent(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    root: &Path,
+    prepared: &PreparedRelease,
+    quiet: bool,
+) -> Result<()> {
+    // Written before the per-member commits, so the changelog files land in
+    // the first member's release commit.
+    if config.changelog.enabled {
+        info!(quiet, "→ Writing changelogs…");
+        pipeline::update_changelog(ctx, root, config, prepared)?;
+    }
+
+    // Per member: bump, commit, tag, push tag, publish.
+    pipeline::run_publish(ctx, config, root, prepared)?;
+
+    move_bookmark_and_export(ctx, config, quiet)?;
+    info!(quiet, "→ Pushing bookmark…");
+    ctx.backend.git_push(Some(&config.release.bookmark), None)?;
+
+    let released = prepared
+        .members()
+        .map_or(0, |m| m.values().filter(|p| p.is_released()).count());
+    info!(quiet, "✓ Released {released} member(s)");
+    Ok(())
+}
+
+fn print_plan(
+    prepared: &PreparedRelease,
+    config: &Config,
+    dry_run: bool,
+    quiet: bool,
+) -> Result<()> {
+    match &prepared.plan {
+        ReleasePlan::Unified(plan) => {
+            info!(quiet, "  Current version: {}", plan.current_version);
+            if plan.baseline_version != plan.current_version {
+                info!(quiet, "  Last released version: {}", plan.baseline_version);
+                info!(quiet, "  (using it as the bump baseline)");
+            }
         }
-
-        update_distro_packages(config, root, &prepared.next_version, quiet);
+        ReleasePlan::Independent(_) if dry_run => {}
+        ReleasePlan::Independent(members) => {
+            let Some(ws) = pipeline::independent_workspace(config) else {
+                return Ok(());
+            };
+            for member in workspace::ordered_members(&ws.members)? {
+                let Some(plan) = members.get(&member.name) else {
+                    continue;
+                };
+                if plan.first_release {
+                    info!(quiet, "  {}: {} (first release)", member.name, plan.next);
+                } else if plan.is_released() {
+                    info!(quiet, "  {}: {} → {}", member.name, plan.current, plan.next);
+                }
+            }
+        }
     }
-
-    info!(quiet, "✓ Released {}", prepared.tag_name);
     Ok(())
 }
 
@@ -94,14 +159,6 @@ fn print_nothing_to_release(config: &Config, quiet: bool) {
         quiet,
         "      (Run `jj-release --help` for full usage details)"
     );
-}
-
-fn print_versions(prepared: &PreparedRelease, is_independent: bool, quiet: bool) {
-    info!(quiet, "  Current version: {}", prepared.baseline_version);
-    if !is_independent && prepared.baseline_version != prepared.current_version {
-        info!(quiet, "  crates.io version: {}", prepared.baseline_version);
-        info!(quiet, "  (using crates.io version as bump baseline)");
-    }
 }
 
 /// `publish.cargo = false`: ask before continuing in a terminal, just warn in CI.
@@ -126,6 +183,7 @@ fn create_release_commit(
     config: &Config,
     root: &Path,
     prepared: &PreparedRelease,
+    plan: &UnifiedPlan,
     quiet: bool,
 ) -> Result<()> {
     if config.changelog.enabled {
@@ -133,17 +191,17 @@ fn create_release_commit(
         pipeline::update_changelog(ctx, root, config, prepared)?;
     }
 
-    info!(quiet, "→ Bumping version to {}…", prepared.next_version);
-    ctx.manifest.write_version(root, &prepared.next_version)?;
-    pipeline::update_workspace_dependencies(root, config, &prepared.next_version)?;
-    apply_file_bumps(config, root, &prepared.next_version.to_string(), quiet)?;
+    info!(quiet, "→ Bumping version to {}…", plan.next_version);
+    ctx.manifest.write_version(root, &plan.next_version)?;
+    pipeline::update_workspace_dependencies(root, config, &plan.next_version)?;
+    apply_file_bumps(config, root, &plan.next_version.to_string(), quiet)?;
 
-    let message = format!("chore: release {}", prepared.tag_name);
+    let message = format!("chore: release {}", plan.tag_name);
     info!(quiet, "→ Creating commit {message:?}…");
     ctx.backend.new_commit(&message)?;
 
-    info!(quiet, "→ Creating tag {}…", prepared.tag_name);
-    ctx.backend.create_tag(&prepared.tag_name, "@")?;
+    info!(quiet, "→ Creating tag {}…", plan.tag_name);
+    ctx.backend.create_tag(&plan.tag_name, "@")?;
 
     move_bookmark_and_export(ctx, config, quiet)
 }
@@ -170,46 +228,26 @@ fn move_bookmark_and_export(ctx: &ReleaseContext<'_>, config: &Config, quiet: bo
     ctx.backend.git_export()
 }
 
-/// Runs after the release is public, so failures warn instead of failing the
-/// run: the crates.io publish, tag and forge release can't be redone.
-#[cfg_attr(not(feature = "publish-copr"), allow(unused_variables))]
-fn update_distro_packages(config: &Config, root: &Path, version: &Version, quiet: bool) {
-    #[cfg(feature = "publish-aur")]
-    if let Some(aur) = &config.publish.aur {
-        info!(quiet, "→ Updating AUR package {}…", aur.package);
-        if let Err(e) = jj_release_core::distro::aur::publish(aur, version, false) {
-            eprintln!("warning: AUR update failed: {e}");
-        }
-    }
-
-    #[cfg(feature = "publish-copr")]
-    if let Some(copr) = &config.publish.copr {
-        info!(quiet, "→ Submitting to COPR project {}…", copr.project);
-        if let Err(e) = jj_release_core::distro::copr::publish(copr, root, version, false) {
-            eprintln!("warning: COPR submission failed: {e}");
-        }
-    }
-}
-
 fn print_dry_run(prepared: &PreparedRelease, config: &Config) -> Result<()> {
-    let is_independent = pipeline::independent_workspace(config).is_some();
-    if is_independent {
-        println!("[dry-run] Independent workspace release:");
-    } else {
-        println!(
-            "[dry-run] Would release {} as {}",
-            prepared.next_version, prepared.tag_name
-        );
-    }
-    print_publish_plan(prepared, config)?;
-    if !is_independent {
-        print_distro_plan(prepared, config);
+    match &prepared.plan {
+        ReleasePlan::Unified(plan) => {
+            println!(
+                "[dry-run] Would release {} as {}",
+                plan.next_version, plan.tag_name
+            );
+            print_publish_plan(prepared, config)?;
+            print_distro_plan(plan, config);
+        }
+        ReleasePlan::Independent(_) => {
+            println!("[dry-run] Independent workspace release:");
+            print_publish_plan(prepared, config)?;
+        }
     }
     Ok(())
 }
 
-fn print_distro_plan(prepared: &PreparedRelease, config: &Config) {
-    let plan = distro::describe(config, &prepared.next_version);
+fn print_distro_plan(plan: &UnifiedPlan, config: &Config) {
+    let plan = distro::describe(config, &plan.next_version);
     if plan.is_empty() {
         return;
     }
@@ -224,23 +262,26 @@ fn print_distro_plan(prepared: &PreparedRelease, config: &Config) {
 }
 
 fn print_publish_plan(prepared: &PreparedRelease, config: &Config) -> Result<()> {
-    if !config.publish.cargo {
-        println!("[dry-run] Publishing: disabled (publish.cargo = false)");
-        return Ok(());
-    }
-
     let Some(ws) = config.workspace.as_ref().filter(|ws| ws.enabled) else {
-        println!("[dry-run] Would publish from root");
+        if config.publish.cargo {
+            println!("[dry-run] Would publish from root");
+        } else {
+            println!("[dry-run] Publishing: disabled (publish.cargo = false)");
+        }
         return Ok(());
     };
 
-    println!("[dry-run] Would publish in order:");
+    if config.publish.cargo {
+        println!("[dry-run] Would publish in order:");
+    } else {
+        println!("[dry-run] Would release in order (publishing disabled):");
+    }
     for member in workspace::ordered_members(&ws.members)? {
-        match ws.versioning {
-            Versioning::Independent => print_independent_member(member, ws, prepared, config),
-            Versioning::Unified => println!(
+        match &prepared.plan {
+            ReleasePlan::Independent(members) => print_independent_member(member, members, config),
+            ReleasePlan::Unified(plan) => println!(
                 "  - {} ({}) → {} (deps updated)",
-                member.name, member.path, prepared.next_version
+                member.name, member.path, plan.next_version
             ),
         }
     }
@@ -249,42 +290,31 @@ fn print_publish_plan(prepared: &PreparedRelease, config: &Config) -> Result<()>
 
 fn print_independent_member(
     member: &WorkspaceMember,
-    ws: &WorkspaceConfig,
-    prepared: &PreparedRelease,
+    members: &HashMap<String, MemberPlan>,
     config: &Config,
 ) {
-    let Some((current, next)) = prepared
-        .member_bumps
-        .as_ref()
-        .and_then(|mb| mb.get(&member.name))
-    else {
+    let Some(plan) = members.get(&member.name) else {
         println!("  - {} ({})", member.name, member.path);
         return;
     };
 
-    if current == next {
+    if !plan.is_released() {
         println!(
             "  - {} ({}) {} (no changes, skipping)",
-            member.name, member.path, current
+            member.name, member.path, plan.current
         );
         return;
     }
 
-    let tag = workspace::member_tag_name(member, next, &config.release.tag_prefix);
+    let tag = workspace::member_tag_name(member, &plan.next, &config.release.tag_prefix);
 
-    // Siblings that also bump, so this member's deps on them get updated.
-    let updated_deps: Vec<&str> = ws
-        .members
+    // Dependencies of this member that are also released in this run,
+    // so their version requirements in its Cargo.toml get updated.
+    let updated_deps: Vec<&str> = member
+        .depends_on
         .iter()
-        .filter(|other| other.name != member.name)
-        .filter(|other| {
-            prepared
-                .member_bumps
-                .as_ref()
-                .and_then(|mb| mb.get(&other.name))
-                .is_some_and(|(c, n)| c != n)
-        })
-        .map(|other| other.name.as_str())
+        .filter(|dep| members.get(*dep).is_some_and(MemberPlan::is_released))
+        .map(String::as_str)
         .collect();
 
     let deps = if updated_deps.is_empty() {
@@ -293,8 +323,15 @@ fn print_independent_member(
         format!(", deps updated: {}", updated_deps.join(", "))
     };
 
-    println!(
-        "  - {} ({}) {} → {} (tag: {tag}{deps})",
-        member.name, member.path, current, next
-    );
+    if plan.first_release {
+        println!(
+            "  - {} ({}) {} (first release, tag: {tag}{deps})",
+            member.name, member.path, plan.next
+        );
+    } else {
+        println!(
+            "  - {} ({}) {} → {} (tag: {tag}{deps})",
+            member.name, member.path, plan.current, plan.next
+        );
+    }
 }

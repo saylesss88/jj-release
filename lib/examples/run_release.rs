@@ -14,13 +14,8 @@
 use std::{env, path::PathBuf};
 
 use jj_release_core::{
-    config::Config,
-    errors::Result,
-    forge::NoForge,
-    jj::ShellBackend,
-    manifest,
-    pipeline::{self, ReleaseContext},
-    publish::NoPublish,
+    ReleaseContext, ReleasePlan, config, errors::Result, forge::NoForge, jj::ShellBackend,
+    manifest, pipeline, publish::NoPublish,
 };
 
 fn main() -> Result<()> {
@@ -34,8 +29,7 @@ fn main() -> Result<()> {
     let forge = NoForge;
     let publisher = NoPublish;
     let ctx = ReleaseContext::new(&backend, manifest.as_ref(), &forge, &publisher);
-    // let config = Config::default();
-    let mut config = Config::default();
+    let mut config = config::load(root)?;
     // Set to true to publish on crates.io after tagging
     config.publish.cargo = false;
 
@@ -45,9 +39,16 @@ fn main() -> Result<()> {
         return Ok(());
     };
 
-    println!("  Current version: {}", prepared.baseline_version);
-    println!("  Next version:    {}", prepared.next_version);
-    println!("  Tag:             {}", prepared.tag_name);
+    let ReleasePlan::Unified(plan) = &prepared.plan else {
+        println!(
+            "Independent workspace detected; use the `jj-release` CLI for per-member releases."
+        );
+        return Ok(());
+    };
+
+    println!("  Current version: {}", plan.current_version);
+    println!("  Next version:    {}", plan.next_version);
+    println!("  Tag:             {}", plan.tag_name);
 
     // Preflight checks
     println!("→ Running preflight checks...");
@@ -60,14 +61,14 @@ fn main() -> Result<()> {
     }
 
     // Bump version
-    println!("→ Bumping version to {}...", prepared.next_version);
-    ctx.manifest.write_version(root, &prepared.next_version)?;
-    pipeline::update_workspace_dependencies(root, &config, &prepared.next_version)?;
+    println!("→ Bumping version to {}...", plan.next_version);
+    ctx.manifest.write_version(root, &plan.next_version)?;
+    pipeline::update_workspace_dependencies(root, &config, &plan.next_version)?;
 
     // Commit and tag
     ctx.backend
-        .new_commit(&format!("chore: release {}", prepared.tag_name))?;
-    ctx.backend.create_tag(&prepared.tag_name, "@")?;
+        .new_commit(&format!("chore: release {}", plan.tag_name))?;
+    ctx.backend.create_tag(&plan.tag_name, "@")?;
     ctx.backend.set_bookmark(&config.release.bookmark, "@")?;
     ctx.backend.git_export()?;
 
@@ -78,14 +79,14 @@ fn main() -> Result<()> {
     // Push: this is irreversible
     println!("→ Pushing...");
     ctx.backend
-        .git_push(Some(&config.release.bookmark), Some(&prepared.tag_name))?;
+        .git_push(Some(&config.release.bookmark), Some(&plan.tag_name))?;
 
     // Forge release
     if config.release.create_release {
         println!("→ Creating forge release...");
-        ctx.forge.create_release(&prepared.tag_name)?;
+        ctx.forge.create_release(&plan.tag_name)?;
     }
 
-    println!("✓ Released {}", prepared.tag_name);
+    println!("✓ Released {}", plan.tag_name);
     Ok(())
 }
