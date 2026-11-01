@@ -98,6 +98,13 @@ pub trait JjBackend {
         let _ = rev;
         Ok(jiff::Zoned::now().date().to_string())
     }
+
+    /// Check if a tag already exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying command fails.
+    fn tag_exists(&self, tag: &str) -> Result<bool>;
 }
 
 // Shell implementation
@@ -281,6 +288,18 @@ impl JjBackend for ShellBackend {
             r#"committer.timestamp().format("%Y-%m-%d")"#,
         ])?;
         Ok(out.trim().to_owned())
+    }
+
+    fn tag_exists(&self, tag: &str) -> Result<bool> {
+        // Attempt to log the exact tag. If jj exits successfully, the tag exists.
+        // We use Command directly here to avoid the automatic error translation in `self.run()`.
+        let out = Command::new(&self.jj_bin)
+            .args(["log", "--no-graph", "-r", tag])
+            .current_dir(&self.root)
+            .output()
+            .map_err(|e| ReleaseError::Message(format!("failed to spawn jj: {e}")))?;
+
+        Ok(out.status.success())
     }
 }
 

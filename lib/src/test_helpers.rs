@@ -45,5 +45,8 @@ pub mod mock {
         fn commit_date(&self, _rev: &str) -> Result<String> {
             Ok("2026-01-01".to_owned())
         }
+        fn tag_exists(&self, tag: &str) -> Result<bool> {
+            Ok(self.tags.contains(&tag.to_owned()))
+        }
     }
 }
