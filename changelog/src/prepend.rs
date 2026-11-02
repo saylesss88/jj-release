@@ -43,10 +43,16 @@ pub fn prepend_to_file(existing: &str, new_section: &str) -> String {
 /// ignoring leading whitespace.
 #[must_use]
 pub fn has_changelog_title(existing: &str) -> bool {
-    existing
+    let first = existing
+        .trim_start_matches('\u{feff}') // byte-order mark from some editors
         .trim_start()
-        .get(..11)
-        .is_some_and(|t| t.eq_ignore_ascii_case("# changelog"))
+        .lines()
+        .next()
+        .unwrap_or("");
+    // "#" followed by a space or nothing; "##" is a section, "#tag" isn't a heading.
+    first
+        .strip_prefix('#')
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with([' ', '\t']))
 }
 
 /// Drop `[Unreleased]` sections at the start of `body`. A new section, whether
@@ -177,5 +183,24 @@ mod tests {
         assert!(!released.contains("[Unreleased]"));
         assert!(released.find("## [0.2.0]") < released.find("## [0.1.0]"));
         assert!(released.contains("- old"));
+    }
+
+    #[test]
+    fn detects_any_h1_title() {
+        assert!(has_changelog_title("# Changelog\n"));
+        assert!(has_changelog_title("# CHANGELOG\n"));
+        assert!(has_changelog_title("# Change Log\n"));
+        assert!(has_changelog_title("# Release Notes for jj-release\n"));
+        assert!(has_changelog_title("\n\n# Changelog\n"));
+        assert!(has_changelog_title("\u{feff}# Changelog\n"));
+    }
+
+    #[test]
+    fn rejects_non_titles() {
+        assert!(!has_changelog_title(""));
+        assert!(!has_changelog_title("## [0.1.0] - 2026-01-01\n"));
+        assert!(!has_changelog_title("#Changelog\n"));
+        assert!(!has_changelog_title("TBD\n===\n")); // setext, intentionally unsupported
+        assert!(!has_changelog_title("Some text\n# Changelog\n"));
     }
 }
