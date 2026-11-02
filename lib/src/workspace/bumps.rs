@@ -98,8 +98,7 @@ pub fn member_tag_name(
     version: &Version,
     default_prefix: &str,
 ) -> String {
-    let prefix = member.tag_prefix.as_deref().unwrap_or(default_prefix);
-    format!("{prefix}{version}")
+    format!("{}{version}", super::member_prefix(member, default_prefix))
 }
 
 /// The jj fileset covering `member`'s files, minus any other members nested
