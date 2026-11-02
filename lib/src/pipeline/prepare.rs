@@ -282,7 +282,7 @@ mod tests {
     use super::*;
     use std::{cell::RefCell, path::Path};
 
-    use crate::PublishBackend;
+    use crate::{PublishBackend, WorkspaceMember};
 
     use semver::Version;
 
@@ -404,5 +404,119 @@ mod tests {
             validate::check_publish(&publisher, Path::new("/tmp")),
             Err("mock failure".to_owned())
         );
+    }
+
+    fn member(name: &str, deps: &[&str]) -> WorkspaceMember {
+        WorkspaceMember {
+            name: name.into(),
+            path: format!("crates/{name}"),
+            depends_on: deps.iter().map(|d| (*d).to_owned()).collect(),
+            ..Default::default()
+        }
+    }
+
+    fn plan(current: &str, next: &str) -> MemberPlan {
+        MemberPlan {
+            current: Version::parse(current).unwrap(),
+            next: Version::parse(next).unwrap(),
+            first_release: false,
+            propagated: false,
+            updated_deps: Vec::new(),
+        }
+    }
+
+    fn reqs(entries: &[(&str, &str, &str)]) -> HashMap<String, HashMap<String, VersionReq>> {
+        let mut out: HashMap<String, HashMap<String, VersionReq>> = HashMap::new();
+        for (dependent, dep, req) in entries {
+            out.entry((*dependent).to_owned())
+                .or_default()
+                .insert((*dep).to_owned(), VersionReq::parse(req).unwrap());
+        }
+        out
+    }
+
+    fn ws() -> WorkspaceConfig {
+        WorkspaceConfig {
+            enabled: true,
+            versioning: Versioning::Independent,
+            members: vec![
+                member("globset", &[]),
+                member("ignore", &["globset"]),
+                member("ripgrep", &["ignore"]),
+            ],
+        }
+    }
+
+    #[test]
+    fn breaking_bump_releases_direct_dependents() {
+        let reqs = reqs(&[
+            ("ignore", "globset", "0.4.21"),
+            ("ripgrep", "ignore", "0.4.34"),
+        ]);
+        let mut plans = HashMap::from([
+            ("globset".to_owned(), plan("0.4.21", "0.5.0")),
+            ("ignore".to_owned(), plan("0.4.34", "0.4.34")),
+            ("ripgrep".to_owned(), plan("15.2.0", "15.2.0")),
+        ]);
+
+        propagate_dependency_bumps(&ws(), &reqs, &mut plans).unwrap();
+
+        let ignore = &plans["ignore"];
+        assert_eq!(ignore.next, Version::new(0, 4, 35));
+        assert!(ignore.propagated);
+        assert_eq!(ignore.updated_deps, ["globset"]);
+
+        // ignore's patch bump still satisfies ripgrep's "0.4.34" requirement.
+        assert!(!plans["ripgrep"].is_released());
+    }
+
+    #[test]
+    fn compatible_bump_does_not_propagate() {
+        let reqs = reqs(&[("ignore", "globset", "0.4.21")]);
+        let mut plans = HashMap::from([
+            ("globset".to_owned(), plan("0.4.21", "0.4.22")),
+            ("ignore".to_owned(), plan("0.4.34", "0.4.34")),
+            ("ripgrep".to_owned(), plan("15.2.0", "15.2.0")),
+        ]);
+
+        propagate_dependency_bumps(&ws(), &reqs, &mut plans).unwrap();
+
+        assert!(!plans["ignore"].is_released());
+    }
+
+    #[test]
+    fn exact_pin_cascades() {
+        let reqs = reqs(&[
+            ("ignore", "globset", "0.4.21"),
+            ("ripgrep", "ignore", "=0.4.34"),
+        ]);
+        let mut plans = HashMap::from([
+            ("globset".to_owned(), plan("0.4.21", "0.5.0")),
+            ("ignore".to_owned(), plan("0.4.34", "0.4.34")),
+            ("ripgrep".to_owned(), plan("15.2.0", "15.2.0")),
+        ]);
+
+        propagate_dependency_bumps(&ws(), &reqs, &mut plans).unwrap();
+
+        assert!(plans["ignore"].propagated);
+        assert!(plans["ripgrep"].propagated);
+        assert_eq!(plans["ripgrep"].next, Version::new(15, 2, 1));
+    }
+
+    #[test]
+    fn own_bump_is_kept() {
+        let reqs = reqs(&[("ignore", "globset", "0.4.21")]);
+        let mut plans = HashMap::from([
+            ("globset".to_owned(), plan("0.4.21", "0.5.0")),
+            ("ignore".to_owned(), plan("0.4.34", "0.5.0")), // its own feat
+            ("ripgrep".to_owned(), plan("15.2.0", "15.2.0")),
+        ]);
+
+        propagate_dependency_bumps(&ws(), &reqs, &mut plans).unwrap();
+
+        let ignore = &plans["ignore"];
+        assert_eq!(ignore.next, Version::new(0, 5, 0));
+        assert!(!ignore.propagated);
+        assert_eq!(ignore.updated_deps, ["globset"]);
     }
 }

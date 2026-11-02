@@ -101,7 +101,7 @@ mod tests {
             fs::write(
                 d.join("Cargo.toml"),
                 format!(
-                    "[package]\nname = \"{name}\"\nversion = \"{version}\"\nedition = \"2021\"\n"
+                    "[package]\nname = \"{name}\"\nversion = \"{version}\"\nedition = \"2024\"\n"
                 ),
             )
             .unwrap();
