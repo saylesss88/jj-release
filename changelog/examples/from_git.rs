@@ -15,7 +15,10 @@ fn main() {
         .output()
         .expect("failed to run git");
     if !output.status.success() {
-        eprintln!("git log failed: {}", String::from_utf8_lossy(&output.stderr));
+        eprintln!(
+            "git log failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         return;
     }
 

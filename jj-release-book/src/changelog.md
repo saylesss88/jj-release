@@ -15,6 +15,9 @@ jj-release changelog -o NOTES.md
 
 # Regenerate the full changelog from all tags (useful for bootstrapping)
 jj-release changelog --full -w
+
+# Override to a specific layout from the command-line (root, per-member, or both)
+jj-release changelog --layout both
 ```
 
 `-w` (`--write`) writes to `[changelog].file` (default `CHANGELOG.md`): at the

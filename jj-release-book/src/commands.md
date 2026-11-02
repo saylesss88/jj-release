@@ -33,6 +33,9 @@ jj-release changelog -o CHANGELOG.md
 # Regenerate the full changelog from all tags (useful for bootstrapping)
 jj-release changelog --full -o CHANGELOG.md
 
+# Choose a specific changelog layout (root, per-member, or both)
+jj-release changelog --layout both
+
 # Open a PR for review before publishing
 jj-release pr
 ```

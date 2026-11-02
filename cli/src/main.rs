@@ -13,6 +13,7 @@ use clap::Parser;
 use crate::config::Config;
 use crate::pipeline::ChangelogOutput;
 
+use jj_release_changelog::ChangelogLayout;
 #[cfg(feature = "forgejo")]
 use jj_release_core::forge::ForgejoForge;
 #[cfg(feature = "gitea")]
@@ -53,12 +54,16 @@ struct Cli {
     command: Option<Subcommand>,
 
     /// Skip publishing to crates.io even if publish.cargo = true.
-    #[arg(long)]
+    #[arg(long, global = true)]
     no_publish: bool,
 
     /// Force publishing to crates.io even if publish.cargo = false.
-    #[arg(long)]
+    #[arg(short = 'p', long, global = true)]
     publish_cargo: bool,
+
+    /// Override the changelog layout (root, per-member, both).
+    #[arg(long, global = true)]
+    layout: Option<String>,
 }
 
 #[derive(clap::Subcommand, Debug, Clone)]
@@ -106,7 +111,12 @@ fn main() {
 fn run() -> Result<(), errors::ReleaseError> {
     let cli = Cli::parse();
     let root = resolve_repo_root(cli.repo.clone())?;
-    let config = load_config(&root, cli.no_publish, cli.publish_cargo)?;
+    let config = load_config(
+        &root,
+        cli.no_publish,
+        cli.publish_cargo,
+        cli.layout.as_deref(),
+    )?;
 
     let backend = ShellBackend::new(&root)?;
     let publisher = build_publisher(&config);
@@ -133,12 +143,28 @@ fn resolve_repo_root(repo_arg: Option<PathBuf>) -> Result<PathBuf, ReleaseError>
     }
 }
 
-fn load_config(root: &Path, no_publish: bool, publish_cargo: bool) -> Result<Config, ReleaseError> {
+fn load_config(
+    root: &Path,
+    no_publish: bool,
+    publish_cargo: bool,
+    layout_override: Option<&str>,
+) -> Result<Config, ReleaseError> {
     let mut config = config::load(root)?;
     if publish_cargo {
         config.publish.cargo = true;
     } else if no_publish {
         config.publish.cargo = false;
+    }
+
+    if let Some(layout_str) = layout_override {
+        match layout_str.to_lowercase().as_str() {
+            "root" => config.changelog.layout = ChangelogLayout::Root,
+            "per-member" => config.changelog.layout = ChangelogLayout::PerMember,
+            "both" => config.changelog.layout = ChangelogLayout::Both,
+            _ => eprintln!(
+                "warning: ignored unknown layout '{layout_str}', valid options are: root, per-member, both"
+            ),
+        }
     }
 
     if !root.join("release.toml").exists() {
