@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, path::Path};
 
-use semver::Version;
+use semver::{Version, VersionReq};
 
 use crate::{
     BumpKind, Config, ManifestBackend, MemberPlan, PreparedRelease, ReleasePlan, UnifiedPlan,
@@ -218,9 +218,13 @@ fn plan_member_versions(
                 current,
                 next,
                 first_release,
+                propagated: false,
+                updated_deps: Vec::new(),
             },
         );
     }
+    let reqs = workspace::member_requirements(&root.join("Cargo.toml"))?;
+    propagate_dependency_bumps(ws, &reqs, &mut plans)?;
     Ok(plans)
 }
 
@@ -232,6 +236,45 @@ pub(super) fn resolve_since(backend: &dyn JjBackend, config: &Config) -> Result<
 
     eprintln!("hint: no version tag found. Entering First Release mode (starting from root).");
     Ok("root()".to_owned())
+}
+
+/// Release dependents whose requirement on a released member no longer
+/// accepts that member's new version. Members are visited dependencies-first,
+/// so a propagated release can cascade further down the graph.
+fn propagate_dependency_bumps(
+    ws: &WorkspaceConfig,
+    reqs: &HashMap<String, HashMap<String, VersionReq>>,
+    plans: &mut HashMap<String, MemberPlan>,
+) -> Result<()> {
+    for member in workspace::ordered_members(&ws.members)? {
+        let Some(member_reqs) = reqs.get(&member.name) else {
+            continue;
+        };
+
+        let mut outdated: Vec<String> = member_reqs
+            .iter()
+            .filter(|(dep, req)| {
+                plans
+                    .get(*dep)
+                    .is_some_and(|p| p.is_released() && !req.matches(&p.next))
+            })
+            .map(|(dep, _)| dep.clone())
+            .collect();
+        if outdated.is_empty() {
+            continue;
+        }
+        outdated.sort();
+
+        let Some(plan) = plans.get_mut(&member.name) else {
+            continue;
+        };
+        if !plan.is_released() {
+            plan.next = commits::apply_bump(&plan.current, BumpKind::Patch);
+            plan.propagated = true;
+        }
+        plan.updated_deps = outdated;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

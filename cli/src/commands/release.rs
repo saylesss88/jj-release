@@ -320,13 +320,28 @@ fn print_independent_member(
     let deps = if updated_deps.is_empty() {
         String::new()
     } else {
-        format!(", deps updated: {}", updated_deps.join(", "))
+        let labelled: Vec<String> = updated_deps
+            .iter()
+            .map(|dep| {
+                if plan.updated_deps.iter().any(|d| d == dep) {
+                    format!("{dep} (breaking)")
+                } else {
+                    (*dep).to_owned()
+                }
+            })
+            .collect();
+        format!(", deps updated: {}", labelled.join(", "))
     };
 
     if plan.first_release {
         println!(
             "  - {} ({}) {} (first release, tag: {tag}{deps})",
             member.name, member.path, plan.next
+        );
+    } else if plan.propagated {
+        println!(
+            "  - {} ({}) {} → {} (dependency update, tag: {tag}{deps})",
+            member.name, member.path, plan.current, plan.next
         );
     } else {
         println!(

@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{fmt::Write, fs, path::Path};
 
 use semver::Version;
 use toml_edit::DocumentMut;
@@ -97,12 +97,13 @@ pub fn update_changelog(
         // One file per member, each with only its own commits.
         (ChangelogLayout::PerMember, _) => {
             for (member, version, commits) in releasing_members(ctx, config, ws, prepared)? {
-                let section = jj_release_changelog::render_changelog_section(
+                let mut section = jj_release_changelog::render_changelog_section(
                     &commits,
                     Some(&version),
                     &config.changelog,
                     None,
                 );
+                section.push_str(&dependency_notes(member, prepared));
                 write_section(&root.join(&member.path), config, &section)?;
             }
             Ok(())
@@ -123,6 +124,7 @@ pub fn update_changelog(
                         &commits,
                         &config.changelog,
                     ));
+                    s.push_str(&dependency_notes(member, prepared));
                     s
                 })
                 .collect();
@@ -162,7 +164,9 @@ fn releasing_members<'a>(
         let commits = ctx
             .backend
             .log_commits_for_path(&format!("{since}..@"), &fileset)?;
-        if !commits.is_empty() {
+        let plan = prepared.members().and_then(|m| m.get(&member.name));
+        let has_dep_updates = plan.is_some_and(|p| !p.updated_deps.is_empty());
+        if !commits.is_empty() || has_dep_updates {
             out.push((member, version, commits));
         }
     }
@@ -455,6 +459,26 @@ fn unified_plan(prepared: &PreparedRelease) -> Result<&UnifiedPlan> {
     })
 }
 
+fn dependency_notes(member: &WorkspaceMember, prepared: &PreparedRelease) -> String {
+    let Some(members) = prepared.members() else {
+        return String::new();
+    };
+    let Some(plan) = members.get(&member.name) else {
+        return String::new();
+    };
+    if plan.updated_deps.is_empty() {
+        return String::new();
+    }
+
+    let mut out = String::from("\n### Dependencies\n\n");
+    for dep in &plan.updated_deps {
+        if let Some(dep_plan) = members.get(dep) {
+            let _ = writeln!(out, "- Updated `{dep}` to {}", dep_plan.next);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use std::{cell::RefCell, collections::HashMap, process::Command, rc::Rc};
@@ -608,6 +632,8 @@ mod tests {
                     current: Version::new(0, 1, 0),
                     next: Version::new(0, 2, 0),
                     first_release: false,
+                    propagated: false,
+                    updated_deps: Vec::new(),
                 },
             )])),
         };

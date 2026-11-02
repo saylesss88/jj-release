@@ -117,6 +117,11 @@ pub struct MemberPlan {
     pub next: Version,
     /// No tag exists for this member yet; `next == current` but it is still released.
     pub first_release: bool,
+    /// Released only because a dependency's new version falls outside its
+    /// requirement, not because of its own commits.
+    pub propagated: bool,
+    /// Workspace dependencies whose requirements change in this release.
+    pub updated_deps: Vec<String>,
 }
 
 impl MemberPlan {

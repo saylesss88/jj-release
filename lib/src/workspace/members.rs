@@ -1,7 +1,11 @@
-use std::{collections::HashMap, fs, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::Path,
+};
 
-use cargo_metadata::MetadataCommand;
-use semver::Version;
+use cargo_metadata::{DependencyKind, MetadataCommand};
+use semver::{Version, VersionReq};
 
 use crate::{
     WorkspaceMember,
@@ -141,6 +145,38 @@ pub fn member_versions(root: &Path) -> Result<HashMap<String, Version>> {
         }
     }
     Ok(versions)
+}
+
+/// For each member, its version requirements on other workspace members:
+/// `dependent -> (dependency -> requirement)`.
+///
+/// # Errors
+///
+/// Returns an error if `cargo metadata` fails.
+pub fn member_requirements(
+    cargo_toml: &Path,
+) -> Result<HashMap<String, HashMap<String, VersionReq>>> {
+    let metadata = MetadataCommand::new()
+        .manifest_path(cargo_toml)
+        .no_deps()
+        .exec()?;
+
+    let members = metadata.workspace_packages();
+    let names: HashSet<&str> = members.iter().map(|p| p.name.as_str()).collect();
+
+    Ok(members
+        .iter()
+        .map(|p| {
+            let reqs = p
+                .dependencies
+                .iter()
+                .filter(|d| matches!(d.kind, DependencyKind::Normal | DependencyKind::Build))
+                .filter(|d| names.contains(d.name.as_str()))
+                .map(|d| (d.name.clone(), d.req.clone()))
+                .collect();
+            (p.name.to_string(), reqs)
+        })
+        .collect())
 }
 
 #[cfg(test)]
