@@ -9,25 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- dependency bump propagation
+- **(init)** detect tag prefixes from existing tags
+- **(changelog)** add --write flag to changelog subcommand
 - **(changelog)** tie in support for a changelog per workspace member
 - **(changelog)** support one changelog for each workspace or a single root changelog
 - **(changelog)** add code to support ## Unreleased header
 
 ### ♻️ Changed
 
+- **BREAKING** split PreparedRelease into unified and independent plans
+- **(main)** slim down fn run with helper functions
 - **(changelog)** create a new jj_release_changelog workspace member and move the changelog logic there
 
 ### 🛠️ Fixed
 
+- use statements calling old changelog module
+- **(config)** move `manifest_backend` key to the top of `release.toml`
 - use prepared.baseline_version for pr.rs and release.rs in the cli
 
-## [0.10.0](https://github.com/saylesss88/jj-release/compare/v0.9.0...v0.10.0) - 2026-10-31
+## [0.10.0](https://github.com/saylesss88/jj-release/compare/v0.9.0...v0.10.0) - 2026-10-10
 
 ### ✨ Added
 
 - **(changelog)** add link to Comparing changes for changelog headers
 
-## [0.9.0](https://github.com/saylesss88/jj-release/compare/v0.8.0...v0.9.0) - 2026-10-31
+## [0.9.0](https://github.com/saylesss88/jj-release/compare/v0.8.0...v0.9.0) - 2026-09-29
 
 ### ✨ Added
 
@@ -52,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - feature-gate ureq behind gitea and forgejo features and remove them from the default features list
 
-## [0.8.0](https://github.com/saylesss88/jj-release/compare/v0.7.0...v0.8.0) - 2026-10-31
+## [0.8.0](https://github.com/saylesss88/jj-release/compare/v0.7.0...v0.8.0) - 2026-09-24
 
 ### ✨ Added
 
@@ -63,7 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **(release)** add a y/n prompt for when cargo.publish = false to warn users and remind them
 
-## [0.7.0](https://github.com/saylesss88/jj-release/compare/v0.6.0...v0.7.0) - 2026-10-31
+## [0.7.0](https://github.com/saylesss88/jj-release/compare/v0.6.0...v0.7.0) - 2026-09-23
 
 ### ♻️ Changed
 
@@ -71,7 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **(binary)** move what can be moved into the lib
 - add detect_workspace to lib and simplify init using it
 
-## [0.6.0](https://github.com/saylesss88/jj-release/compare/v0.5.2...v0.6.0) - 2026-10-31
+## [0.6.0](https://github.com/saylesss88/jj-release/compare/v0.5.2...v0.6.0) - 2026-09-22
 
 ### ✨ Added
 
@@ -81,13 +88,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - extract helper functions to slim down release_pipeline
 
-## [0.5.2](https://github.com/saylesss88/jj-release/compare/v0.5.1...v0.5.2) - 2026-10-31
+## [0.5.2](https://github.com/saylesss88/jj-release/compare/v0.5.1...v0.5.2) - 2026-09-22
 
 ### 🛠️ Fixed
 
 - explicitly define readme path for crates.io
 
-## [0.5.1](https://github.com/saylesss88/jj-release/compare/v0.5.0...v0.5.1) - 2026-10-31
+## [0.5.1](https://github.com/saylesss88/jj-release/compare/v0.5.0...v0.5.1) - 2026-09-22
 
 ### ♻️ Changed
 

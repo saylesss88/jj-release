@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ✨ Added
 
+- **(changelog)** add an option for keeping track of both independent workspace members and the root changelog tracking everything at the same time
+- dependency bump propagation
+- add check to ensure the same tag isn't created twice
+- **(workspace)** write detect_member_tags function
+- **(detect)** resolve workspace member globs when detecting versioning
+- **(init)** detect tag prefixes from existing tags
+- **(workspace)** detect crates/ workspaces with glob patterns
+- **(changelog)** add --write flag to changelog subcommand
 - **(changelog)** tie in support for a changelog per workspace member
 - **(changelog)** support one changelog for each workspace or a single root changelog
 - **(changelog)** add code to support ## Unreleased header
@@ -18,17 +26,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ♻️ Changed
 
+- **(workspace)** move workspace.rs into workspace/ dir and split into submodules
+- **BREAKING** split PreparedRelease into unified and independent plans
 - **(changelog)** create a new jj_release_changelog workspace member and move the changelog logic there
 - **(pipeline)** transition from registry checks to tag boundaries
 
 ### 🛠️ Fixed
 
+- **(pipeline/prepare)** return None from prepare_release when an independent release has nothing to release
+- **(test)** failing test missing parameter
+- **(pipeline/release)** ensure that commits and tags still execute when publishing is off
+- use statements calling old changelog module
+- **(config)** move `manifest_backend` key to the top of `release.toml`
 - use prepared.baseline_version for pr.rs and release.rs in the cli
 - use statements & paths
 - imports/use statements
 - imports
 
-## [0.10.0](https://github.com/saylesss88/jj-release/compare/v0.9.0...v0.10.0) - 2026-10-31
+### 🪲 Bug
+
+- **(changelog)** every historical release gets todays date
+- **(validate)** add check to make sure release.toml members match the members defined in Cargo.toml
+
+## [0.10.0](https://github.com/saylesss88/jj-release/compare/v0.9.0...v0.10.0) - 2026-10-10
 
 ### ✨ Added
 
@@ -53,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **(example)** add workspace_info example
 - **(lib/Cargo.toml)** fix metadata to point to correct docs.rs for the lib as well as have repository metadata lead to jj-release/lib
 
-## [0.9.0](https://github.com/saylesss88/jj-release/compare/v0.8.0...v0.9.0) - 2026-10-31
+## [0.9.0](https://github.com/saylesss88/jj-release/compare/v0.8.0...v0.9.0) - 2026-09-29
 
 ### ✨ Added
 
@@ -93,7 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - move WorkspaceManifest into manifest.rs
 - commit ignore for registry tests
 
-## [0.8.0](https://github.com/saylesss88/jj-release/compare/v0.7.0...v0.8.0) - 2026-10-31
+## [0.8.0](https://github.com/saylesss88/jj-release/compare/v0.7.0...v0.8.0) - 2026-09-24
 
 ### ✨ Added
 
@@ -115,7 +135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - add logo to README
 
-## [0.7.0](https://github.com/saylesss88/jj-release/compare/v0.6.0...v0.7.0) - 2026-10-31
+## [0.7.0](https://github.com/saylesss88/jj-release/compare/v0.6.0...v0.7.0) - 2026-09-23
 
 ### ✨ Added
 
@@ -140,7 +160,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - add `prepare_release` example
 - add `full_changelog` example
 
-## [0.6.0](https://github.com/saylesss88/jj-release/compare/v0.5.2...v0.6.0) - 2026-10-31
+## [0.6.0](https://github.com/saylesss88/jj-release/compare/v0.5.2...v0.6.0) - 2026-09-22
 
 ### ✨ Added
 
@@ -160,7 +180,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **(changelog)** prepend_to_file was duplicating the header info per release
 
-## [0.5.1](https://github.com/saylesss88/jj-release/compare/v0.5.0...v0.5.1) - 2026-10-31
+## [0.5.1](https://github.com/saylesss88/jj-release/compare/v0.5.0...v0.5.1) - 2026-09-22
 
 ### ♻️ Changed
 

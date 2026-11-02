@@ -14,7 +14,7 @@ enabled = true
 strict = true
 emoji_headers = true
 link_headers = true
-layout = "per-member" # or "root" (default)
+layout = "both"      # "root" (default) / "both"
 # exclude_prefixes = ["chore", "ci", "test"]
 
 # [changelog.prefix_mapping]
