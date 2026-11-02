@@ -26,6 +26,8 @@ semver_checks_upgrade_major = false  # auto-upgrade to major (default: only post
 enabled = true                       # write a CHANGELOG.md entry on each release
 file = "CHANGELOG.md"                # path to the changelog file
 strict = true                        # drop unmapped/unformatted commits (false = "Other Changes")
+# layout = "per-member"  # "root" (default) or "both"
+
 
 # [aur]
 # Required: The exact name of your package on the AUR
