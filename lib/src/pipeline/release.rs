@@ -72,45 +72,45 @@ pub fn update_changelog(
     config: &Config,
     prepared: &pipeline::PreparedRelease,
 ) -> Result<()> {
-    let single = || {
-        let plan = unified_plan(prepared)?;
-        write_section(
-            root,
-            config,
-            &jj_release_changelog::render_changelog_section(
-                &prepared.commits,
-                Some(&plan.next_version),
-                &config.changelog,
-                None,
-            ),
-        )
-    };
-
     let Some(ws) = config.workspace.as_ref().filter(|w| w.enabled) else {
-        return single();
+        // Single crate: layout doesn't apply
+        return write_single_section(root, config, prepared);
     };
+    let layout = config.changelog.layout;
+    if layout.includes_root() {
+        write_root_changelog(ctx, root, config, ws, prepared)?;
+    }
+    if layout.includes_members() {
+        // Under Both, a member at "." shares the root file, which already has its changes.
+        let skip_root_member = layout == ChangelogLayout::Both;
+        write_member_changelogs(ctx, root, config, ws, prepared, skip_root_member)?;
+    }
+    Ok(())
+}
 
-    match (config.changelog.layout, &ws.versioning) {
-        // One shared version, one file: same as a single crate.
-        (ChangelogLayout::Root, Versioning::Unified) => single(),
+fn write_single_section(root: &Path, config: &Config, prepared: &PreparedRelease) -> Result<()> {
+    let plan = unified_plan(prepared)?;
+    write_section(
+        root,
+        &jj_release_changelog::render_changelog_section(
+            &prepared.commits,
+            Some(&plan.next_version),
+            &config.changelog,
+            None,
+        ),
+    )
+}
 
-        // One file per member, each with only its own commits.
-        (ChangelogLayout::PerMember, _) => {
-            for (member, version, commits) in releasing_members(ctx, config, ws, prepared)? {
-                let mut section = jj_release_changelog::render_changelog_section(
-                    &commits,
-                    Some(&version),
-                    &config.changelog,
-                    None,
-                );
-                section.push_str(&dependency_notes(member, prepared));
-                write_section(&root.join(&member.path), config, &section)?;
-            }
-            Ok(())
-        }
-
-        // One root file with a named section per bumped member.
-        (ChangelogLayout::Root, Versioning::Independent) => {
+fn write_root_changelog(
+    ctx: &ReleaseContext<'_>,
+    root: &Path,
+    config: &Config,
+    ws: &WorkspaceConfig,
+    prepared: &PreparedRelease,
+) -> Result<()> {
+    match ws.versioning {
+        Versioning::Unified => write_single_section(root, config, prepared),
+        Versioning::Independent => {
             let sections: Vec<String> = releasing_members(ctx, config, ws, prepared)?
                 .into_iter()
                 .map(|(member, version, commits)| {
@@ -131,9 +131,37 @@ pub fn update_changelog(
             if sections.is_empty() {
                 return Ok(());
             }
-            write_section(root, config, &sections.join("\n"))
+            write_section(root, &sections.join("\n"))
         }
     }
+}
+
+fn write_member_changelogs(
+    ctx: &ReleaseContext<'_>,
+    root: &Path,
+    config: &Config,
+    ws: &WorkspaceConfig,
+    prepared: &PreparedRelease,
+    skip_root_member: bool,
+) -> Result<()> {
+    for (member, version, commits) in releasing_members(ctx, config, ws, prepared)? {
+        if skip_root_member && member.path == "." {
+            continue;
+        }
+        let body = jj_release_changelog::render_body(&commits, &config.changelog);
+        let notes = dependency_notes(member, prepared);
+        if body.trim().is_empty() && notes.trim().is_empty() {
+            continue;
+        }
+
+        let mut section = jj_release_changelog::render_heading(None, Some(&version), None, None);
+        section.push_str(&body);
+        section.push_str(&notes);
+
+        let path = super::changelog::member_changelog_path(root, member, &config.changelog.file);
+        write_section(&path, &section)?;
+    }
+    Ok(())
 }
 
 /// Members being released in this run, with their next version and the
@@ -185,11 +213,16 @@ fn member_next_version(member: &WorkspaceMember, prepared: &PreparedRelease) -> 
     }
 }
 
-fn write_section(dir: &Path, config: &Config, section: &str) -> Result<()> {
-    let path = dir.join(&config.changelog.file);
-    let existing = fs::read_to_string(&path).unwrap_or_default();
+fn write_section(path: &Path, section: &str) -> Result<()> {
+    let existing = fs::read_to_string(path).unwrap_or_default();
+    if !existing.trim().is_empty() && !jj_release_changelog::has_changelog_title(&existing) {
+        eprintln!(
+            "warning: {} doesn't start with \"# Changelog\"; a Keep a Changelog header was added above its existing content",
+            path.display()
+        );
+    }
     fs::write(
-        &path,
+        path,
         jj_release_changelog::prepend_to_file(&existing, section),
     )?;
     Ok(())
