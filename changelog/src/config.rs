@@ -68,5 +68,20 @@ pub enum ChangelogLayout {
     Root,
     /// One changelog in each workspace member's directory.
     PerMember,
+    /// Individual member changelogs plus an aggregated root changelog.
+    Both,
 }
 
+impl ChangelogLayout {
+    /// Whether a changelog is written at the repository root.
+    #[must_use]
+    pub const fn includes_root(self) -> bool {
+        matches!(self, Self::Root | Self::Both)
+    }
+
+    /// Whether a changelog is written in each member's directory.
+    #[must_use]
+    pub const fn includes_members(self) -> bool {
+        matches!(self, Self::PerMember | Self::Both)
+    }
+}
