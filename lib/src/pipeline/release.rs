@@ -158,7 +158,8 @@ fn write_member_changelogs(
         section.push_str(&body);
         section.push_str(&notes);
 
-        let path = super::changelog::member_changelog_path(root, member, &config.changelog.file);
+        let path =
+            super::changelog_cmd::member_changelog_path(root, member, &config.changelog.file);
         write_section(&path, &section)?;
     }
     Ok(())

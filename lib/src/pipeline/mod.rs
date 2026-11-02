@@ -12,7 +12,7 @@ use crate::jj::JjBackend;
 use crate::manifest::ManifestBackend;
 use crate::publish::PublishBackend;
 
-pub use changelog::{
+pub use changelog_cmd::{
     ChangelogOutput, member_changelog_path, print_changelog, print_full_changelog,
 };
 pub use next_version::print_next_version;
@@ -22,7 +22,7 @@ pub use release::{
 };
 pub use validate::validate;
 
-mod changelog;
+mod changelog_cmd;
 mod next_version;
 mod prepare;
 mod release;
