@@ -27,7 +27,8 @@ depends_on = ["mylib"]   # publish lib before cli
 
 <!--prettier-ignore-->
 > [!NOTE]
-> You need to add the `depends_on` yourself after running `jj-release init`.
+> `jj-release init` fills in `depends_on` from your `Cargo.toml` files. If you
+> add a dependency between members later, add it to `depends_on` as well.
 
 Cross-member dependency versions are updated automatically during the release.
 You do not need to manually update `Cargo.toml` dependency versions between
