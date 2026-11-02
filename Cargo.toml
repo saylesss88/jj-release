@@ -23,7 +23,7 @@ exclude = [
 ]
 
 [workspace.dependencies]
-ureq = { version = "3", default-features = false, features = ["json"] }
+ureq = { version = "3", default-features = false }
 
 [profile.release]
 opt-level = 3
