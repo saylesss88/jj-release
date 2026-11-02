@@ -6,11 +6,7 @@ use crate::render::CHANGELOG_HEADER;
 /// up to, but not including, the first `## ` heading, so custom intro text
 /// is preserved. Returns `None` if the file doesn't start with that title.
 fn split_header(existing: &str) -> Option<(&str, &str)> {
-    let starts_with_title = existing
-        .trim_start()
-        .get(..11)
-        .is_some_and(|t| t.eq_ignore_ascii_case("# changelog"));
-    if !starts_with_title {
+    if !has_changelog_title(existing) {
         return None;
     }
 
@@ -35,10 +31,38 @@ pub fn prepend_to_file(existing: &str, new_section: &str) -> String {
         Some((header, body)) => {
             // Normalise to exactly one blank line before the first section.
             let header = header.trim_end();
+            let body = strip_leading_unreleased(body);
             format!("{header}\n\n{new_section}\n{body}")
         }
         // No changelog title: add the default header and keep the file as is.
         None => format!("{CHANGELOG_HEADER}{new_section}\n{existing}"),
+    }
+}
+
+/// Whether `existing` starts with a `# Changelog` title (any letter case),
+/// ignoring leading whitespace.
+#[must_use]
+pub fn has_changelog_title(existing: &str) -> bool {
+    existing
+        .trim_start()
+        .get(..11)
+        .is_some_and(|t| t.eq_ignore_ascii_case("# changelog"))
+}
+
+/// Drop `[Unreleased]` sections at the start of `body`. A new section, whether
+/// another preview or an actual release, always supersedes them.
+fn strip_leading_unreleased(body: &str) -> &str {
+    let mut rest = body.trim_start_matches('\n');
+    loop {
+        let Some(first) = rest.lines().next() else {
+            return rest;
+        };
+        if !(first.starts_with("## ") && first.contains("[Unreleased]")) {
+            return rest;
+        }
+        // Skip this section: everything up to the next `## ` heading.
+        let after = &rest[first.len()..];
+        rest = after.find("\n## ").map_or("", |i| &after[i + 1..]);
     }
 }
 
@@ -123,5 +147,35 @@ mod tests {
         let twice = prepend_to_file(&once, SECTION);
         assert_eq!(twice.matches("# Changelog").count(), 1);
         assert_eq!(twice.matches("All notable changes").count(), 1);
+    }
+
+    #[test]
+    fn detects_changelog_title() {
+        assert!(has_changelog_title("# Changelog\n\nIntro\n"));
+        assert!(has_changelog_title("\n\n# CHANGELOG\n"));
+        assert!(!has_changelog_title("TBD\n===\n"));
+        assert!(!has_changelog_title(""));
+    }
+
+    #[test]
+    fn repeated_preview_replaces_unreleased() {
+        let once = prepend_to_file("", "## [Unreleased]\n\n### Added\n\n- a\n");
+        let twice = prepend_to_file(&once, "## [Unreleased]\n\n### Added\n\n- a\n- b\n");
+        assert_eq!(twice.matches("## [Unreleased]").count(), 1);
+        assert!(twice.contains("- b"));
+    }
+
+    #[test]
+    fn release_replaces_unreleased_and_keeps_history() {
+        let existing = prepend_to_file("", "## [0.1.0] - 2026-01-01\n\n### Added\n\n- old\n");
+        let existing = prepend_to_file(&existing, "## [Unreleased]\n\n### Added\n\n- pending\n");
+        let released = prepend_to_file(
+            &existing,
+            "## [0.2.0] - 2026-02-01\n\n### Added\n\n- pending\n",
+        );
+
+        assert!(!released.contains("[Unreleased]"));
+        assert!(released.find("## [0.2.0]") < released.find("## [0.1.0]"));
+        assert!(released.contains("- old"));
     }
 }
