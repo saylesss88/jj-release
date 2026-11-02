@@ -10,4 +10,6 @@ pub use bumps::{
     member_tag_name,
 };
 pub use detect::{DetectedWorkspace, detect_workspace};
-pub use members::{member_requirements, member_versions, ordered_members, parse_workspace_members};
+pub use members::{
+    member_prefix, member_requirements, member_versions, ordered_members, parse_workspace_members,
+};

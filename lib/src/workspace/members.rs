@@ -171,6 +171,12 @@ pub fn member_requirements(
         })
         .collect())
 }
+/// The tag prefix for `member`: its own `tag_prefix` if set (even if empty,
+/// for bare-version tags like `15.2.0`), otherwise the workspace default.
+#[must_use]
+pub fn member_prefix<'a>(member: &'a WorkspaceMember, default: &'a str) -> &'a str {
+    member.tag_prefix.as_deref().unwrap_or(default)
+}
 
 #[cfg(test)]
 mod tests {
