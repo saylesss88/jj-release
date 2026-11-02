@@ -18,6 +18,9 @@ jj-release --dry-run
 # Run release without publishing to crates.io
 jj-release --no-publish
 
+# Force publishing to crates.io even if publish.cargo = false
+jj-release -p
+
 # Print the next version that would be released
 jj-release next-version
 

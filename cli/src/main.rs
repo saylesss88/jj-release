@@ -29,6 +29,7 @@ use jj_release_core::{
 };
 
 #[derive(Parser, Debug)]
+#[allow(clippy::struct_excessive_bools)]
 #[command(
     name = "jj-release",
     version,
@@ -54,6 +55,10 @@ struct Cli {
     /// Skip publishing to crates.io even if publish.cargo = true.
     #[arg(long)]
     no_publish: bool,
+
+    /// Force publishing to crates.io even if publish.cargo = false.
+    #[arg(long)]
+    publish_cargo: bool,
 }
 
 #[derive(clap::Subcommand, Debug, Clone)]
@@ -101,7 +106,7 @@ fn main() {
 fn run() -> Result<(), errors::ReleaseError> {
     let cli = Cli::parse();
     let root = resolve_repo_root(cli.repo.clone())?;
-    let config = load_config(&root, cli.no_publish)?;
+    let config = load_config(&root, cli.no_publish, cli.publish_cargo)?;
 
     let backend = ShellBackend::new(&root)?;
     let publisher = build_publisher(&config);
@@ -128,10 +133,11 @@ fn resolve_repo_root(repo_arg: Option<PathBuf>) -> Result<PathBuf, ReleaseError>
     }
 }
 
-fn load_config(root: &Path, no_publish: bool) -> Result<Config, ReleaseError> {
+fn load_config(root: &Path, no_publish: bool, publish_cargo: bool) -> Result<Config, ReleaseError> {
     let mut config = config::load(root)?;
-
-    if no_publish {
+    if publish_cargo {
+        config.publish.cargo = true;
+    } else if no_publish {
         config.publish.cargo = false;
     }
 
