@@ -32,6 +32,29 @@ pub enum ChangelogOutput<'a> {
     Configured,
 }
 
+struct PendingChanges {
+    latest: Option<Tag>,
+    commits: Vec<CommitInfo>,
+}
+
+impl PendingChanges {
+    fn version(&self, current: &Version) -> Option<Version> {
+        section_version(self.latest.as_ref(), current, &self.commits)
+    }
+}
+
+fn pending_changes(
+    ctx: &ReleaseContext<'_>,
+    prefix: &str,
+    fileset: Option<&str>,
+) -> Result<PendingChanges> {
+    let latest = sorted_tags(ctx, prefix)?.pop();
+    let since = latest.as_ref().map_or("root()", |tag| tag.name.as_str());
+    let commits = log_commits(ctx, &format!("{since}..@"), fileset)?;
+
+    Ok(PendingChanges { latest, commits })
+}
+
 /// The workspace, if the configured layout writes member changelogs.
 fn member_layout_ws(config: &Config) -> Option<&WorkspaceConfig> {
     config
@@ -381,41 +404,28 @@ fn print_member_changelogs(
             Versioning::Unified => config.release.tag_prefix.as_str(),
             Versioning::Independent => workspace::member_prefix(member, &config.release.tag_prefix),
         };
-        let latest = sorted_tags(ctx, prefix)?.pop();
-        let since = latest.as_ref().map_or("root()", |t| t.name.as_str());
         let fileset = workspace::member_fileset(member, &ws.members);
-        let commits = ctx
-            .backend
-            .log_commits_for_path(&format!("{since}..@"), &fileset)?;
-        if changelog::render_body(&commits, &config.changelog)
+        let pending = pending_changes(ctx, prefix, Some(&fileset))?;
+        if changelog::render_body(&pending.commits, &config.changelog)
             .trim()
             .is_empty()
         {
             continue;
         }
-        if commits.is_empty() {
-            continue;
-        }
 
-        let version = if let Some(v) = &unified_version {
-            v.clone()
+        let version = if let Some(version) = &unified_version {
+            version.clone()
         } else {
             let current = CargoManifest.read_version(&root.join(&member.path))?;
-            section_version(latest.as_ref(), &current, &commits)
+            pending.version(&current)
         };
 
         let section = changelog::render_changelog_section(
-            &commits,
+            &pending.commits,
             version.as_ref(),
             &config.changelog,
             None,
         );
-
-        if let Some(path) = root_target(config, root, target) {
-            write_prepended(&path, &section)?;
-        } else {
-            print!("{section}");
-        }
 
         let header = Path::new(&member.path).join(&config.changelog.file);
         let path = matches!(target, ChangelogOutput::Configured)
@@ -454,22 +464,18 @@ fn print_independent_root(
 
     for member in &ws.members {
         let prefix = workspace::member_prefix(member, &config.release.tag_prefix);
-        let latest = sorted_tags(ctx, prefix)?.pop();
-        let since = latest.as_ref().map_or("root()", |t| t.name.as_str());
 
         let fileset = workspace::member_fileset(member, &ws.members);
-        let commits = ctx
-            .backend
-            .log_commits_for_path(&format!("{since}..@"), &fileset)?;
-        if commits.is_empty() {
+        let pending = pending_changes(ctx, prefix, Some(&fileset))?;
+
+        if pending.commits.is_empty() {
             continue;
         }
-
         let current = CargoManifest.read_version(&root.join(&member.path))?;
-        let version = section_version(latest.as_ref(), &current, &commits);
+        let version = pending.version(&current);
 
         if let Some(section) =
-            named_member_section(&member.name, version.as_ref(), &commits, config, "")
+            named_member_section(&member.name, version.as_ref(), &pending.commits, config, "")
         {
             sections.push(section);
         }
