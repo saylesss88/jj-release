@@ -146,13 +146,10 @@ fn print_root_changelog(
         return Ok(0);
     }
 
-    match root_target(config, root, target) {
-        Some(path) => {
-            let existing = fs::read_to_string(&path).unwrap_or_default();
-            fs::write(&path, changelog::prepend_to_file(&existing, &section))?;
-            println!("✓ Written to {}", path.display());
-        }
-        None => print!("{section}"),
+    if let Some(path) = root_target(config, root, target) {
+        write_prepended(&path, &section)?;
+    } else {
+        print!("{section}");
     }
     Ok(1)
 }
@@ -403,11 +400,15 @@ fn print_member_changelogs(
             None,
         );
 
+        if let Some(path) = root_target(config, root, target) {
+            write_prepended(&path, &section)?;
+        } else {
+            print!("{section}");
+        }
+
         if matches!(target, ChangelogOutput::Configured) {
-            let file = member_changelog_path(root, member, &config.changelog.file);
-            let existing = fs::read_to_string(&file).unwrap_or_default();
-            fs::write(&file, changelog::prepend_to_file(&existing, &section))?;
-            println!("✓ Written to {}", file.display());
+            let path = member_changelog_path(root, member, &config.changelog.file);
+            write_prepended(&path, &section)?
         } else {
             println!("==> {}/{} <==", member.path, config.changelog.file);
             print!("{section}");
@@ -471,15 +472,7 @@ fn print_independent_root(
     let section = sections.join("\n");
 
     if let Some(path) = root_target(config, root, target) {
-        let existing = fs::read_to_string(&path).unwrap_or_default();
-        if !existing.trim().is_empty() && !changelog::has_changelog_title(&existing) {
-            eprintln!(
-                "warning: {} doesn't start with \"# Changelog\"; a Keep a Changelog header was added above its existing content",
-                path.display()
-            );
-        }
-        fs::write(&path, changelog::prepend_to_file(&existing, &section))?;
-        println!("✓ Written to {}", path.display());
+        write_prepended(&path, &section)?;
     } else {
         if show_header {
             println!("==> {} <==", config.changelog.file);
@@ -553,4 +546,28 @@ pub fn member_changelog_path(root: &Path, member: &WorkspaceMember, file: &str) 
     } else {
         root.join(&member.path).join(file)
     }
+}
+
+fn read_existing(path: &Path) -> Result<String> {
+    match fs::read_to_string(path) {
+        Ok(content) => Ok(content),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(String::new()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn write_prepended(path: &Path, section: &str) -> Result<()> {
+    let existing = read_existing(path)?;
+
+    if !existing.trim().is_empty() && !changelog::has_changelog_title(&existing) {
+        eprintln!(
+            "warning: {} doesn't start with \"# Changelog\"; \
+            a Keep a Changelog header was added above its existing content",
+            path.display()
+        );
+    }
+
+    fs::write(path, changelog::prepend_to_file(&existing, section))?;
+    println!("✔️ Written to {}", path.display());
+    Ok(())
 }
