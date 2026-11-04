@@ -18,7 +18,7 @@ use crate::{
     workspace,
 };
 
-use jj_release_changelog::{self, ChangelogLayout, Release};
+use jj_release_changelog::{self as changelog, ChangelogLayout, Release};
 
 /// Where `print_changelog` sends its output.
 #[derive(Debug, Clone, Copy)]
@@ -127,34 +127,19 @@ fn print_root_changelog(
     let url = remote_repo(config, root).and_then(|(base, repo)| {
         let prev = &latest_tag.as_ref()?.version;
         Some(version.as_ref().map_or_else(
-            || {
-                jj_release_changelog::compare_unreleased_url(
-                    &base,
-                    &repo,
-                    prev,
-                    &config.release.tag_prefix,
-                )
-            },
-            |next| {
-                jj_release_changelog::compare_url(
-                    &base,
-                    &repo,
-                    prev,
-                    next,
-                    &config.release.tag_prefix,
-                )
-            },
+            || changelog::compare_unreleased_url(&base, &repo, prev, &config.release.tag_prefix),
+            |next| changelog::compare_url(&base, &repo, prev, next, &config.release.tag_prefix),
         ))
     });
 
-    let section = jj_release_changelog::render_changelog_section(
+    let section = changelog::render_changelog_section(
         &commits,
         version.as_ref(),
         &config.changelog,
         url.as_deref(),
     );
 
-    if jj_release_changelog::render_body(&commits, &config.changelog)
+    if changelog::render_body(&commits, &config.changelog)
         .trim()
         .is_empty()
     {
@@ -164,10 +149,7 @@ fn print_root_changelog(
     match root_target(config, root, target) {
         Some(path) => {
             let existing = fs::read_to_string(&path).unwrap_or_default();
-            fs::write(
-                &path,
-                jj_release_changelog::prepend_to_file(&existing, &section),
-            )?;
+            fs::write(&path, changelog::prepend_to_file(&existing, &section))?;
             println!("✓ Written to {}", path.display());
         }
         None => print!("{section}"),
@@ -305,7 +287,7 @@ fn build_full_changelog(
 
         if !(path.is_some() && commits.is_empty()) {
             let compare_url = match (&previous_version, remote) {
-                (Some(pv), Some((base, repo))) => Some(jj_release_changelog::compare_url(
+                (Some(pv), Some((base, repo))) => Some(changelog::compare_url(
                     base,
                     repo,
                     pv,
@@ -329,7 +311,7 @@ fn build_full_changelog(
     let tip = log_commits(ctx, &format!("{prev}..@"), path)?;
     if !tip.is_empty() {
         let compare_url = match (&previous_version, remote) {
-            (Some(pv), Some((base, repo))) => Some(jj_release_changelog::compare_unreleased_url(
+            (Some(pv), Some((base, repo))) => Some(changelog::compare_unreleased_url(
                 base, repo, pv, tag_prefix,
             )),
             _ => None,
@@ -342,10 +324,7 @@ fn build_full_changelog(
         });
     }
 
-    Ok(jj_release_changelog::render_changelog(
-        &releases,
-        &config.changelog,
-    ))
+    Ok(changelog::render_changelog(&releases, &config.changelog))
 }
 
 /// `None` renders `[Unreleased]` (manifest not bumped past the latest tag),
@@ -400,7 +379,7 @@ fn print_member_changelogs(
         let commits = ctx
             .backend
             .log_commits_for_path(&format!("{since}..@"), &fileset)?;
-        if jj_release_changelog::render_body(&commits, &config.changelog)
+        if changelog::render_body(&commits, &config.changelog)
             .trim()
             .is_empty()
         {
@@ -417,7 +396,7 @@ fn print_member_changelogs(
             section_version(latest.as_ref(), &current, &commits)
         };
 
-        let section = jj_release_changelog::render_changelog_section(
+        let section = changelog::render_changelog_section(
             &commits,
             version.as_ref(),
             &config.changelog,
@@ -427,10 +406,7 @@ fn print_member_changelogs(
         if matches!(target, ChangelogOutput::Configured) {
             let file = member_changelog_path(root, member, &config.changelog.file);
             let existing = fs::read_to_string(&file).unwrap_or_default();
-            fs::write(
-                &file,
-                jj_release_changelog::prepend_to_file(&existing, &section),
-            )?;
+            fs::write(&file, changelog::prepend_to_file(&existing, &section))?;
             println!("✓ Written to {}", file.display());
         } else {
             println!("==> {}/{} <==", member.path, config.changelog.file);
@@ -446,8 +422,7 @@ fn remote_repo(config: &Config, root: &Path) -> Option<(String, String)> {
     if !config.changelog.link_headers {
         return None;
     }
-    let base =
-        jj_release_changelog::forge_base_url(&config.release.forge, &config.release.forge_url)?;
+    let base = changelog::forge_base_url(&config.release.forge, &config.release.forge_url)?;
     let (owner, repo) = detect::remote_url(root)
         .as_deref()
         .and_then(detect::parse_remote_owner_repo)?;
@@ -497,16 +472,13 @@ fn print_independent_root(
 
     if let Some(path) = root_target(config, root, target) {
         let existing = fs::read_to_string(&path).unwrap_or_default();
-        if !existing.trim().is_empty() && !jj_release_changelog::has_changelog_title(&existing) {
+        if !existing.trim().is_empty() && !changelog::has_changelog_title(&existing) {
             eprintln!(
                 "warning: {} doesn't start with \"# Changelog\"; a Keep a Changelog header was added above its existing content",
                 path.display()
             );
         }
-        fs::write(
-            &path,
-            jj_release_changelog::prepend_to_file(&existing, &section),
-        )?;
+        fs::write(&path, changelog::prepend_to_file(&existing, &section))?;
         println!("✓ Written to {}", path.display());
     } else {
         if show_header {
@@ -526,11 +498,11 @@ fn named_member_section(
     config: &Config,
     extra: &str, // dependency notes, or "" in previews
 ) -> Option<String> {
-    let body = jj_release_changelog::render_body(commits, &config.changelog);
+    let body = changelog::render_body(commits, &config.changelog);
     if body.trim().is_empty() && extra.trim().is_empty() {
         return None;
     }
-    let mut section = jj_release_changelog::render_heading(Some(name), version, None, None);
+    let mut section = changelog::render_heading(Some(name), version, None, None);
     section.push_str(&body);
     section.push_str(extra);
     Some(section)
