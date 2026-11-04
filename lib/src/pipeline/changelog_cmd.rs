@@ -146,11 +146,10 @@ fn print_root_changelog(
         return Ok(0);
     }
 
-    if let Some(path) = root_target(config, root, target) {
-        write_prepended(&path, &section)?;
-    } else {
-        print!("{section}");
-    }
+    let path = root_target(config, root, target);
+    let header = show_header.then(|| Path::new(&config.changelog.file));
+
+    emit_pending(path.as_deref(), header, &section)?;
     Ok(1)
 }
 
@@ -225,16 +224,28 @@ fn emit_root_full(
     let tags = sorted_tags(ctx, &config.release.tag_prefix)?;
     let result =
         build_full_changelog(ctx, config, &tags, &config.release.tag_prefix, None, remote)?;
-    emit(root_target(config, root, target).as_deref(), &result)
+    emit_full(root_target(config, root, target).as_deref(), &result)
 }
 
-fn emit(output: Option<&Path>, result: &str) -> Result<()> {
-    match output {
-        Some(path) => write_full(path, result)?,
-
-        None => print!("{result}"),
+fn emit_pending(path: Option<&Path>, header: Option<&Path>, section: &str) -> Result<()> {
+    if let Some(path) = path {
+        return write_prepended(path, section);
     }
+    if let Some(header) = header {
+        println!("==> {} <==", header.display());
+    }
+    print!("{section}");
     Ok(())
+}
+
+fn emit_full(path: Option<&Path>, content: &str) -> Result<()> {
+    path.map_or_else(
+        || {
+            print!("{content}");
+            Ok(())
+        },
+        |path| write_full(path, content),
+    )
 }
 
 /// All tags matching `prefix`, parsed and sorted oldest first.
@@ -406,13 +417,12 @@ fn print_member_changelogs(
             print!("{section}");
         }
 
-        if matches!(target, ChangelogOutput::Configured) {
-            let path = member_changelog_path(root, member, &config.changelog.file);
-            write_prepended(&path, &section)?
-        } else {
-            println!("==> {}/{} <==", member.path, config.changelog.file);
-            print!("{section}");
-        }
+        let header = Path::new(&member.path).join(&config.changelog.file);
+        let path = matches!(target, ChangelogOutput::Configured)
+            .then(|| member_changelog_path(root, member, &config.changelog.file));
+
+        emit_pending(path.as_deref(), Some(&header), &section)?;
+
         written += 1;
     }
     Ok(written)
@@ -471,14 +481,11 @@ fn print_independent_root(
     let count = sections.len();
     let section = sections.join("\n");
 
-    if let Some(path) = root_target(config, root, target) {
-        write_prepended(&path, &section)?;
-    } else {
-        if show_header {
-            println!("==> {} <==", config.changelog.file);
-        }
-        print!("{section}");
-    }
+    let path = root_target(config, root, target);
+    let header = show_header.then(|| Path::new(&config.changelog.file));
+
+    emit_pending(path.as_deref(), header, &section)?;
+
     Ok(count)
 }
 
