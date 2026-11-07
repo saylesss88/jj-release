@@ -38,7 +38,7 @@ pub fn render_heading(
     date: Option<&str>,
     compare_url: Option<&str>,
 ) -> String {
-    let prefix = name.map_or_else(String::new, ToString::to_string);
+    let prefix = name.map_or_else(String::new, |n| format!("{n} "));
     let label = version.map_or_else(|| "Unreleased".to_owned(), ToString::to_string);
     let linked =
         compare_url.map_or_else(|| format!("[{label}]"), |url| format!("[{label}]({url})"));

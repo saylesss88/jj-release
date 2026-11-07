@@ -60,18 +60,14 @@ pub fn latest_version_tag(backend: &dyn JjBackend, prefix: &str) -> Result<Optio
 
 // -- Walking --
 
-/// Detect whether the tip of the current working copy contains the trigger
-/// string anywhere in its commit message.  We check `@` (the working-copy
-/// parent stack) for the trigger commit.
+/// Find a commit in `since..@` whose description contains `trigger`.
 ///
-/// Returns the `change_id` of the trigger commit if found, `None` otherwise.
+/// Returns the trigger commit's `change_id`, or `None` if there isn't one.
 pub(crate) fn find_trigger(
     backend: &dyn JjBackend,
     trigger: &str,
     since: &str,
 ) -> Result<Option<String>> {
-    // Walk the very tip, just @ and its immediate parent chain up to 10 deep.
-    // We don't want to scan the whole repo; the trigger should be recent.
     let commits = backend
         .log_commits(&format!("{since}..@"))
         .map_err(|e| ReleaseError::Message(format!("scanning for trigger commit: {e}")))?;
@@ -111,11 +107,11 @@ pub fn resolve_bump(force: Option<&str>, commits: &[CommitInfo]) -> Result<BumpK
     }
 }
 
-/// Classify a single commit description into a bump kind.
+/// Classify a single commit description. Non-conventional commits don't bump.
 fn classify(description: &str) -> BumpKind {
     // Try parsing as a conventional commit first.
     let Ok(commit) = Commit::parse(description) else {
-        return BumpKind::Major;
+        return BumpKind::None;
     };
     if commit.breaking() {
         return BumpKind::Major;
