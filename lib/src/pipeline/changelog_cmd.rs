@@ -128,10 +128,10 @@ fn compare_link(
     prefix: &str,
 ) -> Option<String> {
     let (remote, prev) = (remote?, prev?);
-    Some(match next {
-        Some(next) => changelog::compare_url(&remote.base, &remote.repo, prev, next, prefix),
-        None => changelog::compare_unreleased_url(&remote.base, &remote.repo, prev, prefix),
-    })
+    Some(next.map_or_else(
+        || changelog::compare_unreleased_url(&remote.base, &remote.repo, prev, prefix),
+        |next| changelog::compare_url(&remote.base, &remote.repo, prev, next, prefix),
+    ))
 }
 
 /// Renders and prints the changelog section for the pending release to standard output.
@@ -229,7 +229,7 @@ fn print_root_changelog(
     let path = target.root_file(config, root);
     let header = show_header.then(|| Path::new(&config.changelog.file));
 
-    emit_pending(path.as_deref(), header, &section)?;
+    emit(path.as_deref(), header, &section, WriteMode::Prepend)?;
     Ok(1)
 }
 
@@ -281,13 +281,15 @@ pub fn print_full_changelog(
         let result =
             build_full_changelog(ctx, config, &tags, prefix, Some(&fileset), remote.as_ref())?;
 
-        if matches!(target, ChangelogOutput::Configured) {
-            let path = member_changelog_path(root, member, &config.changelog.file);
-            write_full(&path, &result)?;
-        } else {
-            println!("==> {}/{} <==", member.path, config.changelog.file);
-            print!("{result}");
-        }
+        let file = &config.changelog.file;
+        let header = Path::new(&member.path).join(file);
+
+        emit(
+            target.member_file(root, member, file).as_deref(),
+            Some(&header),
+            &result,
+            WriteMode::Replace,
+        )?;
     }
 
     Ok(())
@@ -304,27 +306,11 @@ fn emit_root_full(
     let tags = sorted_tags(ctx, &config.release.tag_prefix)?;
     let result =
         build_full_changelog(ctx, config, &tags, &config.release.tag_prefix, None, remote)?;
-    emit_full(target.root_file(config, root).as_deref(), &result)
-}
-
-fn emit_pending(path: Option<&Path>, header: Option<&Path>, section: &str) -> Result<()> {
-    if let Some(path) = path {
-        return write_prepended(path, section);
-    }
-    if let Some(header) = header {
-        println!("==> {} <==", header.display());
-    }
-    print!("{section}");
-    Ok(())
-}
-
-fn emit_full(path: Option<&Path>, content: &str) -> Result<()> {
-    path.map_or_else(
-        || {
-            print!("{content}");
-            Ok(())
-        },
-        |path| write_full(path, content),
+    emit(
+        target.root_file(config, root).as_deref(),
+        None,
+        &result,
+        WriteMode::Replace,
     )
 }
 
@@ -459,7 +445,7 @@ fn print_member_changelogs(
         let header = Path::new(&member.path).join(&config.changelog.file);
         let path = target.member_file(root, member, &config.changelog.file);
 
-        emit_pending(path.as_deref(), Some(&header), &section)?;
+        emit(path.as_deref(), Some(&header), &section, WriteMode::Prepend)?;
 
         written += 1;
     }
@@ -506,7 +492,7 @@ fn print_independent_root(
     let path = target.root_file(config, root);
     let header = show_header.then(|| Path::new(&config.changelog.file));
 
-    emit_pending(path.as_deref(), header, &section)?;
+    emit(path.as_deref(), header, &section, WriteMode::Prepend)?;
 
     Ok(count)
 }
@@ -582,6 +568,30 @@ fn read_existing(path: &Path) -> Result<String> {
         Ok(content) => Ok(content),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(String::new()),
         Err(error) => Err(error.into()),
+    }
+}
+
+/// How changelog content is written to an existing file.
+#[derive(Debug, Clone, Copy)]
+enum WriteMode {
+    /// Insert a pending section above the existing entries.
+    Prepend,
+    /// Replace the whole file (asking first if it differs).
+    Replace,
+}
+
+/// Write `content` to `path`, or print it (under `header`, if any) when `path` is `None`.
+fn emit(path: Option<&Path>, header: Option<&Path>, content: &str, mode: WriteMode) -> Result<()> {
+    let Some(path) = path else {
+        if let Some(header) = header {
+            println!("==> {} <==", header.display());
+        }
+        print!("{content}");
+        return Ok(());
+    };
+    match mode {
+        WriteMode::Prepend => write_prepended(path, content),
+        WriteMode::Replace => write_full(path, content),
     }
 }
 
