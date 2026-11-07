@@ -32,6 +32,23 @@ pub enum ChangelogOutput<'a> {
     Configured,
 }
 
+impl ChangelogOutput<'_> {
+    /// The root changelog file to write, or `None` to print.
+    fn root_file(self, config: &Config, root: &Path) -> Option<PathBuf> {
+        match self {
+            Self::Stdout => None,
+            Self::Path(path) => Some(path.to_path_buf()),
+            Self::Configured => Some(root.join(&config.changelog.file)),
+        }
+    }
+
+    /// `member`'s changelog file to write, or `None` to print.
+    /// Only `Configured` writes member files; `--output` names a single file.
+    fn member_file(self, root: &Path, member: &WorkspaceMember, file: &str) -> Option<PathBuf> {
+        matches!(self, Self::Configured).then(|| member_changelog_path(root, member, file))
+    }
+}
+
 struct PendingChanges {
     latest: Option<Tag>,
     commits: Vec<CommitInfo>,
@@ -61,15 +78,6 @@ fn member_layout_ws(config: &Config) -> Option<&WorkspaceConfig> {
         .workspace
         .as_ref()
         .filter(|w| w.enabled && config.changelog.layout.includes_members())
-}
-
-/// The single file to write in root layout, or `None` for stdout.
-fn root_target(config: &Config, root: &Path, target: ChangelogOutput<'_>) -> Option<PathBuf> {
-    match target {
-        ChangelogOutput::Stdout => None,
-        ChangelogOutput::Path(p) => Some(p.to_path_buf()),
-        ChangelogOutput::Configured => Some(root.join(&config.changelog.file)),
-    }
 }
 
 /// Renders and prints the changelog section for the pending release to standard output.
@@ -169,7 +177,7 @@ fn print_root_changelog(
         return Ok(0);
     }
 
-    let path = root_target(config, root, target);
+    let path = target.root_file(config, root);
     let header = show_header.then(|| Path::new(&config.changelog.file));
 
     emit_pending(path.as_deref(), header, &section)?;
@@ -247,7 +255,7 @@ fn emit_root_full(
     let tags = sorted_tags(ctx, &config.release.tag_prefix)?;
     let result =
         build_full_changelog(ctx, config, &tags, &config.release.tag_prefix, None, remote)?;
-    emit_full(root_target(config, root, target).as_deref(), &result)
+    emit_full(target.root_file(config, root).as_deref(), &result)
 }
 
 fn emit_pending(path: Option<&Path>, header: Option<&Path>, section: &str) -> Result<()> {
@@ -428,8 +436,7 @@ fn print_member_changelogs(
         );
 
         let header = Path::new(&member.path).join(&config.changelog.file);
-        let path = matches!(target, ChangelogOutput::Configured)
-            .then(|| member_changelog_path(root, member, &config.changelog.file));
+        let path = target.member_file(root, member, &config.changelog.file);
 
         emit_pending(path.as_deref(), Some(&header), &section)?;
 
@@ -487,7 +494,7 @@ fn print_independent_root(
     let count = sections.len();
     let section = sections.join("\n");
 
-    let path = root_target(config, root, target);
+    let path = target.root_file(config, root);
     let header = show_header.then(|| Path::new(&config.changelog.file));
 
     emit_pending(path.as_deref(), header, &section)?;
