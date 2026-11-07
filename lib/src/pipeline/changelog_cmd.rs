@@ -49,27 +49,42 @@ impl ChangelogOutput<'_> {
     }
 }
 
+// Pending release
+
 struct PendingChanges {
     latest: Option<Tag>,
     commits: Vec<CommitInfo>,
 }
 
 impl PendingChanges {
-    fn version(&self, current: &Version) -> Option<Version> {
-        section_version(self.latest.as_ref(), current, &self.commits)
+    /// Commits since the latest `prefix` tag (or all history before the first
+    /// release), optionally limited to those touching `fileset`.
+    fn since_last_tag(
+        ctx: &ReleaseContext<'_>,
+        prefix: &str,
+        fileset: Option<&str>,
+    ) -> Result<Self> {
+        let latest = commits::latest_version_tag(ctx.backend, prefix)?;
+        let since = latest.as_ref().map_or("root()", |tag| tag.name.as_str());
+        let commits = log_commits(ctx, &format!("{since}..@"), fileset)?;
+        Ok(Self { latest, commits })
     }
-}
 
-fn pending_changes(
-    ctx: &ReleaseContext<'_>,
-    prefix: &str,
-    fileset: Option<&str>,
-) -> Result<PendingChanges> {
-    let latest = sorted_tags(ctx, prefix)?.pop();
-    let since = latest.as_ref().map_or("root()", |tag| tag.name.as_str());
-    let commits = log_commits(ctx, &format!("{since}..@"), fileset)?;
+    fn latest_version(&self) -> Option<&Version> {
+        self.latest.as_ref().map(|tag| &tag.version)
+    }
 
-    Ok(PendingChanges { latest, commits })
+    /// The version the pending section is headed with: `None` renders
+    /// `[Unreleased]` (the manifest hasn't been bumped past the latest tag),
+    /// `Some` is the next version.
+    fn next_version(&self, current: &Version) -> Option<Version> {
+        let latest = self.latest_version();
+        if latest.is_some_and(|latest| current <= latest) {
+            return None;
+        }
+        let bump = commits::compute_bump(&self.commits);
+        Some(bump::next_version(latest, current, bump))
+    }
 }
 
 /// The workspace, if the configured layout writes member changelogs.
@@ -148,15 +163,11 @@ fn print_root_changelog(
     }
 
     let current = ctx.manifest.read_version(root)?;
-    let latest_tag = commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)?;
-    let since = latest_tag.as_ref().map_or("root()", |t| t.name.as_str());
-    let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
-
-    // None renders [Unreleased] (manifest not bumped past the latest tag).
-    let version = section_version(latest_tag.as_ref(), &current, &commits);
+    let pending = PendingChanges::since_last_tag(ctx, &config.release.tag_prefix, None)?;
+    let version = pending.next_version(&current);
 
     let url = remote_repo(config, root).and_then(|(base, repo)| {
-        let prev = &latest_tag.as_ref()?.version;
+        let prev = pending.latest_version()?; // Use pending.latest_version()
         Some(version.as_ref().map_or_else(
             || changelog::compare_unreleased_url(&base, &repo, prev, &config.release.tag_prefix),
             |next| changelog::compare_url(&base, &repo, prev, next, &config.release.tag_prefix),
@@ -164,13 +175,13 @@ fn print_root_changelog(
     });
 
     let section = changelog::render_changelog_section(
-        &commits,
+        &pending.commits, // Use pending.commits
         version.as_ref(),
         &config.changelog,
         url.as_deref(),
     );
 
-    if changelog::render_body(&commits, &config.changelog)
+    if changelog::render_body(&pending.commits, &config.changelog)
         .trim()
         .is_empty()
     {
@@ -366,24 +377,6 @@ fn build_full_changelog(
     Ok(changelog::render_changelog(&releases, &config.changelog))
 }
 
-/// `None` renders `[Unreleased]` (manifest not bumped past the latest tag),
-/// `Some` renders the next version.
-fn section_version(
-    latest: Option<&Tag>,
-    current: &Version,
-    commits: &[CommitInfo],
-) -> Option<Version> {
-    if latest.is_some_and(|t| *current <= t.version) {
-        return None;
-    }
-    let bump = commits::compute_bump(commits);
-    Some(bump::next_version(
-        latest.map(|t| &t.version),
-        current,
-        bump,
-    ))
-}
-
 fn print_member_changelogs(
     ctx: &ReleaseContext<'_>,
     config: &Config,
@@ -396,10 +389,8 @@ fn print_member_changelogs(
     // Unified members share one version, computed from the whole repo.
     let unified_version = if matches!(ws.versioning, Versioning::Unified) {
         let current = ctx.manifest.read_version(root)?;
-        let latest = commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)?;
-        let since = latest.as_ref().map_or("root()", |t| t.name.as_str());
-        let all = ctx.backend.log_commits(&format!("{since}..@"))?;
-        Some(section_version(latest.as_ref(), &current, &all))
+        let pending_repo = PendingChanges::since_last_tag(ctx, &config.release.tag_prefix, None)?;
+        Some(pending_repo.next_version(&current))
     } else {
         None
     };
@@ -413,7 +404,7 @@ fn print_member_changelogs(
             Versioning::Independent => workspace::member_prefix(member, &config.release.tag_prefix),
         };
         let fileset = workspace::member_fileset(member, &ws.members);
-        let pending = pending_changes(ctx, prefix, Some(&fileset))?;
+        let pending = PendingChanges::since_last_tag(ctx, prefix, Some(&fileset))?;
         if changelog::render_body(&pending.commits, &config.changelog)
             .trim()
             .is_empty()
@@ -425,7 +416,7 @@ fn print_member_changelogs(
             version.clone()
         } else {
             let current = CargoManifest.read_version(&root.join(&member.path))?;
-            pending.version(&current)
+            pending.next_version(&current)
         };
 
         let section = changelog::render_changelog_section(
@@ -473,13 +464,13 @@ fn print_independent_root(
         let prefix = workspace::member_prefix(member, &config.release.tag_prefix);
 
         let fileset = workspace::member_fileset(member, &ws.members);
-        let pending = pending_changes(ctx, prefix, Some(&fileset))?;
+        let pending = PendingChanges::since_last_tag(ctx, prefix, Some(&fileset))?;
 
         if pending.commits.is_empty() {
             continue;
         }
         let current = CargoManifest.read_version(&root.join(&member.path))?;
-        let version = pending.version(&current);
+        let version = pending.next_version(&current);
 
         if let Some(section) =
             named_member_section(&member.name, version.as_ref(), &pending.commits, config, "")
