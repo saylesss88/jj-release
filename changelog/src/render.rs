@@ -208,6 +208,26 @@ pub fn render_changelog_section(
     out
 }
 
+/// A pending section, or `None` when no commit would render (e.g. strict mode
+/// filtered them all). Unlike `render_changelog_section`, an empty section
+/// produces nothing rather than a bare heading.
+#[must_use]
+pub fn render_pending_section(
+    name: Option<&str>,
+    commits: &[CommitInfo],
+    version: Option<&Version>,
+    config: &ChangelogConfig,
+    compare_url: Option<&str>,
+) -> Option<String> {
+    let body = render_body(commits, config);
+    if body.is_empty() {
+        return None;
+    }
+    let mut section = render_heading(name, version, None, compare_url);
+    section.push_str(&body);
+    Some(section)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,5 +1,29 @@
 use semver::Version;
 
+/// A forge repository that release compare links point at.
+#[derive(Debug, Clone)]
+pub struct ForgeRepo {
+    /// Forge base URL, e.g. `https://github.com`.
+    pub base: String,
+    /// `owner/repo`.
+    pub repo: String,
+}
+
+impl ForgeRepo {
+    /// A link comparing `prev` with `next`, or with the tip when `next` is `None`.
+    #[must_use]
+    pub fn compare_link(&self, prev: &Version, next: Option<&Version>, prefix: &str) -> String {
+        next.map_or_else(
+            || compare_unreleased_url(&self.base, &self.repo, prev, prefix),
+            |next| compare_url(&self.base, &self.repo, prev, next, prefix),
+        )
+        // match next {
+        //     Some(next) => compare_url(&self.base, &self.repo, prev, next, prefix),
+        //     None => compare_unreleased_url(&self.base, &self.repo, prev, prefix),
+        // }
+    }
+}
+
 #[must_use]
 pub fn compare_url(
     base_url: &str,
@@ -9,6 +33,16 @@ pub fn compare_url(
     tag_prefix: &str,
 ) -> String {
     format!("{base_url}/{owner_repo}/compare/{tag_prefix}{prev}...{tag_prefix}{next}")
+}
+
+#[must_use]
+pub fn compare_unreleased_url(
+    base_url: &str,
+    owner_repo: &str,
+    prev: &Version,
+    tag_prefix: &str,
+) -> String {
+    format!("{base_url}/{owner_repo}/compare/{tag_prefix}{prev}...HEAD")
 }
 
 #[must_use]
@@ -23,17 +57,6 @@ pub fn forge_base_url(forge: &str, forge_url: &str) -> Option<String> {
         _ => None,
     }
 }
-
-#[must_use]
-pub fn compare_unreleased_url(
-    base_url: &str,
-    owner_repo: &str,
-    prev: &Version,
-    tag_prefix: &str,
-) -> String {
-    format!("{base_url}/{owner_repo}/compare/{tag_prefix}{prev}...HEAD")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

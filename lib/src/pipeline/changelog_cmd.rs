@@ -18,7 +18,7 @@ use crate::{
     workspace,
 };
 
-use jj_release_changelog::{self as changelog, ChangelogLayout, Release};
+use jj_release_changelog::{self as changelog, ChangelogLayout, ForgeRepo, Release};
 
 // Output targets
 
@@ -121,16 +121,16 @@ pub fn print_full_changelog(
     target: ChangelogOutput<'_>,
 ) -> Result<()> {
     check_target(config, target)?;
-    let remote = Remote::detect(config, root);
+    let forge = forge_repo(config, root);
 
     let Some(ws) = member_layout_ws(config) else {
-        return full_root(ctx, config, root, target, remote.as_ref());
+        return full_root(ctx, config, root, target, forge.as_ref());
     };
     let includes_root = config.changelog.layout.includes_root();
     let aggregate_root = includes_root && matches!(ws.versioning, Versioning::Unified);
 
     if aggregate_root {
-        full_root(ctx, config, root, target, remote.as_ref())?;
+        full_root(ctx, config, root, target, forge.as_ref())?;
     } else if includes_root && !ws.members.iter().any(is_root_member) {
         eprintln!(
             "note: --full doesn't regenerate an aggregated root changelog for independent workspaces"
@@ -144,7 +144,7 @@ pub fn print_full_changelog(
         }
         let prefix = member_tag_prefix(config, ws, member);
         let fileset = workspace::member_fileset(member, &ws.members);
-        let content = build_full_changelog(ctx, config, prefix, Some(&fileset), remote.as_ref())?;
+        let content = build_full_changelog(ctx, config, prefix, Some(&fileset), forge.as_ref())?;
 
         let header = member_display_path(member, file);
         emit(
@@ -156,6 +156,36 @@ pub fn print_full_changelog(
     }
 
     Ok(())
+}
+
+/// A compare link from `prev` to `next`, or to the tip when `next` is `None`.
+/// `None` without a forge repo or a previous release to compare against.
+fn compare_link(
+    forge: Option<&ForgeRepo>,
+    prev: Option<&Version>,
+    next: Option<&Version>,
+    prefix: &str,
+) -> Option<String> {
+    Some(forge?.compare_link(prev?, next, prefix))
+}
+
+/// A heading (named for a workspace member when `name` is given) followed by
+/// the rendered commits. `None` when nothing would render, e.g. strict mode
+/// filtered out every commit.
+fn render_section(
+    name: Option<&str>,
+    version: Option<&Version>,
+    commits: &[CommitInfo],
+    config: &Config,
+    compare_url: Option<&str>,
+) -> Option<String> {
+    let body = changelog::render_body(commits, &config.changelog);
+    if body.trim().is_empty() {
+        return None;
+    }
+    let mut section = changelog::render_heading(name, version, None, compare_url);
+    section.push_str(&body);
+    Some(section)
 }
 
 // Pending release
@@ -234,19 +264,18 @@ fn pending_root(
     }
 
     let (pending, version) = repo_pending(ctx, config, root)?;
-
     let compare_url = compare_link(
-        Remote::detect(config, root).as_ref(),
+        forge_repo(config, root).as_ref(),
         pending.latest_version(),
         version.as_ref(),
         &config.release.tag_prefix,
     );
 
-    let Some(section) = render_section(
+    let Some(section) = changelog::render_pending_section(
         None,
-        version.as_ref(),
         &pending.commits,
-        config,
+        version.as_ref(),
+        &config.changelog,
         compare_url.as_deref(),
     ) else {
         return Ok(0);
@@ -373,9 +402,9 @@ fn full_root(
     config: &Config,
     root: &Path,
     target: ChangelogOutput<'_>,
-    remote: Option<&Remote>,
+    forge: Option<&ForgeRepo>,
 ) -> Result<()> {
-    let content = build_full_changelog(ctx, config, &config.release.tag_prefix, None, remote)?;
+    let content = build_full_changelog(ctx, config, &config.release.tag_prefix, None, forge)?;
     emit(
         target.root_file(config, root).as_deref(),
         None,
@@ -392,7 +421,7 @@ fn build_full_changelog(
     config: &Config,
     prefix: &str,
     fileset: Option<&str>,
-    remote: Option<&Remote>,
+    forge: Option<&ForgeRepo>,
 ) -> Result<String> {
     let tags = commits::version_tags(ctx.backend, prefix)?;
     let mut releases = Vec::new();
@@ -407,7 +436,7 @@ fn build_full_changelog(
                 version: Some(tag.version.clone()),
                 date: Some(ctx.backend.commit_date(&tag.name)?),
                 compare_url: compare_link(
-                    remote,
+                    forge,
                     prev.map(|t| &t.version),
                     Some(&tag.version),
                     prefix,
@@ -424,7 +453,7 @@ fn build_full_changelog(
     if !tip.is_empty() {
         releases.push(Release {
             version: None,
-            compare_url: compare_link(remote, prev.map(|t| &t.version), None, prefix),
+            compare_url: compare_link(forge, prev.map(|t| &t.version), None, prefix),
             commits: tip,
             ..Default::default()
         });
@@ -483,65 +512,6 @@ pub fn member_changelog_path(root: &Path, member: &WorkspaceMember, file: &str) 
 /// `<member path>/<file>`, for the `==> ... <==` header when printing.
 fn member_display_path(member: &WorkspaceMember, file: &str) -> PathBuf {
     Path::new(&member.path).join(file)
-}
-
-// Rendering
-
-/// The forge and `owner/repo` used to build compare links.
-#[derive(Debug, Clone)]
-struct Remote {
-    base: String,
-    repo: String,
-}
-
-impl Remote {
-    /// `Some` when `link_headers` is on and both the forge and the repo can be determined.
-    fn detect(config: &Config, root: &Path) -> Option<Self> {
-        if !config.changelog.link_headers {
-            return None;
-        }
-        let base = changelog::forge_base_url(&config.release.forge, &config.release.forge_url)?;
-        let (owner, repo) = detect::remote_url(root)
-            .as_deref()
-            .and_then(detect::parse_remote_owner_repo)?;
-        Some(Self {
-            base,
-            repo: format!("{owner}/{repo}"),
-        })
-    }
-}
-
-/// A compare link from `prev` to `next`, or to the tip when `next` is `None`.
-/// `None` without a remote or a previous release to compare against.
-fn compare_link(
-    remote: Option<&Remote>,
-    prev: Option<&Version>,
-    next: Option<&Version>,
-    prefix: &str,
-) -> Option<String> {
-    let (remote, prev) = (remote?, prev?);
-    Some(next.map_or_else(
-        || changelog::compare_unreleased_url(&remote.base, &remote.repo, prev, prefix),
-        |next| changelog::compare_url(&remote.base, &remote.repo, prev, next, prefix),
-    ))
-}
-
-/// A named member section, or `None` if nothing in it would render
-/// (e.g. every commit was filtered out by strict mode).
-fn render_section(
-    name: Option<&str>,
-    version: Option<&Version>,
-    commits: &[CommitInfo],
-    config: &Config,
-    compare_url: Option<&str>, // dependency notes, or "" in previews
-) -> Option<String> {
-    let body = changelog::render_body(commits, &config.changelog);
-    if body.trim().is_empty() {
-        return None;
-    }
-    let mut section = changelog::render_heading(name, version, None, compare_url);
-    section.push_str(&body);
-    Some(section)
 }
 
 // I/O
@@ -639,4 +609,20 @@ fn read_existing(path: &Path) -> Result<String> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(String::new()),
         Err(error) => Err(error.into()),
     }
+}
+
+/// The forge repo for compare links, when `link_headers` is on and both the
+/// forge and the repo can be determined.
+fn forge_repo(config: &Config, root: &Path) -> Option<ForgeRepo> {
+    if !config.changelog.link_headers {
+        return None;
+    }
+    let base = changelog::forge_base_url(&config.release.forge, &config.release.forge_url)?;
+    let (owner, repo) = detect::remote_url(root)
+        .as_deref()
+        .and_then(detect::parse_remote_owner_repo)?;
+    Some(ForgeRepo {
+        base,
+        repo: format!("{owner}/{repo}"),
+    })
 }
