@@ -12,6 +12,24 @@ pub const CHANGELOG_HEADER: &str = "# Changelog\n\n\
     The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),\n\
     and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n";
 
+const DOCUMENTATION: &str = "Documentation";
+const OTHER_CHANGES: &str = "Other Changes";
+
+/// Group order in a section ("Keep a Changelog" order). Groups not listed
+/// here (custom mappings) follow alphabetically.
+const STANDARD_HEADERS: [&str; 10] = [
+    "Added",
+    "Changed",
+    "Performance",
+    "Deprecated",
+    "Removed",
+    "Fixed",
+    "Bug",
+    "Security",
+    DOCUMENTATION,
+    OTHER_CHANGES,
+];
+
 /// The `## [x.y.z] - date` line, optionally prefixed with a member name.
 #[must_use]
 pub fn render_heading(
@@ -20,7 +38,7 @@ pub fn render_heading(
     date: Option<&str>,
     compare_url: Option<&str>,
 ) -> String {
-    let prefix = name.map_or_else(String::new, |n| format!("{n}"));
+    let prefix = name.map_or_else(String::new, ToString::to_string);
     let label = version.map_or_else(|| "Unreleased".to_owned(), ToString::to_string);
     let linked =
         compare_url.map_or_else(|| format!("[{label}]"), |url| format!("[{label}]({url})"));
@@ -37,105 +55,121 @@ pub fn render_heading(
 /// The grouped `### Added` / `### Fixed` / ... sections, without a heading.
 #[must_use]
 pub fn render_body(commits: &[CommitInfo], config: &ChangelogConfig) -> String {
-    let mut out = String::new();
-
-    // Dynamically group commits by their target header
-    let mut groups: HashMap<String, Vec<String>> = HashMap::new();
-
+    let mut groups: HashMap<&str, Vec<String>> = HashMap::new();
     for commit in commits {
-        if config
-            .exclude_prefixes
-            .iter()
-            .any(|p| commit.description.starts_with(p))
-        {
-            continue;
-        }
-        if let Ok(conv) = Commit::parse(&commit.description) {
-            let c_type = conv.type_().as_str();
-
-            if config.exclude_prefixes.iter().any(|p| p == c_type) {
-                continue;
-            }
-            let breaking = conv.breaking();
-            let scope = conv.scope().map_or_default(|s| format!("**({s})** "));
-            let summary = conv.description().to_owned();
-
-            let entry = if breaking {
-                format!("**BREAKING** {summary}")
-            } else {
-                format!("{scope}{summary}")
-            };
-
-            let header = if let Some(custom) = config.prefix_mapping.get(c_type) {
-                custom.as_str()
-            } else {
-                match c_type {
-                    "feat" => "Added",
-                    "fix" => "Fixed",
-                    "bug" => "Bug",
-                    "refactor" => "Changed",
-                    "perf" => "Performance",
-                    "docs" => "Documentation",
-                    "deprecate" | "deprecated" => "Deprecated",
-                    "style" | "chore" | "build" | "ci" | "test" => {
-                        // Drop these by default if strict is true.
-                        if config.strict {
-                            continue;
-                        }
-                        "Other Changes"
-                    }
-                    _ if !config.strict => "Other Changes",
-                    _ => continue, // Strict drop for completely unknown types
-                }
-            };
-            groups.entry(header.to_string()).or_default().push(entry);
-        } else if !config.strict {
-            groups
-                .entry("Other Changes".to_string())
-                .or_default()
-                .push(commit.description.clone());
+        if let Some((header, entry)) = changelog_entry(commit, config) {
+            groups.entry(header).or_default().push(entry);
         }
     }
 
-    // Standard "Keep a Changelog" order
-    let standard_headers = [
-        "Added",
-        "Changed",
-        "Performance",
-        "Deprecated",
-        "Removed",
-        "Fixed",
-        "Bug",
-        "Security",
-        "Other Changes",
-    ];
-
-    for header in standard_headers {
-        if let Some(entries) = groups.get(header) {
-            let display_header = format_header(header, config);
-            let _ = write!(out, "\n### {display_header}\n\n");
-            for entry in entries {
-                let _ = writeln!(out, "- {entry}");
-            }
-        }
-    }
-    // Sort and print any custom headers mapped by the user alphabetically at the bottom
-    let mut custom_headers: Vec<_> = groups
+    let mut custom: Vec<&str> = groups
         .keys()
-        .filter(|k| !standard_headers.contains(&k.as_str()))
+        .copied()
+        .filter(|header| !STANDARD_HEADERS.contains(header))
         .collect();
-    custom_headers.sort();
+    custom.sort_unstable();
 
-    for header in custom_headers {
-        if let Some(entries) = groups.get(header) {
-            let display_header = format_header(header, config);
-            let _ = write!(out, "\n### {display_header}\n\n");
-            for entry in entries {
-                let _ = writeln!(out, "- {entry}");
-            }
+    let mut out = String::new();
+    for header in STANDARD_HEADERS.iter().copied().chain(custom) {
+        let Some(entries) = groups.get(header) else {
+            continue;
+        };
+        let _ = write!(out, "\n### {}\n\n", format_header(header, config));
+        for entry in entries {
+            let _ = writeln!(out, "- {entry}");
         }
     }
     out
+}
+
+/// The group header and bullet text for one commit, or `None` if it's
+/// excluded or dropped by strict mode.
+fn changelog_entry<'a>(
+    commit: &CommitInfo,
+    config: &'a ChangelogConfig,
+) -> Option<(&'a str, String)> {
+    let description = commit.description.as_str();
+    if is_excluded(description, config) {
+        return None;
+    }
+
+    let Ok(conv) = Commit::parse(description) else {
+        // Non-conventional commits only appear outside strict mode.
+        return (!config.strict).then(|| (OTHER_CHANGES, description.to_owned()));
+    };
+
+    let c_type = conv.type_().as_str();
+    let header = match config.prefix_mapping.get(c_type) {
+        Some(custom) => custom.as_str(),
+        None => default_header(c_type, config.strict)?,
+    };
+
+    let scope = conv.scope().map_or_default(|s| format!("**({s})** "));
+    let breaking = if conv.breaking() { "**BREAKING** " } else { "" };
+    Some((header, format!("{breaking}{scope}{}", conv.description())))
+}
+
+/// Whether an `exclude_prefixes` entry matches the start of `description`.
+fn is_excluded(description: &str, config: &ChangelogConfig) -> bool {
+    config
+        .exclude_prefixes
+        .iter()
+        .any(|prefix| starts_with_word(description, prefix))
+}
+
+/// Whether `text` starts with `prefix` as a whole word: `fix` matches
+/// `fix: …`, `fix(cli): …` and `fix!: …`, but not `fixed …` or `fixup! …`.
+/// An entry like `chore(deps)` matches only that type and scope.
+fn starts_with_word(text: &str, prefix: &str) -> bool {
+    text.strip_prefix(prefix).is_some_and(|rest| {
+        !rest.starts_with(|c: char| c.is_alphanumeric() || c == '-' || c == '_')
+    })
+}
+
+/// The default group for a commit type. Types without their own group
+/// (style, chore, build, ci, test, and unknown types) go under
+/// "Other Changes", or are dropped in strict mode.
+fn default_header(c_type: &str, strict: bool) -> Option<&'static str> {
+    Some(match c_type {
+        "feat" => "Added",
+        "fix" => "Fixed",
+        "bug" => "Bug",
+        "refactor" => "Changed",
+        "perf" => "Performance",
+        "docs" => DOCUMENTATION,
+        "deprecate" | "deprecated" => "Deprecated",
+        "remove" | "removed" => "Removed",
+        "security" => "Security",
+        _ if strict => return None,
+        _ => OTHER_CHANGES,
+    })
+}
+
+fn format_header(header: &str, config: &ChangelogConfig) -> String {
+    if !config.emoji_headers {
+        return header.to_owned();
+    }
+    let emoji = config
+        .emoji_mapping
+        .get(header)
+        .map_or_else(|| default_emoji(header), String::as_str);
+    format!("{emoji} {header}")
+}
+
+fn default_emoji(header: &str) -> &'static str {
+    match header {
+        "Added" => "✨",
+        "Changed" => "♻️",
+        "Fixed" => "🛠️",
+        "Bug" => "🪲",
+        "Documentation" => "📚",
+        "Performance" => "🚀",
+        "Deprecated" => "⚠️",
+        "Removed" => "🗑️",
+        "Security" => "🔒",
+        OTHER_CHANGES => "📦",
+        _ => "📌",
+    }
 }
 
 /// Render one release section.
@@ -172,32 +206,6 @@ pub fn render_changelog_section(
     let mut out = render_heading(None, version, None, compare_url);
     out.push_str(&render_body(commits, config));
     out
-}
-
-fn format_header(header: &str, config: &ChangelogConfig) -> String {
-    if !config.emoji_headers {
-        return header.to_owned();
-    }
-    // Check if the user provided a custom emoji for this header
-    if let Some(custom_emoji) = config.emoji_mapping.get(header) {
-        return format!("{custom_emoji} {header}");
-    }
-    // Fallback to defaults
-    let emoji = match header {
-        "Added" => "✨",
-        "Changed" => "♻️",
-        "Fixed" => "🛠️",
-        "Bug" => "🪲",
-        "Documentation" => "📚",
-        "Performance" => "🚀",
-        "Deprecated" => "⚠️",
-        "Removed" => "🗑️",
-        "Security" => "🔒",
-        "Other Changes" => "📦",
-        _ => "📌",
-    };
-
-    format!("{emoji} {header}")
 }
 
 #[cfg(test)]

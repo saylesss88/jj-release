@@ -94,7 +94,7 @@ fn classify(description: &str) -> BumpKind {
         }
         return match conv.type_().as_str() {
             "feat" => BumpKind::Minor,
-            "fix" | "perf" | "refactor" => BumpKind::Patch,
+            "fix" | "bug" | "perf" | "refactor" | "security" => BumpKind::Patch,
             // docs, style, test, chore, ci, build → no bump
             _ => BumpKind::None,
         };
