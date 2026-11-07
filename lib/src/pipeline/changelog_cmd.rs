@@ -6,6 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use jiff::Zoned;
 use semver::Version;
 
 use crate::{
@@ -169,25 +170,6 @@ fn compare_link(
     Some(forge?.compare_link(prev?, next, prefix))
 }
 
-/// A heading (named for a workspace member when `name` is given) followed by
-/// the rendered commits. `None` when nothing would render, e.g. strict mode
-/// filtered out every commit.
-fn render_section(
-    name: Option<&str>,
-    version: Option<&Version>,
-    commits: &[CommitInfo],
-    config: &Config,
-    compare_url: Option<&str>,
-) -> Option<String> {
-    let body = changelog::render_body(commits, &config.changelog);
-    if body.trim().is_empty() {
-        return None;
-    }
-    let mut section = changelog::render_heading(name, version, None, compare_url);
-    section.push_str(&body);
-    Some(section)
-}
-
 // Pending release
 
 struct PendingChanges {
@@ -275,6 +257,7 @@ fn pending_root(
         None,
         &pending.commits,
         version.as_ref(),
+        Some(&today()),
         &config.changelog,
         compare_url.as_deref(),
     ) else {
@@ -301,6 +284,7 @@ fn pending_independent_root(
     target: ChangelogOutput<'_>,
     show_header: bool,
 ) -> Result<usize> {
+    let today = today();
     let mut sections = Vec::new();
 
     for member in &ws.members {
@@ -311,11 +295,12 @@ fn pending_independent_root(
         }
 
         let version = pending.next_version(&member_current_version(root, member)?);
-        sections.extend(render_section(
+        sections.extend(changelog::render_pending_section(
             Some(&member.name),
-            version.as_ref(),
             &pending.commits,
-            config,
+            version.as_ref(),
+            Some(&today),
+            &config.changelog,
             None,
         ));
     }
@@ -343,51 +328,46 @@ fn pending_members(
     target: ChangelogOutput<'_>,
     skip_root_member: bool,
 ) -> Result<usize> {
-    let mut written = 0;
-    // Unified members share one version, computed from the whole repo.
-    let unified_version = if matches!(ws.versioning, Versioning::Unified) {
-        let current = ctx.manifest.read_version(root)?;
-        let pending_repo = PendingChanges::since_last_tag(ctx, &config.release.tag_prefix, None)?;
-        Some(pending_repo.next_version(&current))
-    } else {
-        None
+    // Unified members all release at one version, computed from the whole repo.
+    let unified_version = match ws.versioning {
+        Versioning::Unified => Some(repo_pending(ctx, config, root)?.1),
+        Versioning::Independent => None,
     };
 
+    let today = today();
+    let file = &config.changelog.file;
+    let mut written = 0;
+
     for member in &ws.members {
-        if skip_root_member && member.path == "." {
+        if skip_root_member && is_root_member(member) {
             continue;
         }
-        let prefix = match ws.versioning {
-            Versioning::Unified => config.release.tag_prefix.as_str(),
-            Versioning::Independent => workspace::member_prefix(member, &config.release.tag_prefix),
-        };
-        let fileset = workspace::member_fileset(member, &ws.members);
-        let pending = PendingChanges::since_last_tag(ctx, prefix, Some(&fileset))?;
-        if changelog::render_body(&pending.commits, &config.changelog)
-            .trim()
-            .is_empty()
-        {
+        let pending = member_pending(ctx, config, ws, member)?;
+        if pending.commits.is_empty() {
             continue;
         }
-
-        let version = if let Some(version) = &unified_version {
-            version.clone()
-        } else {
-            let current = CargoManifest.read_version(&root.join(&member.path))?;
-            pending.next_version(&current)
+        let version = match &unified_version {
+            Some(version) => version.clone(),
+            None => pending.next_version(&member_current_version(root, member)?),
         };
-
-        let section = changelog::render_changelog_section(
+        let Some(section) = changelog::render_pending_section(
+            None,
             &pending.commits,
             version.as_ref(),
+            Some(&today),
             &config.changelog,
             None,
-        );
+        ) else {
+            continue;
+        };
 
-        let header = Path::new(&member.path).join(&config.changelog.file);
-        let path = target.member_file(root, member, &config.changelog.file);
-
-        emit(path.as_deref(), Some(&header), &section, WriteMode::Prepend)?;
+        let header = member_display_path(member, file);
+        emit(
+            target.member_file(root, member, file).as_deref(),
+            Some(&header),
+            &section,
+            WriteMode::Prepend,
+        )?;
 
         written += 1;
     }
@@ -625,4 +605,9 @@ fn forge_repo(config: &Config, root: &Path) -> Option<ForgeRepo> {
         base,
         repo: format!("{owner}/{repo}"),
     })
+}
+
+/// Todays date for pending release headings.
+fn today() -> String {
+    Zoned::now().date().to_string()
 }

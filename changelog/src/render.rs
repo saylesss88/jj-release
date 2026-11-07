@@ -216,6 +216,7 @@ pub fn render_pending_section(
     name: Option<&str>,
     commits: &[CommitInfo],
     version: Option<&Version>,
+    date: Option<&str>,
     config: &ChangelogConfig,
     compare_url: Option<&str>,
 ) -> Option<String> {
@@ -223,7 +224,7 @@ pub fn render_pending_section(
     if body.is_empty() {
         return None;
     }
-    let mut section = render_heading(name, version, None, compare_url);
+    let mut section = render_heading(name, version, date, compare_url);
     section.push_str(&body);
     Some(section)
 }
