@@ -13,7 +13,11 @@ pub mod mock {
     }
 
     impl JjBackend for MockBackend {
-        fn list_tags(&self) -> Result<Vec<String>> {
+        fn list_tags(&self, revset: &str) -> Result<Vec<String>> {
+            assert_eq!(
+                revset, "tags() & ::@",
+                "Release pipeline must restrict tag searches to the current branch ancestry"
+            );
             Ok(self.tags.clone())
         }
         fn log_commits(&self, revset: &str) -> Result<Vec<CommitInfo>> {

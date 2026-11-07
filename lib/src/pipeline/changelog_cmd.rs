@@ -403,7 +403,7 @@ fn build_full_changelog(
     fileset: Option<&str>,
     forge: Option<&ForgeRepo>,
 ) -> Result<String> {
-    let tags = commits::version_tags(ctx.backend, prefix)?;
+    let tags = commits::version_tags(ctx.backend, prefix, "tags() & ::@")?;
     let mut releases = Vec::new();
     let mut prev: Option<&Tag> = None;
 

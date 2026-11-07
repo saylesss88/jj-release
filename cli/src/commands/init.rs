@@ -10,7 +10,7 @@ pub fn init(root: &Path) -> Result<()> {
     }
 
     let tags = ShellBackend::new(root)
-        .and_then(|b| b.list_tags())
+        .and_then(|b| b.list_tags("tags() & ::@"))
         .unwrap_or_default();
     let content = config::generate_release_toml(root, &tags);
     fs::write(&release_toml, &content)?;

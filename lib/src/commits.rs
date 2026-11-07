@@ -33,9 +33,13 @@ pub struct Tag {
 /// # Errors
 ///
 /// Returns an error if the backend fails to list tags.
-pub(crate) fn version_tags(backend: &dyn JjBackend, prefix: &str) -> Result<Vec<Tag>> {
+pub(crate) fn version_tags(
+    backend: &dyn JjBackend,
+    prefix: &str,
+    revset: &str,
+) -> Result<Vec<Tag>> {
     let mut tags: Vec<Tag> = backend
-        .list_tags()?
+        .list_tags(revset)?
         .into_iter()
         .filter_map(|name| {
             let version = Version::parse(name.strip_prefix(prefix)?).ok()?;
@@ -55,7 +59,7 @@ pub(crate) fn version_tags(backend: &dyn JjBackend, prefix: &str) -> Result<Vec<
 ///
 /// Returns an error if the backend fails to list tags.
 pub fn latest_version_tag(backend: &dyn JjBackend, prefix: &str) -> Result<Option<Tag>> {
-    Ok(version_tags(backend, prefix)?.pop())
+    Ok(version_tags(backend, prefix, "tags() & ::@")?.pop())
 }
 
 // -- Walking --

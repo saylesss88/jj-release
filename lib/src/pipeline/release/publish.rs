@@ -331,7 +331,7 @@ mod tests {
         fn git_export(&self) -> Result<()> {
             Ok(())
         }
-        fn list_tags(&self) -> Result<Vec<String>> {
+        fn list_tags(&self, _revset: &str) -> Result<Vec<String>> {
             Ok(vec![])
         }
         fn check_identity(&self) -> Result<()> {

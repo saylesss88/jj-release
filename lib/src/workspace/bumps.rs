@@ -81,7 +81,7 @@ pub fn member_since(
 ) -> Result<String> {
     let prefix = member.tag_prefix.as_deref().unwrap_or(tag_prefix);
     Ok(backend
-        .list_tags()?
+        .list_tags("tags() & ::@")?
         .into_iter()
         .filter_map(|name| {
             let version = Version::parse(name.strip_prefix(prefix)?).ok()?;

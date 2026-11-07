@@ -69,7 +69,7 @@ pub trait JjBackend {
     /// # Errors
     ///
     /// Returns an error if the underlying command fails to retrieve tags.
-    fn list_tags(&self) -> Result<Vec<String>>;
+    fn list_tags(&self, revset: &str) -> Result<Vec<String>>;
 
     /// Verify that `user.name` and `user.email` are configured in jj.
     /// Called before any mutations to fail fast with a clear message.
@@ -225,8 +225,15 @@ impl JjBackend for ShellBackend {
         self.run_silent(&["git", "export"])
     }
 
-    fn list_tags(&self) -> Result<Vec<String>> {
-        let raw = self.run(&["tag", "list", "--template", r#"name ++ "\n""#])?;
+    fn list_tags(&self, revset: &str) -> Result<Vec<String>> {
+        let raw = self.run(&[
+            "log",
+            "-r",
+            revset,
+            "--no-graph",
+            "-T",
+            r#"tags.join("\n") ++ "\n""#,
+        ])?;
         Ok(raw
             .lines()
             .map(|l| l.trim().to_owned())

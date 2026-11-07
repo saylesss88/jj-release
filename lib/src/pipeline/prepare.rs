@@ -122,7 +122,7 @@ fn independent_since(
     config: &Config,
     ws: &WorkspaceConfig,
 ) -> Result<String> {
-    let tags = backend.list_tags()?;
+    let tags = backend.list_tags("tags() & ::@")?;
     Ok(ws
         .members
         .iter()
