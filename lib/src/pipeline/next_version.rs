@@ -18,7 +18,7 @@ pub fn print_next_version(ctx: &ReleaseContext<'_>, config: &Config, root: &Path
     let current = ctx.manifest.read_version(root)?;
     let since = prepare::resolve_since(ctx.backend, config)?;
     let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
-    let bump = commits::resolve_bump(config.bump.force.as_ref(), &commits)?;
+    let bump = commits::resolve_bump(config.bump.force.as_deref(), &commits)?;
     let next = commits::apply_bump(&current, bump);
     println!("{next}");
     Ok(())

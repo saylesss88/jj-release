@@ -52,7 +52,7 @@ pub fn member_bumps(
     backend: &dyn JjBackend,
     members: &[WorkspaceMember],
     since: &str,
-    force: Option<&String>,
+    force: Option<&str>,
     tag_prefix: &str,
 ) -> Result<HashMap<String, BumpKind>> {
     let mut bumps = HashMap::new();

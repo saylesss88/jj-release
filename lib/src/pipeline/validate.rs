@@ -259,7 +259,7 @@ fn check_bump(ctx: &ReleaseContext<'_>, config: &Config, since: &str) -> Result<
         .map_err(|e| e.to_string())?;
 
     let bump =
-        commits::resolve_bump(config.bump.force.as_ref(), &commits).map_err(|e| e.to_string())?;
+        commits::resolve_bump(config.bump.force.as_deref(), &commits).map_err(|e| e.to_string())?;
 
     if bump == BumpKind::None {
         Err("no releasable commits (feat/fix/BREAKING) found since last tag".to_owned())

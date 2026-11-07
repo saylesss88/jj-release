@@ -551,10 +551,10 @@ fn log_commits(
     revset: &str,
     fileset: Option<&str>,
 ) -> Result<Vec<CommitInfo>> {
-    match fileset {
-        Some(fileset) => ctx.backend.log_commits_for_path(revset, fileset),
-        None => ctx.backend.log_commits(revset),
-    }
+    fileset.map_or_else(
+        || ctx.backend.log_commits(revset),
+        |fileset| ctx.backend.log_commits_for_path(revset, fileset),
+    )
 }
 
 /// How changelog content is written to an existing file.

@@ -84,7 +84,7 @@ pub fn prepare_release(
 
     let commits = backend.log_commits(&format!("{since}..@"))?;
 
-    let mut bump = commits::resolve_bump(config.bump.force.as_ref(), &commits)?;
+    let mut bump = commits::resolve_bump(config.bump.force.as_deref(), &commits)?;
     if !is_first_release {
         bump = upgrade_for_breaking_changes(config, root, &current_version, bump)?;
     }
@@ -188,7 +188,7 @@ fn plan_member_versions(
         backend,
         &ws.members,
         "root()",
-        config.bump.force.as_ref(),
+        config.bump.force.as_deref(),
         &config.release.tag_prefix,
     )?;
 

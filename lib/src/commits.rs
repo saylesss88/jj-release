@@ -9,131 +9,23 @@ use crate::jj::JjBackend;
 pub use jj_release_changelog::CommitInfo;
 
 /// The kind of semver bump a commit implies.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BumpKind {
+    #[default]
     None,
     Patch,
     Minor,
     Major,
 }
 
-// -- Walking --
-
-/// Detect whether the tip of the current working copy contains the trigger
-/// string anywhere in its commit message.  We check `@` (the working-copy
-/// parent stack) for the trigger commit.
-///
-/// Returns the `change_id` of the trigger commit if found, `None` otherwise.
-pub(crate) fn find_trigger(
-    backend: &dyn JjBackend,
-    trigger: &str,
-    since: &str,
-) -> Result<Option<String>> {
-    // Walk the very tip, just @ and its immediate parent chain up to 10 deep.
-    // We don't want to scan the whole repo; the trigger should be recent.
-    let commits = backend
-        .log_commits(&format!("{since}..@"))
-        .map_err(|_| ReleaseError::Message("scanning for trigger commit".into()))?;
-
-    for c in commits {
-        if c.description.contains(trigger) {
-            return Ok(Some(c.change_id));
-        }
-    }
-    Ok(None)
-}
-
-/// Walk commits between `since_revision` (exclusive) and `@` (inclusive),
-/// parse conventional commit messages, and return the required bump kind.
-#[must_use]
-pub(crate) fn compute_bump(commits: &[CommitInfo]) -> BumpKind {
-    let mut bump = BumpKind::None;
-
-    for commit in commits {
-        let kind = classify(&commit.description);
-        if kind > bump {
-            bump = kind;
-        }
-        // Short-circuit: can't go higher than Major.
-        if bump == BumpKind::Major {
-            break;
-        }
-    }
-    bump
-}
-
-/// Resolve the version bump kind, either by respecting a forced override
-/// or by analyzing the given commits.
-///
-/// # Errors
-///
-/// This function will return an error if a `force` override is provided
-/// but is not one of the valid values (`"major"`, `"minor"`, or `"patch"`)
-pub fn resolve_bump(force: Option<&String>, commits: &[CommitInfo]) -> Result<BumpKind> {
-    if let Some(force) = force {
-        return match force.as_str() {
-            "major" => Ok(BumpKind::Major),
-            "minor" => Ok(BumpKind::Minor),
-            "patch" => Ok(BumpKind::Patch),
-            other => {
-                return Err(ReleaseError::Message(format!(
-                    "unknown bump.force value {other:?}: must be major/minor/patch"
-                )));
-            }
-        };
-    }
-    Ok(compute_bump(commits))
-}
-
-/// Classify a single commit description into a bump kind.
-fn classify(description: &str) -> BumpKind {
-    // Try parsing as a conventional commit first.
-    if let Ok(conv) = Commit::parse(description) {
-        if conv.breaking() {
-            return BumpKind::Major;
-        }
-        return match conv.type_().as_str() {
-            "feat" => BumpKind::Minor,
-            "fix" | "bug" | "perf" | "refactor" | "security" => BumpKind::Patch,
-            // docs, style, test, chore, ci, build → no bump
-            _ => BumpKind::None,
-        };
-    }
-
-    // Not a conventional commit, treat as no bump rather than erroring.
-    BumpKind::None
-}
-
-/// Apply a bump to a version, returning the new version.
-#[must_use]
-pub fn apply_bump(current: &Version, bump: BumpKind) -> Version {
-    let mut next = current.clone();
-    match bump {
-        BumpKind::Major => {
-            next.major += 1;
-            next.minor = 0;
-            next.patch = 0;
-        }
-        BumpKind::Minor => {
-            next.minor += 1;
-            next.patch = 0;
-        }
-        BumpKind::Patch => {
-            next.patch += 1;
-        }
-        BumpKind::None => {}
-    }
-    // Clear pre-release and build metadata on a real release.
-    next.pre = Prerelease::EMPTY;
-    next.build = BuildMetadata::EMPTY;
-    next
-}
-
+/// A release tag and the version parsed from its name.
 #[derive(Debug, Clone)]
 pub struct Tag {
     pub name: String,
     pub version: Version,
 }
+
+// -- Tags --
 
 /// Every tag named `<prefix><semver>`, sorted oldest first. Tags whose
 /// remainder isn't valid semver are ignored.
@@ -166,9 +58,98 @@ pub fn latest_version_tag(backend: &dyn JjBackend, prefix: &str) -> Result<Optio
     Ok(version_tags(backend, prefix)?.pop())
 }
 
+// -- Walking --
+
+/// Detect whether the tip of the current working copy contains the trigger
+/// string anywhere in its commit message.  We check `@` (the working-copy
+/// parent stack) for the trigger commit.
+///
+/// Returns the `change_id` of the trigger commit if found, `None` otherwise.
+pub(crate) fn find_trigger(
+    backend: &dyn JjBackend,
+    trigger: &str,
+    since: &str,
+) -> Result<Option<String>> {
+    // Walk the very tip, just @ and its immediate parent chain up to 10 deep.
+    // We don't want to scan the whole repo; the trigger should be recent.
+    let commits = backend
+        .log_commits(&format!("{since}..@"))
+        .map_err(|e| ReleaseError::Message(format!("scanning for trigger commit: {e}")))?;
+
+    Ok(commits
+        .into_iter()
+        .find(|c| c.description.contains(trigger))
+        .map(|c| c.change_id))
+}
+
+/// Walk commits between `since_revision` (exclusive) and `@` (inclusive),
+/// parse conventional commit messages, and return the required bump kind.
 #[must_use]
-pub(crate) fn highest_semver_tag(tags: &[Tag]) -> Option<&Tag> {
-    tags.iter().max_by(|a, b| a.version.cmp(&b.version))
+pub(crate) fn compute_bump(commits: &[CommitInfo]) -> BumpKind {
+    commits
+        .iter()
+        .map(|commit| classify(&commit.description))
+        .max()
+        .unwrap_or_default()
+}
+
+/// The bump to apply: the forced override if given, otherwise the one computed
+/// from `commits`.
+///
+/// # Errors
+///
+/// Returns an error if `force` is not `"major"`, `"minor"`, or `"patch"`.
+pub fn resolve_bump(force: Option<&str>, commits: &[CommitInfo]) -> Result<BumpKind> {
+    match force {
+        None => Ok(compute_bump(commits)),
+        Some("major") => Ok(BumpKind::Major),
+        Some("minor") => Ok(BumpKind::Minor),
+        Some("patch") => Ok(BumpKind::Patch),
+        Some(other) => Err(ReleaseError::Message(format!(
+            "unknown bump.force value {other:?}: must be major/minor/patch"
+        ))),
+    }
+}
+
+/// Classify a single commit description into a bump kind.
+fn classify(description: &str) -> BumpKind {
+    // Try parsing as a conventional commit first.
+    let Ok(commit) = Commit::parse(description) else {
+        return BumpKind::Major;
+    };
+    if commit.breaking() {
+        return BumpKind::Major;
+    }
+    match commit.type_().as_str() {
+        "feat" => BumpKind::Minor,
+        "fix" | "perf" | "refactor" => BumpKind::Patch,
+        // docs, style, test, chore, ci, build → no bump
+        _ => BumpKind::None,
+    }
+}
+
+/// Apply a bump to a version, returning the new version.
+#[must_use]
+pub fn apply_bump(current: &Version, bump: BumpKind) -> Version {
+    let mut next = current.clone();
+    match bump {
+        BumpKind::Major => {
+            next.major += 1;
+            next.minor = 0;
+            next.patch = 0;
+        }
+        BumpKind::Minor => {
+            next.minor += 1;
+            next.patch = 0;
+        }
+        BumpKind::Patch => next.patch += 1,
+
+        BumpKind::None => {}
+    }
+    // Clear pre-release and build metadata on a real release.
+    next.pre = Prerelease::EMPTY;
+    next.build = BuildMetadata::EMPTY;
+    next
 }
 
 #[cfg(test)]
@@ -281,31 +262,6 @@ mod tests {
     }
 
     #[test]
-    fn highest_semver_tag_picks_correct_version() {
-        let tags = vec![
-            Tag {
-                name: "v0.1.0".into(),
-                version: Version::parse("0.1.0").unwrap(),
-            },
-            Tag {
-                name: "v0.3.0".into(),
-                version: Version::parse("0.3.0").unwrap(),
-            },
-            Tag {
-                name: "v0.2.0".into(),
-                version: Version::parse("0.2.0").unwrap(),
-            },
-        ];
-        let latest = highest_semver_tag(&tags).unwrap();
-        assert_eq!(latest.name, "v0.3.0");
-    }
-
-    #[test]
-    fn highest_semver_tag_empty_returns_none() {
-        assert!(highest_semver_tag(&[]).is_none());
-    }
-
-    #[test]
     fn find_trigger_only_scans_since_last_tag() {
         let backend = MockBackend {
             commits: vec![CommitInfo {
@@ -326,7 +282,7 @@ mod tests {
             description: "fix: small thing".into(),
         }];
         assert_eq!(
-            resolve_bump(Some(&"major".to_owned()), &commits).unwrap(),
+            resolve_bump(Some("major"), &commits).unwrap(),
             BumpKind::Major
         );
     }
@@ -338,7 +294,7 @@ mod tests {
             description: "fix: small thing".into(),
         }];
         assert_eq!(
-            resolve_bump(Some(&"minor".to_owned()), &commits).unwrap(),
+            resolve_bump(Some("minor"), &commits).unwrap(),
             BumpKind::Minor
         );
     }
@@ -354,7 +310,7 @@ mod tests {
 
     #[test]
     fn resolve_bump_unknown_force_errors() {
-        assert!(resolve_bump(Some(&"banana".to_owned()), &[]).is_err());
+        assert!(resolve_bump(Some("banana"), &[]).is_err());
     }
 
     #[test]
