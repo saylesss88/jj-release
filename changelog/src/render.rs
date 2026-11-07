@@ -175,7 +175,7 @@ fn default_emoji(header: &str) -> &'static str {
 #[must_use]
 pub fn render_release(release: &Release, config: &ChangelogConfig) -> String {
     let mut out = render_heading(
-        None,
+        release.name.as_deref(),
         release.version.as_ref(),
         release.date.as_deref(),
         release.compare_url.as_deref(),
@@ -436,5 +436,17 @@ mod tests {
         let out = render_changelog(&releases, &ChangelogConfig::default());
         assert!(out.contains("## [0.1.0] - 2026-01-05"));
         assert!(out.contains("## [0.2.0] - 2026-03-10"));
+    }
+    #[test]
+    fn release_heading_includes_member_name() {
+        let release = Release {
+            name: Some("core".into()),
+            version: Some(Version::new(0, 2, 0)),
+            date: Some("2026-11-07".into()),
+            commits: vec!["feat: a".into()],
+            ..Default::default()
+        };
+        let out = render_release(&release, &ChangelogConfig::default());
+        assert!(out.starts_with("## core [0.2.0] - 2026-11-07\n"));
     }
 }

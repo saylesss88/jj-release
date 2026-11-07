@@ -128,19 +128,13 @@ pub fn print_full_changelog(
         return full_root(ctx, config, root, target, forge.as_ref());
     };
     let includes_root = config.changelog.layout.includes_root();
-    let aggregate_root = includes_root && matches!(ws.versioning, Versioning::Unified);
-
-    if aggregate_root {
+    if includes_root {
         full_root(ctx, config, root, target, forge.as_ref())?;
-    } else if includes_root && !ws.members.iter().any(is_root_member) {
-        eprintln!(
-            "note: --full doesn't regenerate an aggregated root changelog for independent workspaces"
-        );
     }
 
     let file = &config.changelog.file;
     for member in &ws.members {
-        if aggregate_root && is_root_member(member) {
+        if includes_root && is_root_member(member) {
             continue;
         }
         let prefix = member_tag_prefix(config, ws, member);
@@ -384,7 +378,10 @@ fn full_root(
     target: ChangelogOutput<'_>,
     forge: Option<&ForgeRepo>,
 ) -> Result<()> {
-    let content = build_full_changelog(ctx, config, &config.release.tag_prefix, None, forge)?;
+    let content = match independent_ws(config) {
+        Some(ws) => build_independent_full_changelog(ctx, config, ws, forge)?,
+        None => build_full_changelog(ctx, config, &config.release.tag_prefix, None, forge)?,
+    };
     emit(
         target.root_file(config, root).as_deref(),
         None,
@@ -393,16 +390,17 @@ fn full_root(
     )
 }
 
-/// Render a full changelog for `tags`, optionally limited to commits
-/// touching `path`. Empty ranges are skipped when a path is given, since
-/// most releases won't touch every member.
-fn build_full_changelog(
+/// Every `prefix` release, oldest first, plus an `[Unreleased]` release for
+/// commits since the last tag. With a fileset, releases with no matching
+/// commits are skipped, since most releases won't touch every member.
+/// `name` labels each heading, for the aggregated root changelog.
+fn full_releases(
     ctx: &ReleaseContext<'_>,
-    config: &Config,
     prefix: &str,
     fileset: Option<&str>,
     forge: Option<&ForgeRepo>,
-) -> Result<String> {
+    name: Option<&str>,
+) -> Result<Vec<Release>> {
     let tags = commits::version_tags(ctx.backend, prefix, "tags() & ::@")?;
     let mut releases = Vec::new();
     let mut prev: Option<&Tag> = None;
@@ -413,6 +411,7 @@ fn build_full_changelog(
 
         if fileset.is_none() || !commits.is_empty() {
             releases.push(Release {
+                name: name.map(ToOwned::to_owned),
                 version: Some(tag.version.clone()),
                 date: Some(ctx.backend.commit_date(&tag.name)?),
                 compare_url: compare_link(
@@ -424,7 +423,6 @@ fn build_full_changelog(
                 commits,
             });
         }
-
         prev = Some(tag);
     }
 
@@ -432,13 +430,53 @@ fn build_full_changelog(
     let tip = log_commits(ctx, &format!("{since}..@"), fileset)?;
     if !tip.is_empty() {
         releases.push(Release {
-            version: None,
+            name: name.map(ToOwned::to_owned),
             compare_url: compare_link(forge, prev.map(|t| &t.version), None, prefix),
             commits: tip,
             ..Default::default()
         });
     }
+    Ok(releases)
+}
 
+/// A full changelog from every `prefix` tag, optionally limited to `fileset`.
+fn build_full_changelog(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    prefix: &str,
+    fileset: Option<&str>,
+    forge: Option<&ForgeRepo>,
+) -> Result<String> {
+    let releases = full_releases(ctx, prefix, fileset, forge, None)?;
+    Ok(changelog::render_changelog(&releases, &config.changelog))
+}
+
+/// The root changelog for an independent workspace: every member's releases,
+/// each heading named for its member, ordered by date.
+fn build_independent_full_changelog(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    ws: &WorkspaceConfig,
+    forge: Option<&ForgeRepo>,
+) -> Result<String> {
+    let mut releases = Vec::new();
+    for member in &ws.members {
+        let fileset = workspace::member_fileset(member, &ws.members);
+        releases.extend(full_releases(
+            ctx,
+            member_tag_prefix(config, ws, member),
+            Some(&fileset),
+            forge,
+            Some(&member.name),
+        )?);
+    }
+
+    // `render_changelog` takes oldest first. Unreleased sections (no date) go
+    // last, so they render at the top. The sort is stable, so a member's
+    // releases tagged on the same day stay in version order.
+    releases.sort_by(|a, b| {
+        (a.date.is_none(), a.date.as_deref()).cmp(&(b.date.is_none(), b.date.as_deref()))
+    });
     Ok(changelog::render_changelog(&releases, &config.changelog))
 }
 

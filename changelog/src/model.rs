@@ -28,6 +28,8 @@ impl From<&str> for CommitInfo {
 /// One release in a changelog.
 #[derive(Debug, Clone, Default)]
 pub struct Release {
+    /// Workspace member the release belongs to, shown in its heading.
+    pub name: Option<String>,
     /// `None` renders `[Unreleased]`.
     pub version: Option<Version>,
     /// `YYYY-MM-DD`. `None` uses today's date (ignored for unreleased).
