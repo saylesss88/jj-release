@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::fmt::Write;
+use std::{collections::HashMap, fmt::Write};
 
 use git_conventional::Commit;
 use jiff::Zoned;
