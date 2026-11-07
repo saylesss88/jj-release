@@ -43,27 +43,6 @@ pub(crate) fn find_trigger(
     Ok(None)
 }
 
-/// Return the latest `vX.Y.Z` tag reachable from `@`, as a `(tag_name,
-/// Version)` pair.  Returns `None` if no version tag exists yet (first
-/// release).
-///
-/// # Errors
-///
-/// This function will return an error if listing the tags from the backend fails
-/// (e.g., due to an issue communicating with the underlying version control system).
-pub fn latest_version_tag(backend: &dyn JjBackend, prefix: &str) -> Result<Option<Tag>> {
-    let raw_tags = backend.list_tags()?;
-    let tags: Vec<Tag> = raw_tags
-        .into_iter()
-        .filter_map(|name| {
-            let stripped = name.strip_prefix(prefix)?;
-            let version = Version::parse(stripped).ok()?;
-            Some(Tag { name, version })
-        })
-        .collect();
-    Ok(highest_semver_tag(&tags).cloned())
-}
-
 /// Walk commits between `since_revision` (exclusive) and `@` (inclusive),
 /// parse conventional commit messages, and return the required bump kind.
 #[must_use]
@@ -154,6 +133,37 @@ pub fn apply_bump(current: &Version, bump: BumpKind) -> Version {
 pub struct Tag {
     pub name: String,
     pub version: Version,
+}
+
+/// Every tag named `<prefix><semver>`, sorted oldest first. Tags whose
+/// remainder isn't valid semver are ignored.
+///
+/// # Errors
+///
+/// Returns an error if the backend fails to list tags.
+pub(crate) fn version_tags(backend: &dyn JjBackend, prefix: &str) -> Result<Vec<Tag>> {
+    let mut tags: Vec<Tag> = backend
+        .list_tags()?
+        .into_iter()
+        .filter_map(|name| {
+            let version = Version::parse(name.strip_prefix(prefix)?).ok()?;
+            Some(Tag { name, version })
+        })
+        .collect();
+    tags.sort_by(|a, b| a.version.cmp(&b.version));
+    Ok(tags)
+}
+
+/// The highest-versioned `<prefix><semver>` tag in the repo, or `None`
+/// before the first release.
+///
+/// Note: this considers every tag, not only those reachable from `@`.
+///
+/// # Errors
+///
+/// Returns an error if the backend fails to list tags.
+pub fn latest_version_tag(backend: &dyn JjBackend, prefix: &str) -> Result<Option<Tag>> {
+    Ok(version_tags(backend, prefix)?.pop())
 }
 
 #[must_use]

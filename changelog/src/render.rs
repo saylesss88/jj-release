@@ -20,10 +20,11 @@ pub fn render_heading(
     date: Option<&str>,
     compare_url: Option<&str>,
 ) -> String {
+    let prefix = name.map_or_else(String::new, |n| format!("{n}"));
     let label = version.map_or_else(|| "Unreleased".to_owned(), ToString::to_string);
     let linked =
         compare_url.map_or_else(|| format!("[{label}]"), |url| format!("[{label}]({url})"));
-    let prefix = name.map_or_else(String::new, |n| format!("{n} "));
+
     match version {
         Some(_) => {
             let date = date.map_or_else(|| Zoned::now().date().to_string(), ToOwned::to_owned);

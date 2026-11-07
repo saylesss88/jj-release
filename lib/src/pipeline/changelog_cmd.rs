@@ -20,6 +20,8 @@ use crate::{
 
 use jj_release_changelog::{self as changelog, ChangelogLayout, Release};
 
+// Output targets
+
 /// Where `print_changelog` sends its output.
 #[derive(Debug, Clone, Copy)]
 pub enum ChangelogOutput<'a> {
@@ -47,6 +49,113 @@ impl ChangelogOutput<'_> {
     fn member_file(self, root: &Path, member: &WorkspaceMember, file: &str) -> Option<PathBuf> {
         matches!(self, Self::Configured).then(|| member_changelog_path(root, member, file))
     }
+}
+
+/// `--output` names a single file, which can't hold per-member changelogs.
+fn check_target(config: &Config, target: ChangelogOutput<'_>) -> Result<()> {
+    if member_layout_ws(config).is_some() && matches!(target, ChangelogOutput::Path(_)) {
+        return Err(ReleaseError::Message(
+            "--output writes a single file; with layout = \"per-member\" use --write".into(),
+        ));
+    }
+    Ok(())
+}
+
+// Entry points
+
+/// Renders the changelog section(s) for the pending release and prints them
+/// or prepends them to the changelog file(s), depending on `target`.
+/// With `full`, regenerates the complete changelog instead.
+///
+/// # Errors
+///
+/// Returns an error if `target` is a single path but the layout writes member
+/// changelogs, or if reading a manifest, listing tags, fetching commit
+/// history, or writing a changelog file fails.
+pub fn print_changelog(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    root: &Path,
+    target: ChangelogOutput<'_>,
+    full: bool,
+) -> Result<()> {
+    if full {
+        return print_full_changelog(ctx, config, root, target);
+    }
+    check_target(config, target)?;
+
+    let written = match member_layout_ws(config) {
+        None => pending_root(ctx, config, root, target, false)?,
+        Some(ws) => {
+            let layout = config.changelog.layout;
+            let root_count = if layout.includes_root() {
+                pending_root(ctx, config, root, target, true)?
+            } else {
+                0
+            };
+            // With `Both`, the root changelog already covers a member at ".".
+            let skip_root_member = layout == ChangelogLayout::Both;
+            root_count + pending_members(ctx, config, root, ws, target, skip_root_member)?
+        }
+    };
+
+    if written == 0 {
+        println!("No changelog entries since the last release.");
+    }
+
+    Ok(())
+}
+
+/// Generates and outputs a comprehensive changelog from the repository's entire history.
+///
+///# Errors
+///
+/// Returns an error if:
+/// - The VCS backend fails to list tags or log commits.
+/// - The local manifest version cannot be read.
+/// - Writing to the provided `output` file fails.
+pub fn print_full_changelog(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    root: &Path,
+    target: ChangelogOutput<'_>,
+) -> Result<()> {
+    check_target(config, target)?;
+    let remote = Remote::detect(config, root);
+
+    let Some(ws) = member_layout_ws(config) else {
+        return full_root(ctx, config, root, target, remote.as_ref());
+    };
+    let includes_root = config.changelog.layout.includes_root();
+    let aggregate_root = includes_root && matches!(ws.versioning, Versioning::Unified);
+
+    if aggregate_root {
+        full_root(ctx, config, root, target, remote.as_ref())?;
+    } else if includes_root && !ws.members.iter().any(is_root_member) {
+        eprintln!(
+            "note: --full doesn't regenerate an aggregated root changelog for independent workspaces"
+        );
+    }
+
+    let file = &config.changelog.file;
+    for member in &ws.members {
+        if aggregate_root && is_root_member(member) {
+            continue;
+        }
+        let prefix = member_tag_prefix(config, ws, member);
+        let fileset = workspace::member_fileset(member, &ws.members);
+        let content = build_full_changelog(ctx, config, prefix, Some(&fileset), remote.as_ref())?;
+
+        let header = member_display_path(member, file);
+        emit(
+            target.member_file(root, member, file).as_deref(),
+            Some(&header),
+            &content,
+            WriteMode::Replace,
+        )?;
+    }
+
+    Ok(())
 }
 
 // Pending release
@@ -87,313 +196,117 @@ impl PendingChanges {
     }
 }
 
-/// The workspace, if the configured layout writes member changelogs.
-fn member_layout_ws(config: &Config) -> Option<&WorkspaceConfig> {
-    config
-        .workspace
-        .as_ref()
-        .filter(|w| w.enabled && config.changelog.layout.includes_members())
-}
-
-/// The forge and `owner/repo` used to build compare links.
-#[derive(Debug, Clone)]
-struct Remote {
-    base: String,
-    repo: String,
-}
-
-impl Remote {
-    /// `Some` when `link_headers` is on and both the forge and the repo can be determined.
-    fn detect(config: &Config, root: &Path) -> Option<Self> {
-        if !config.changelog.link_headers {
-            return None;
-        }
-        let base = changelog::forge_base_url(&config.release.forge, &config.release.forge_url)?;
-        let (owner, repo) = detect::remote_url(root)
-            .as_deref()
-            .and_then(detect::parse_remote_owner_repo)?;
-        Some(Self {
-            base,
-            repo: format!("{owner}/{repo}"),
-        })
-    }
-}
-
-/// A compare link from `prev` to `next`, or to the tip when `next` is `None`.
-/// `None` without a remote or a previous release to compare against.
-fn compare_link(
-    remote: Option<&Remote>,
-    prev: Option<&Version>,
-    next: Option<&Version>,
-    prefix: &str,
-) -> Option<String> {
-    let (remote, prev) = (remote?, prev?);
-    Some(next.map_or_else(
-        || changelog::compare_unreleased_url(&remote.base, &remote.repo, prev, prefix),
-        |next| changelog::compare_url(&remote.base, &remote.repo, prev, next, prefix),
-    ))
-}
-
-/// Renders and prints the changelog section for the pending release to standard output.
-///
-/// # Errors
-///
-/// Returns an error if reading the version manifest, locating the latest release tag,
-/// or fetching the commit history fails.
-pub fn print_changelog(
+/// Repo-wide changes since the last `release.tag_prefix` tag, with the
+/// version they'd release as.
+fn repo_pending(
     ctx: &ReleaseContext<'_>,
     config: &Config,
     root: &Path,
-    target: ChangelogOutput<'_>,
-    full: bool,
-) -> Result<()> {
-    if member_layout_ws(config).is_some() && matches!(target, ChangelogOutput::Path(_)) {
-        return Err(ReleaseError::Message(
-            "--output writes a single file; with layout = \"per-member\" use --write".into(),
-        ));
-    }
-    if full {
-        return print_full_changelog(ctx, config, root, target);
-    }
+) -> Result<(PendingChanges, Option<Version>)> {
+    let current = ctx.manifest.read_version(root)?;
+    let pending = PendingChanges::since_last_tag(ctx, &config.release.tag_prefix, None)?;
+    let version = pending.next_version(&current);
+    Ok((pending, version))
+}
 
-    let written = match member_layout_ws(config) {
-        None => print_root_changelog(ctx, config, root, target, false)?,
-        Some(ws) => {
-            let layout = config.changelog.layout;
-            let root_count = if layout.includes_root() {
-                print_root_changelog(ctx, config, root, target, true)?
-            } else {
-                0
-            };
-            root_count
-                + print_member_changelogs(
-                    ctx,
-                    config,
-                    root,
-                    ws,
-                    target,
-                    layout == ChangelogLayout::Both,
-                )?
-        }
-    };
-
-    if written == 0 {
-        println!("No changelog entries since the last release.");
-    }
-
-    Ok(())
+/// Changes to `member` since its own last tag.
+fn member_pending(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    ws: &WorkspaceConfig,
+    member: &WorkspaceMember,
+) -> Result<PendingChanges> {
+    let fileset = workspace::member_fileset(member, &ws.members);
+    PendingChanges::since_last_tag(ctx, member_tag_prefix(config, ws, member), Some(&fileset))
 }
 
 /// The root changelog section: one section for a single crate or unified
 /// workspace, or named per-member sections for an independent workspace.
-fn print_root_changelog(
+fn pending_root(
     ctx: &ReleaseContext<'_>,
     config: &Config,
     root: &Path,
     target: ChangelogOutput<'_>,
     show_header: bool,
 ) -> Result<usize> {
-    if let Some(ws) = config
-        .workspace
-        .as_ref()
-        .filter(|w| w.enabled && matches!(w.versioning, Versioning::Independent))
-    {
-        return print_independent_root(ctx, config, root, ws, target, show_header);
+    if let Some(ws) = independent_ws(config) {
+        return pending_independent_root(ctx, config, root, ws, target, show_header);
     }
 
-    let current = ctx.manifest.read_version(root)?;
-    let pending = PendingChanges::since_last_tag(ctx, &config.release.tag_prefix, None)?;
-    let version = pending.next_version(&current);
+    let (pending, version) = repo_pending(ctx, config, root)?;
 
-    // Using the new Remote struct and helper
     let compare_url = compare_link(
         Remote::detect(config, root).as_ref(),
         pending.latest_version(),
         version.as_ref(),
         &config.release.tag_prefix,
     );
-    let section = changelog::render_changelog_section(
-        &pending.commits, // Use pending.commits
+
+    let Some(section) = render_section(
+        None,
         version.as_ref(),
-        &config.changelog,
+        &pending.commits,
+        config,
         compare_url.as_deref(),
-    );
-
-    if changelog::render_body(&pending.commits, &config.changelog)
-        .trim()
-        .is_empty()
-    {
+    ) else {
         return Ok(0);
-    }
+    };
 
-    let path = target.root_file(config, root);
     let header = show_header.then(|| Path::new(&config.changelog.file));
-
-    emit(path.as_deref(), header, &section, WriteMode::Prepend)?;
+    emit(
+        target.root_file(config, root).as_deref(),
+        header,
+        &section,
+        WriteMode::Prepend,
+    )?;
     Ok(1)
 }
 
-/// Generates and outputs a comprehensive changelog from the repository's entire history.
-///
-///# Errors
-///
-/// Returns an error if:
-/// - The VCS backend fails to list tags or log commits.
-/// - The local manifest version cannot be read.
-/// - Writing to the provided `output` file fails.
-pub fn print_full_changelog(
+/// Root layout, independent versioning: one named section per member with
+/// changes since its own last tag, all in the root changelog.
+fn pending_independent_root(
     ctx: &ReleaseContext<'_>,
     config: &Config,
     root: &Path,
+    ws: &WorkspaceConfig,
     target: ChangelogOutput<'_>,
-) -> Result<()> {
-    // Resolve remote base and repo only once
-    let remote = Remote::detect(config, root);
-
-    let Some(ws) = member_layout_ws(config) else {
-        return emit_root_full(ctx, config, root, target, remote.as_ref());
-    };
-
-    let layout = config.changelog.layout;
-    let unified = matches!(ws.versioning, Versioning::Unified);
-    // Unified: the root file is the aggregated history from `release.tag_prefix` tags.
-    // Independent: a member at "." writes its own history to the root file instead.
-    let aggregate_root = layout.includes_root() && unified;
-
-    if aggregate_root {
-        emit_root_full(ctx, config, root, target, remote.as_ref())?;
-    } else if layout.includes_root() && !ws.members.iter().any(|m| m.path == ".") {
-        eprintln!(
-            "note: --full doesn't regenerate an aggregated root changelog for independent workspaces"
-        );
-    }
+    show_header: bool,
+) -> Result<usize> {
+    let mut sections = Vec::new();
 
     for member in &ws.members {
-        if aggregate_root && member.path == "." {
+        let pending = member_pending(ctx, config, ws, member)?;
+
+        if pending.commits.is_empty() {
             continue;
         }
-        let prefix = match ws.versioning {
-            Versioning::Unified => config.release.tag_prefix.as_str(),
-            Versioning::Independent => workspace::member_prefix(member, &config.release.tag_prefix),
-        };
-        let tags = sorted_tags(ctx, prefix)?;
-        let fileset = workspace::member_fileset(member, &ws.members);
-        let result =
-            build_full_changelog(ctx, config, &tags, prefix, Some(&fileset), remote.as_ref())?;
 
-        let file = &config.changelog.file;
-        let header = Path::new(&member.path).join(file);
-
-        emit(
-            target.member_file(root, member, file).as_deref(),
-            Some(&header),
-            &result,
-            WriteMode::Replace,
-        )?;
+        let version = pending.next_version(&member_current_version(root, member)?);
+        sections.extend(render_section(
+            Some(&member.name),
+            version.as_ref(),
+            &pending.commits,
+            config,
+            None,
+        ));
     }
 
-    Ok(())
-}
+    if sections.is_empty() {
+        return Ok(0);
+    }
+    let header = show_header.then(|| Path::new(&config.changelog.file));
 
-/// The complete root changelog, regenerated from every `release.tag_prefix` tag.
-fn emit_root_full(
-    ctx: &ReleaseContext<'_>,
-    config: &Config,
-    root: &Path,
-    target: ChangelogOutput<'_>,
-    remote: Option<&Remote>,
-) -> Result<()> {
-    let tags = sorted_tags(ctx, &config.release.tag_prefix)?;
-    let result =
-        build_full_changelog(ctx, config, &tags, &config.release.tag_prefix, None, remote)?;
     emit(
         target.root_file(config, root).as_deref(),
-        None,
-        &result,
-        WriteMode::Replace,
-    )
+        header,
+        &sections.join("\n"),
+        WriteMode::Prepend,
+    )?;
+
+    Ok(sections.len())
 }
 
-/// All tags matching `prefix`, parsed and sorted oldest first.
-fn sorted_tags(ctx: &ReleaseContext<'_>, prefix: &str) -> Result<Vec<Tag>> {
-    let mut tags: Vec<Tag> = ctx
-        .backend
-        .list_tags()?
-        .into_iter()
-        .filter_map(|name| {
-            let version = Version::parse(name.strip_prefix(prefix)?).ok()?;
-            Some(Tag { name, version })
-        })
-        .collect();
-    tags.sort_by(|a, b| a.version.cmp(&b.version));
-    Ok(tags)
-}
-
-fn log_commits(
-    ctx: &ReleaseContext<'_>,
-    revset: &str,
-    path: Option<&str>,
-) -> Result<Vec<CommitInfo>> {
-    path.map_or_else(
-        || ctx.backend.log_commits(revset),
-        |p| ctx.backend.log_commits_for_path(revset, p),
-    )
-}
-
-/// Render a full changelog for `tags`, optionally limited to commits
-/// touching `path`. Empty ranges are skipped when a path is given, since
-/// most releases won't touch every member.
-fn build_full_changelog(
-    ctx: &ReleaseContext<'_>,
-    config: &Config,
-    tags: &[Tag],
-    tag_prefix: &str,
-    path: Option<&str>,
-    remote: Option<&Remote>,
-) -> Result<String> {
-    let mut releases = Vec::new();
-
-    let mut prev = "root()".to_owned();
-    let mut previous_version: Option<Version> = None;
-
-    for tag in tags {
-        let commits = log_commits(ctx, &format!("{prev}..{}", tag.name), path)?;
-
-        if !(path.is_some() && commits.is_empty()) {
-            let compare_url = compare_link(
-                remote,
-                previous_version.as_ref(),
-                Some(&tag.version),
-                tag_prefix,
-            );
-
-            releases.push(Release {
-                version: Some(tag.version.clone()),
-                date: Some(ctx.backend.commit_date(&tag.name)?),
-                compare_url,
-                commits,
-            });
-        }
-
-        prev.clone_from(&tag.name);
-        previous_version = Some(tag.version.clone());
-    }
-
-    let tip = log_commits(ctx, &format!("{prev}..@"), path)?;
-    if !tip.is_empty() {
-        let compare_url = compare_link(remote, previous_version.as_ref(), None, tag_prefix);
-        releases.push(Release {
-            version: None,
-            compare_url,
-            commits: tip,
-            ..Default::default()
-        });
-    }
-
-    Ok(changelog::render_changelog(&releases, &config.changelog))
-}
-
-fn print_member_changelogs(
+fn pending_members(
     ctx: &ReleaseContext<'_>,
     config: &Config,
     root: &Path,
@@ -452,122 +365,195 @@ fn print_member_changelogs(
     Ok(written)
 }
 
-/// Root layout, independent versioning: one named section per member with
-/// changes since its own last tag, all in the root changelog.
-fn print_independent_root(
+// Full history
+
+/// The complete root changelog, regenerated from every `release.tag_prefix` tag.
+fn full_root(
     ctx: &ReleaseContext<'_>,
     config: &Config,
     root: &Path,
-    ws: &WorkspaceConfig,
     target: ChangelogOutput<'_>,
-    show_header: bool,
-) -> Result<usize> {
-    let mut sections = Vec::new();
-
-    for member in &ws.members {
-        let prefix = workspace::member_prefix(member, &config.release.tag_prefix);
-
-        let fileset = workspace::member_fileset(member, &ws.members);
-        let pending = PendingChanges::since_last_tag(ctx, prefix, Some(&fileset))?;
-
-        if pending.commits.is_empty() {
-            continue;
-        }
-        let current = CargoManifest.read_version(&root.join(&member.path))?;
-        let version = pending.next_version(&current);
-
-        if let Some(section) =
-            named_member_section(&member.name, version.as_ref(), &pending.commits, config, "")
-        {
-            sections.push(section);
-        }
-    }
-
-    if sections.is_empty() {
-        return Ok(0);
-    }
-    let count = sections.len();
-    let section = sections.join("\n");
-
-    let path = target.root_file(config, root);
-    let header = show_header.then(|| Path::new(&config.changelog.file));
-
-    emit(path.as_deref(), header, &section, WriteMode::Prepend)?;
-
-    Ok(count)
+    remote: Option<&Remote>,
+) -> Result<()> {
+    let content = build_full_changelog(ctx, config, &config.release.tag_prefix, None, remote)?;
+    emit(
+        target.root_file(config, root).as_deref(),
+        None,
+        &content,
+        WriteMode::Replace,
+    )
 }
 
-/// A named member section, or `None` if nothing in it would render
-/// (e.g. every commit was filtered out by strict mode).
-fn named_member_section(
-    name: &str,
-    version: Option<&Version>,
-    commits: &[CommitInfo],
+/// Render a full changelog for `tags`, optionally limited to commits
+/// touching `path`. Empty ranges are skipped when a path is given, since
+/// most releases won't touch every member.
+fn build_full_changelog(
+    ctx: &ReleaseContext<'_>,
     config: &Config,
-    extra: &str, // dependency notes, or "" in previews
-) -> Option<String> {
-    let body = changelog::render_body(commits, &config.changelog);
-    if body.trim().is_empty() && extra.trim().is_empty() {
-        return None;
+    prefix: &str,
+    fileset: Option<&str>,
+    remote: Option<&Remote>,
+) -> Result<String> {
+    let tags = commits::version_tags(ctx.backend, prefix)?;
+    let mut releases = Vec::new();
+    let mut prev: Option<&Tag> = None;
+
+    for tag in &tags {
+        let since = prev.map_or("root()", |t| t.name.as_str());
+        let commits = log_commits(ctx, &format!("{since}..{}", tag.name), fileset)?;
+
+        if fileset.is_none() || !commits.is_empty() {
+            releases.push(Release {
+                version: Some(tag.version.clone()),
+                date: Some(ctx.backend.commit_date(&tag.name)?),
+                compare_url: compare_link(
+                    remote,
+                    prev.map(|t| &t.version),
+                    Some(&tag.version),
+                    prefix,
+                ),
+                commits,
+            });
+        }
+
+        prev = Some(tag);
     }
-    let mut section = changelog::render_heading(Some(name), version, None, None);
-    section.push_str(&body);
-    section.push_str(extra);
-    Some(section)
+
+    let since = prev.map_or("root()", |t| t.name.as_str());
+    let tip = log_commits(ctx, &format!("{since}..@"), fileset)?;
+    if !tip.is_empty() {
+        releases.push(Release {
+            version: None,
+            compare_url: compare_link(remote, prev.map(|t| &t.version), None, prefix),
+            commits: tip,
+            ..Default::default()
+        });
+    }
+
+    Ok(changelog::render_changelog(&releases, &config.changelog))
 }
 
-/// For `--full`: ask before replacing an existing changelog whose content
-/// differs from what would be written. Non-interactive runs (CI, pipes)
-/// refuse instead of overwriting.
-fn confirm_overwrite(path: &Path, new: &str) -> Result<bool> {
-    let Ok(existing) = fs::read_to_string(path) else {
-        return Ok(true); // no file yet
-    };
-    if existing == new {
-        return Ok(true); // nothing would change
-    }
-    if !io::stdin().is_terminal() {
-        eprintln!(
-            "skipping {}: it exists with different content (re-run interactively to confirm)",
-            path.display()
-        );
-        return Ok(false);
-    }
-    eprint!(
-        "{} exists and will be replaced. Continue? [y/N] ",
-        path.display()
-    );
-    let _ = io::stderr().flush();
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-    Ok(matches!(input.trim().to_lowercase().as_str(), "y" | "yes"))
+// Workspace helpers
+
+fn enabled_ws(config: &Config) -> Option<&WorkspaceConfig> {
+    config.workspace.as_ref().filter(|ws| ws.enabled)
 }
 
-/// Write a regenerated changelog, asking first if it would replace different content.
-fn write_full(path: &Path, content: &str) -> Result<()> {
-    if confirm_overwrite(path, content)? {
-        fs::write(path, content)?;
-        println!("✓ Written to {}", path.display());
+/// The workspace, if the configured layout writes member changelogs.
+fn member_layout_ws(config: &Config) -> Option<&WorkspaceConfig> {
+    enabled_ws(config).filter(|_| config.changelog.layout.includes_members())
+}
+
+/// The workspace, if its members are versioned independently.
+fn independent_ws(config: &Config) -> Option<&WorkspaceConfig> {
+    enabled_ws(config).filter(|ws| matches!(ws.versioning, Versioning::Independent))
+}
+
+/// The tag prefix `member` releases under.
+fn member_tag_prefix<'a>(
+    config: &'a Config,
+    ws: &WorkspaceConfig,
+    member: &'a WorkspaceMember,
+) -> &'a str {
+    match ws.versioning {
+        Versioning::Unified => &config.release.tag_prefix,
+        Versioning::Independent => workspace::member_prefix(member, &config.release.tag_prefix),
     }
-    Ok(())
+}
+
+fn member_current_version(root: &Path, member: &WorkspaceMember) -> Result<Version> {
+    CargoManifest.read_version(&root.join(&member.path))
+}
+
+fn is_root_member(member: &WorkspaceMember) -> bool {
+    member.path == "."
 }
 
 /// The changelog file for `member`: `<root>/<file>` for a member at ".",
 /// otherwise `<root>/<member path>/<file>`.
 #[must_use]
 pub fn member_changelog_path(root: &Path, member: &WorkspaceMember, file: &str) -> PathBuf {
-    if member.path == "." {
+    if is_root_member(member) {
         root.join(file)
     } else {
         root.join(&member.path).join(file)
     }
 }
 
-fn read_existing(path: &Path) -> Result<String> {
-    match fs::read_to_string(path) {
-        Ok(content) => Ok(content),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(String::new()),
-        Err(error) => Err(error.into()),
+/// `<member path>/<file>`, for the `==> ... <==` header when printing.
+fn member_display_path(member: &WorkspaceMember, file: &str) -> PathBuf {
+    Path::new(&member.path).join(file)
+}
+
+// Rendering
+
+/// The forge and `owner/repo` used to build compare links.
+#[derive(Debug, Clone)]
+struct Remote {
+    base: String,
+    repo: String,
+}
+
+impl Remote {
+    /// `Some` when `link_headers` is on and both the forge and the repo can be determined.
+    fn detect(config: &Config, root: &Path) -> Option<Self> {
+        if !config.changelog.link_headers {
+            return None;
+        }
+        let base = changelog::forge_base_url(&config.release.forge, &config.release.forge_url)?;
+        let (owner, repo) = detect::remote_url(root)
+            .as_deref()
+            .and_then(detect::parse_remote_owner_repo)?;
+        Some(Self {
+            base,
+            repo: format!("{owner}/{repo}"),
+        })
+    }
+}
+
+/// A compare link from `prev` to `next`, or to the tip when `next` is `None`.
+/// `None` without a remote or a previous release to compare against.
+fn compare_link(
+    remote: Option<&Remote>,
+    prev: Option<&Version>,
+    next: Option<&Version>,
+    prefix: &str,
+) -> Option<String> {
+    let (remote, prev) = (remote?, prev?);
+    Some(next.map_or_else(
+        || changelog::compare_unreleased_url(&remote.base, &remote.repo, prev, prefix),
+        |next| changelog::compare_url(&remote.base, &remote.repo, prev, next, prefix),
+    ))
+}
+
+/// A named member section, or `None` if nothing in it would render
+/// (e.g. every commit was filtered out by strict mode).
+fn render_section(
+    name: Option<&str>,
+    version: Option<&Version>,
+    commits: &[CommitInfo],
+    config: &Config,
+    compare_url: Option<&str>, // dependency notes, or "" in previews
+) -> Option<String> {
+    let body = changelog::render_body(commits, &config.changelog);
+    if body.trim().is_empty() {
+        return None;
+    }
+    let mut section = changelog::render_heading(name, version, None, compare_url);
+    section.push_str(&body);
+    Some(section)
+}
+
+// I/O
+
+fn log_commits(
+    ctx: &ReleaseContext<'_>,
+    revset: &str,
+    fileset: Option<&str>,
+) -> Result<Vec<CommitInfo>> {
+    match fileset {
+        Some(fileset) => ctx.backend.log_commits_for_path(revset, fileset),
+        None => ctx.backend.log_commits(revset),
     }
 }
 
@@ -609,4 +595,48 @@ fn write_prepended(path: &Path, section: &str) -> Result<()> {
     fs::write(path, changelog::prepend_to_file(&existing, section))?;
     println!("✔️ Written to {}", path.display());
     Ok(())
+}
+
+/// Write a regenerated changelog, asking first if it would replace different content.
+fn write_full(path: &Path, content: &str) -> Result<()> {
+    if confirm_overwrite(path, content)? {
+        fs::write(path, content)?;
+        println!("✓ Written to {}", path.display());
+    }
+    Ok(())
+}
+
+/// For `--full`: ask before replacing an existing changelog whose content
+/// differs from what would be written. Non-interactive runs (CI, pipes)
+/// refuse instead of overwriting.
+fn confirm_overwrite(path: &Path, new: &str) -> Result<bool> {
+    let Ok(existing) = fs::read_to_string(path) else {
+        return Ok(true); // no file yet
+    };
+    if existing == new {
+        return Ok(true); // nothing would change
+    }
+    if !io::stdin().is_terminal() {
+        eprintln!(
+            "skipping {}: it exists with different content (re-run interactively to confirm)",
+            path.display()
+        );
+        return Ok(false);
+    }
+    eprint!(
+        "{} exists and will be replaced. Continue? [y/N] ",
+        path.display()
+    );
+    let _ = io::stderr().flush();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    Ok(matches!(input.trim().to_lowercase().as_str(), "y" | "yes"))
+}
+
+fn read_existing(path: &Path) -> Result<String> {
+    match fs::read_to_string(path) {
+        Ok(content) => Ok(content),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(String::new()),
+        Err(error) => Err(error.into()),
+    }
 }
