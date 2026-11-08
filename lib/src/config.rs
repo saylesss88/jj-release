@@ -275,6 +275,7 @@ cargo = false
 [changelog]
 enabled = true
 strict = true
+file = "CHANGELOG.md"
 # emoji_headers = true
 # link_headers = true
 # layout = "per-member"  # "root" (default) or "both"
@@ -493,5 +494,18 @@ tag_prefix = "mylib-v"
         assert_eq!(cli.path, "crates/cli");
         assert_eq!(cli.depends_on, ["core"]);
         assert!(!members.iter().find(|m| m.name == "xtask").unwrap().publish);
+    }
+
+    #[test]
+    fn missing_changelog_file_uses_default() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("release.toml"),
+            "[changelog]\nenabled = true\nstrict = true\n",
+        )
+        .unwrap();
+
+        let cfg = load(dir.path()).unwrap();
+        assert_eq!(cfg.changelog.file, "CHANGELOG.md");
     }
 }

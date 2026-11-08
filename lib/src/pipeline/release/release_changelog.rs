@@ -1,11 +1,14 @@
-use std::{fs, path::Path};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 use semver::Version;
 
 use crate::{
     ReleasePlan, commits,
     config::{Config, Versioning, WorkspaceConfig, WorkspaceMember},
-    errors::Result,
+    errors::{ReleaseError, Result},
     pipeline::{self, CommitInfo, PreparedRelease, ReleaseContext},
     workspace,
 };
@@ -45,7 +48,7 @@ pub fn update_changelog(
 fn write_single_section(root: &Path, config: &Config, prepared: &PreparedRelease) -> Result<()> {
     let plan = publish::unified_plan(prepared)?;
     write_section(
-        root,
+        &root_changelog(root, config),
         &jj_release_changelog::render_changelog_section(
             &prepared.commits,
             Some(&plan.next_version),
@@ -53,6 +56,11 @@ fn write_single_section(root: &Path, config: &Config, prepared: &PreparedRelease
             None,
         ),
     )
+}
+
+/// The root changelog file.
+fn root_changelog(root: &Path, config: &Config) -> PathBuf {
+    root.join(&config.changelog.file)
 }
 
 fn write_root_changelog(
@@ -85,7 +93,7 @@ fn write_root_changelog(
             if sections.is_empty() {
                 return Ok(());
             }
-            write_section(root, &sections.join("\n"))
+            write_section(&root_changelog(root, config), &sections.join("\n"))
         }
     }
 }
@@ -169,7 +177,18 @@ fn member_next_version(member: &WorkspaceMember, prepared: &PreparedRelease) -> 
 }
 
 fn write_section(path: &Path, section: &str) -> Result<()> {
-    let existing = fs::read_to_string(path).unwrap_or_default();
+    let existing = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => String::new(),
+        // Anything else must stop the release. Treating it as empty would
+        // overwrite the existing changelog with just this section.
+        Err(e) => {
+            return Err(ReleaseError::Message(format!(
+                "reading {}: {e}",
+                path.display()
+            )));
+        }
+    };
     if !existing.trim().is_empty() && !jj_release_changelog::has_changelog_title(&existing) {
         eprintln!(
             "warning: {} doesn't start with \"# Changelog\"; a Keep a Changelog header was added above its existing content",
@@ -179,6 +198,37 @@ fn write_section(path: &Path, section: &str) -> Result<()> {
     fs::write(
         path,
         jj_release_changelog::prepend_to_file(&existing, section),
-    )?;
-    Ok(())
+    )
+    .map_err(|e| ReleaseError::Message(format!("writing {}: {e}", path.display())))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{BumpKind, UnifiedPlan};
+
+    #[test]
+    fn single_crate_writes_the_configured_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let prepared = PreparedRelease {
+            since: "root()".into(),
+            commits: vec![CommitInfo {
+                change_id: "a".into(),
+                description: "feat: thing".into(),
+            }],
+            plan: ReleasePlan::Unified(UnifiedPlan {
+                current_version: Version::new(0, 1, 0),
+                baseline_version: Version::new(0, 1, 0),
+                next_version: Version::new(0, 2, 0),
+                tag_name: "v0.2.0".into(),
+                bump: BumpKind::Minor,
+            }),
+        };
+
+        write_single_section(dir.path(), &Config::default(), &prepared).unwrap();
+
+        let written = fs::read_to_string(dir.path().join("CHANGELOG.md")).unwrap();
+        assert!(written.contains("## [0.2.0]"));
+        assert!(written.contains("- thing"));
+    }
 }
