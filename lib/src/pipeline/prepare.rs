@@ -39,17 +39,48 @@ pub fn prepare_release(
 ) -> Result<Option<PreparedRelease>> {
     backend.check_identity()?;
 
+    let since = release_since(backend, config)?;
+    if commits::find_trigger(backend, &config.release.trigger, &since)?.is_none() {
+        return Ok(None);
+    }
+    plan_since(backend, manifest, config, root, since)
+    // Check for trigger commit.
+}
+
+pub fn plan_release(
+    backend: &dyn JjBackend,
+    manifest: &dyn ManifestBackend,
+    config: &Config,
+    root: &Path,
+) -> Result<Option<PreparedRelease>> {
+    let since = release_since(backend, config)?;
+    plan_since(backend, manifest, config, root, since)
+}
+
+/// Where release history starts: the latest release tag (of any member, for
+/// an independent workspace), or `root()` before the first release.
+fn release_since(backend: &dyn JjBackend, config: &Config) -> Result<String> {
+    match independent_workspace(config) {
+        Some(ws) => independent_since(backend, config, ws),
+        None => resolve_since(backend, config),
+    }
+}
+
+/// The release plan for the commits since `since`.
+fn plan_since(
+    backend: &dyn JjBackend,
+    manifest: &dyn ManifestBackend,
+    config: &Config,
+    root: &Path,
+    since: String,
+) -> Result<Option<PreparedRelease>> {
     // Independent: no repo-wide version is read at all.
     if let Some(ws) = independent_workspace(config) {
-        let since = independent_since(backend, config, ws)?;
-        if commits::find_trigger(backend, &config.release.trigger, &since)?.is_none() {
-            return Ok(None);
-        }
         let commits = backend.log_commits(&format!("{since}..@"))?;
         let members = plan_member_versions(backend, config, ws, root)?;
 
-        // If no individual members have pending releases, abort the release early.
-        if !members.values().any(super::MemberPlan::is_released) {
+        // If no individual members have pending releases, there's nothing to release.
+        if !members.values().any(MemberPlan::is_released) {
             return Ok(None);
         }
 
@@ -60,20 +91,12 @@ pub fn prepare_release(
         }));
     }
 
-    let since = resolve_since(backend, config)?;
     let is_first_release = since == "root()";
-
-    // Check for trigger commit.
-    if commits::find_trigger(backend, &config.release.trigger, &since)?.is_none() {
-        return Ok(None);
-    }
-
     let current_version = manifest.read_version(root)?;
 
     // Fetch the baseline from local VCS tags
     let latest_tag = commits::latest_version_tag(backend, &config.release.tag_prefix)?;
 
-    // Use crates.io version as baseline if available, more reliable than manifest.
     let baseline_version = if is_first_release {
         current_version.clone()
     } else {
@@ -102,7 +125,6 @@ pub fn prepare_release(
             bump,
         )
     };
-
     let next_version = apply_channel(backend, config, &config.release.tag_prefix, next_version)?;
 
     let tag_name = config.tag_name(&next_version);

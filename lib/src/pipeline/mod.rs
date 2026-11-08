@@ -16,7 +16,7 @@ pub use changelog_cmd::{
     ChangelogOutput, member_changelog_path, print_changelog, print_full_changelog,
 };
 pub use next_version::print_next_version;
-pub use prepare::{independent_workspace, prepare_release};
+pub use prepare::{independent_workspace, plan_release, prepare_release};
 pub use release::{
     run_distro, run_preflight_checks, run_publish, update_changelog, update_workspace_dependencies,
 };
