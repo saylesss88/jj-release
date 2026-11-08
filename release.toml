@@ -4,17 +4,17 @@ manifest_backend = "cargo"
 
 [release]
 forge = "github"
-create_release = true
+create_release = false
 
 [publish]
-cargo = true
+cargo = false
 
 [changelog]
 enabled = true
 strict = true
-emoji_headers = true
-link_headers = true
-layout = "both"      # "root" (default) / "both"
+# emoji_headers = true
+# link_headers = true
+# layout = "per-member"  # "root" (default) or "both"
 # exclude_prefixes = ["chore", "ci", "test"]
 
 # [changelog.prefix_mapping]
@@ -26,17 +26,17 @@ layout = "both"      # "root" (default) / "both"
 # search = 'your-crate = ".*"'
 # replace = 'your-crate = "{{version}}"'
 
-[publish.aur]
-package = "jj-release"
-fail_on_error = false
+# [publish.aur]
+# package = "my-package"
+# fail_on_error = false
 
-[publish.copr]
+# [publish.copr]
 # Required: your COPR project as owner/project
-project = "sayless88/jj-release"
-fail_on_error = false
+# project = "your-username/my-cli-tool"
+# fail_on_error = false
 
 # Required: path to the spec, relative to the repo root
-spec = "copr/rust-jj-release.spec"
+# spec = "packaging/rust-my-cli-tool.spec"
 
 # Optional: wait for the COPR build to finish (default: false)
 # wait = true
@@ -48,17 +48,13 @@ versioning = "unified"
 [[workspace.members]]
 name = "jj_release_core"
 path = "lib"
-publish = true
-# depends_on = []
-
-[[workspace.members]]
-name = "jj-release"
-path = "cli"
-publish = true
-# depends_on = []
+depends_on = ["jj_release_changelog"]
 
 [[workspace.members]]
 name = "jj_release_changelog"
 path = "changelog"
-publish = true
-# depends_on = []
+
+[[workspace.members]]
+name = "jj-release"
+path = "cli"
+depends_on = ["jj_release_changelog", "jj_release_core"]

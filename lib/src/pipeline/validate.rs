@@ -19,6 +19,44 @@ use crate::{
 
 type CheckResult = Result<String, String>;
 
+// -- Validate --
+
+/// Encapsulates the tracking and reporting of validation checks.
+#[derive(Default)]
+struct Validator {
+    passed: usize,
+    failed: usize,
+}
+
+impl Validator {
+    /// Executes a check, logs the result, and updates the internal counters.
+    fn check(&mut self, label: &str, result: Result<String, String>) {
+        match result {
+            Ok(msg) => {
+                println!("✓ {label}: {msg}");
+                self.passed += 1;
+            }
+            Err(msg) => {
+                println!("✗ {label}: {msg}");
+                self.failed += 1;
+            }
+        }
+    }
+
+    /// Evaluates the final results, printing a summary and returning an error if any checks failed.
+    fn finish(self) -> Result<()> {
+        println!("\n{} passed, {} failed", self.passed, self.failed);
+        if self.failed > 0 {
+            Err(ReleaseError::Message(format!(
+                "{} check(s) failed",
+                self.failed
+            )))
+        } else {
+            Ok(())
+        }
+    }
+}
+
 /// Validates the release environment, checking backend identity, forge CLI availability, manifest
 /// readability, version tags, trigger commits, and tokens.
 ///
@@ -26,123 +64,145 @@ type CheckResult = Result<String, String>;
 ///
 /// Returns an error if any backend operations fail, or ifthe manifest cannot be read.
 pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Result<()> {
-    let mut passed = 0;
-    let mut failed = 0;
-
-    let mut run_check = |label: &str, result: CheckResult| match result {
-        Ok(msg) => {
-            println!("✓ {label}: {msg}");
-            passed += 1;
-        }
-        Err(msg) => {
-            println!("✗ {label}: {msg}");
-            failed += 1;
-        }
-    };
-
-    // Independent workspaces have no repo-wide version or tag: checks that
-    // read one look at each member instead.
+    let mut v = Validator::default();
     let independent = pipeline::independent_workspace(config);
 
-    if distro::any_configured(config) {
-        if !config.publish.cargo {
-            run_check(
-                "distro packages",
-                Ok("skipped (publish.cargo = false)".to_owned()),
-            );
-        } else if independent.is_some() {
-            run_check(
-                "distro packages",
-                Ok("skipped (independent versioning)".to_owned()),
-            );
-        } else {
-            for (label, required, result) in distro::preflight(config, root) {
-                let result = match result {
-                    Err(e) if !required => Ok(format!("warning, not required: {e}")),
-                    other => other,
-                };
-                run_check(label, result);
-            }
-        }
-    }
+    validate_environment(&mut v, ctx, config);
+    validate_manifests(&mut v, ctx, config, root, independent);
+    validate_distro(&mut v, config, root, independent);
+    validate_publishing(&mut v, ctx, config, root, independent);
+    validate_versioning(&mut v, ctx, config, root, independent);
 
-    run_check("jj identity", check_jj_identity(ctx));
-    run_check("forge CLI", check_forge_cli(config));
-    run_check(
-        "manifest",
-        independent.map_or_else(
-            || check_manifest(ctx, root),
-            |ws| check_member_manifests(ws, root),
-        ),
-    );
-    run_check("workspace members", check_workspace_members(config, root));
-    run_check(
-        "version tag",
-        independent.map_or_else(
-            || check_version_tag(ctx, config),
-            |ws| check_member_tags(ctx, config, ws),
-        ),
-    );
+    v.finish()
+}
+
+fn validate_environment(v: &mut Validator, ctx: &ReleaseContext<'_>, config: &Config) {
+    v.check("jj identity", check_jj_identity(ctx));
+    v.check("forge CLI", check_forge_cli(config));
 
     if config.publish.cargo {
-        run_check(
-            "publish pre-flight (dry-run)",
-            check_publish(ctx.publisher, root),
+        v.check("CARGO_REGISTRY_TOKEN", check_cargo_token());
+    }
+}
+
+fn validate_manifests(
+    v: &mut Validator,
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    root: &Path,
+    independent: Option<&WorkspaceConfig>,
+) {
+    let manifest_res = independent.map_or_else(
+        || check_manifest(ctx, root),
+        |ws| check_member_manifests(ws, root),
+    );
+    v.check("manifest", manifest_res);
+    v.check("workspace members", check_workspace_members(config, root));
+}
+
+fn validate_distro(
+    v: &mut Validator,
+    config: &Config,
+    root: &Path,
+    independent: Option<&WorkspaceConfig>,
+) {
+    if !distro::any_configured(config) {
+        return;
+    }
+
+    if !config.publish.cargo {
+        v.check(
+            "distro packages",
+            Ok("skipped (publish.cargo = false)".to_owned()),
+        );
+    } else if independent.is_some() {
+        v.check(
+            "distro packages",
+            Ok("skipped (independent versioning)".to_owned()),
         );
     } else {
-        run_check(
+        for (label, required, result) in distro::preflight(config, root) {
+            let res = match result {
+                Err(e) if !required => Ok(format!("warning, not required: {e}")),
+                other => other,
+            };
+            v.check(label, res);
+        }
+    }
+}
+
+fn validate_publishing(
+    v: &mut Validator,
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    root: &Path,
+    independent: Option<&WorkspaceConfig>,
+) {
+    if !config.publish.cargo {
+        v.check(
             "publish pre-flight (dry-run)",
             Ok("skipped (publish.cargo = false)".to_owned()),
         );
+        return;
     }
 
-    if config.publish.cargo && config.publish.semver_checks {
-        let result = if independent.is_some() {
+    v.check(
+        "publish pre-flight (dry-run)",
+        check_publish(ctx.publisher, root),
+    );
+
+    if config.publish.semver_checks {
+        let res = if independent.is_some() {
             Ok("skipped (not used for independent versioning)".to_owned())
         } else {
             check_semver(ctx, config, root)
         };
-        run_check("cargo-semver-checks", result);
-    }
-    if config.publish.cargo {
-        let result = independent.map_or_else(
-            || check_crates_io(ctx, root),
-            |ws| Some(check_members_on_crates_io(ws, root)),
-        );
-        if let Some(result) = result {
-            run_check("crates.io", result);
-        }
+        v.check("cargo-semver-checks", res);
     }
 
-    let since = prepare::release_since(ctx.backend, config).map_err(|e| e.to_string());
-
-    run_check(
-        "trigger commit",
-        since
-            .as_ref()
-            .map_err(Clone::clone)
-            .and_then(|s| check_trigger(ctx, config, s)),
+    let crates_io_res = independent.map_or_else(
+        || check_crates_io(ctx, root),
+        |ws| Some(check_members_on_crates_io(ws, root)),
     );
 
-    let bump = match independent {
-        Some(_) => check_member_bumps(ctx, config, root),
-        None => since
-            .as_ref()
-            .map_err(Clone::clone)
-            .and_then(|s| check_bump(ctx, config, s)),
-    };
-    run_check("version bump", bump);
-
-    if config.publish.cargo {
-        run_check("CARGO_REGISTRY_TOKEN", check_cargo_token());
+    if let Some(res) = crates_io_res {
+        v.check("crates.io", res);
     }
-
-    println!("\n{passed} passed, {failed} failed");
-    if failed > 0 {
-        return Err(ReleaseError::Message(format!("{failed} check(s) failed")));
-    }
-    Ok(())
 }
+
+fn validate_versioning(
+    v: &mut Validator,
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    root: &Path,
+    independent: Option<&WorkspaceConfig>,
+) {
+    let tag_res = independent.map_or_else(
+        || check_version_tag(ctx, config),
+        |ws| check_member_tags(ctx, config, ws),
+    );
+    v.check("version tag", tag_res);
+
+    let since_res = prepare::release_since(ctx.backend, config).map_err(|e| e.to_string());
+
+    // Cleaned up the `.and_then(Clone::clone)` clutter using standard pattern matching
+    let trigger_res = match &since_res {
+        Ok(since) => check_trigger(ctx, config, since),
+        Err(e) => Err(e.clone()),
+    };
+    v.check("trigger commit", trigger_res);
+
+    let bump_res = match independent {
+        Some(_) => check_member_bumps(ctx, config, root),
+        None => match &since_res {
+            Ok(since) => check_bump(ctx, config, since),
+            Err(e) => Err(e.clone()),
+        },
+    };
+    v.check("version bump", bump_res);
+}
+
+// -- Checks --
 
 fn check_workspace_members(config: &Config, root: &Path) -> CheckResult {
     let Some(ws) = config.workspace.as_ref().filter(|w| w.enabled) else {

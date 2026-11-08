@@ -47,6 +47,28 @@ pub fn prepare_release(
     // Check for trigger commit.
 }
 
+/// Evaluates the repository state to generate a detailed plan for the next release.
+///
+/// This function determines the baseline commit of the last release, inspects
+/// the commit history since that point, and calculates the appropriate version
+/// bumps for either a unified workspace or individual independent workspace members.
+/// If no pending releases are found for any crates, it returns `Ok(None)`.
+///
+/// # Errors
+///
+/// Returns an error if any of the following occur:
+/// - **VCS Failures:** The backend fails to read repository history, list version tags,
+///   or extract commit logs to determine what changed since the last release.
+/// - **Manifest I/O:** The manifest backend fails to locate, read, or parse the
+///   primary package manifest (e.g., `Cargo.toml`) at the given `root`.
+/// - **Member Evaluation:** The workspace is independent and evaluating individual
+///   member manifests or cross-member dependencies fails.
+/// - **Invalid Configuration:** A forced version bump (via CLI or config) is provided
+///   but fails to parse as a valid semantic version bump.
+/// - **Breaking Changes:** Automated breaking change detection (if enabled) encounters
+///   a failure during execution.
+/// - **Channel Evaluation:** Calculating the next pre-release channel version
+///   (e.g., `alpha`, `rc`) results in an invalid semver identifier.
 pub fn plan_release(
     backend: &dyn JjBackend,
     manifest: &dyn ManifestBackend,
@@ -66,7 +88,16 @@ pub(super) fn release_since(backend: &dyn JjBackend, config: &Config) -> Result<
     )
 }
 
-/// The release plan for the commits since `since`.
+/// Computes the release plan using a specific VCS baseline (`since`).
+///
+/// This helper branches based on workspace configuration
+///
+/// Returns `Ok(None)` if no version bumps are required for any crate.
+///
+/// # Errors
+///
+/// This function produces the exact same error conditions as its public
+/// wrapper, [`plan_release`]. See its documentation for a full breakdown.
 fn plan_since(
     backend: &dyn JjBackend,
     manifest: &dyn ManifestBackend,
