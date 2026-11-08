@@ -140,6 +140,7 @@ fn independent_since(
         .max_by_key(|t| backend.commit_date(t).unwrap_or_default())
         .unwrap_or_else(|| "root()".to_owned()))
 }
+
 /// The workspace config, if independent versioning is enabled.
 #[must_use]
 pub fn independent_workspace(config: &Config) -> Option<&WorkspaceConfig> {

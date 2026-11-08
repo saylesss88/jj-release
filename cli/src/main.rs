@@ -64,6 +64,10 @@ struct Cli {
     /// Override the changelog layout (root, per-member, both).
     #[arg(long, global = true)]
     layout: Option<String>,
+
+    /// Release as the next pre-release on CHANNEL (e.g. `rc` → 1.0.0-rc.1, 1.0.0-rc.2, …).
+    #[arg(long, global = true, value_name = "CHANNEL")]
+    pre: Option<String>,
 }
 
 #[derive(clap::Subcommand, Debug, Clone)]
@@ -116,6 +120,7 @@ fn run() -> Result<(), errors::ReleaseError> {
         cli.no_publish,
         cli.publish_cargo,
         cli.layout.as_deref(),
+        cli.pre.as_deref(),
     )?;
 
     let backend = ShellBackend::new(&root)?;
@@ -148,6 +153,7 @@ fn load_config(
     no_publish: bool,
     publish_cargo: bool,
     layout_override: Option<&str>,
+    pre: Option<&str>,
 ) -> Result<Config, ReleaseError> {
     let mut config = config::load(root)?;
     if publish_cargo {
@@ -165,6 +171,10 @@ fn load_config(
                 "warning: ignored unknown layout '{layout_str}', valid options are: root, per-member, both"
             ),
         }
+    }
+
+    if let Some(pre) = pre {
+        config.bump.pre = Some(pre.to_owned());
     }
 
     if !root.join("release.toml").exists() {

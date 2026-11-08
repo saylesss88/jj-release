@@ -1,7 +1,7 @@
 //! Commit walking and conventional commit parsing.
 
 use git_conventional::Commit;
-use semver::{BuildMetadata, Prerelease, Version};
+use semver::{Prerelease, Version};
 
 use crate::errors::{ReleaseError, Result};
 use crate::jj::JjBackend;
@@ -62,6 +62,86 @@ pub fn latest_version_tag(backend: &dyn JjBackend, prefix: &str) -> Result<Optio
     Ok(version_tags(backend, prefix, "tags() & ::@")?.pop())
 }
 
+/// Where a commit range starts: `tag`, or `root()` before the first release.
+#[must_use]
+pub(crate) fn since_revision(tag: Option<&Tag>) -> &str {
+    tag.map_or("root()", |tag| tag.name.as_str())
+}
+
+// -- Pre-releases --
+
+/// The next `<target>-<channel>.N` version: one past the highest existing
+/// `<channel>.N` pre-release of `target`, or `.1` if there isn't one.
+///
+/// Moving up a channel (`beta` → `rc`) restarts at `.1`. Moving down
+/// (`rc` → `beta`) is refused, since `1.0.0-beta.1` sorts below `1.0.0-rc.1`.
+///
+/// # Errors
+///
+/// Returns an error if `channel` isn't a single alphanumeric identifier,
+/// `target` has already been released, or the new version wouldn't sort
+/// above an existing pre-release of `target`.
+pub fn next_prerelease(target: &Version, channel: &str, tags: &[Tag]) -> Result<Version> {
+    validate_channel(channel)?;
+    let core = release_core(target);
+
+    let mut latest_pre: Option<&Version> = None;
+    for version in tags.iter().map(|tag| &tag.version) {
+        if release_core(version) != core {
+            continue;
+        }
+        if version.pre.is_empty() {
+            return Err(ReleaseError::Message(format!(
+                "{core} has already been released"
+            )));
+        }
+        latest_pre = latest_pre.max(Some(version));
+    }
+
+    let number = latest_pre
+        .and_then(|v| {
+            v.pre
+                .as_str()
+                .strip_prefix(channel)?
+                .strip_prefix('.')?
+                .parse::<u64>()
+                .ok()
+        })
+        .map_or(1, |n| n + 1);
+
+    let mut next = core.clone();
+    next.pre = Prerelease::new(&format!("{channel}.{number}")).map_err(|e| {
+        ReleaseError::Message(format!("invalid pre-release {channel}.{number}: {e}"))
+    })?;
+
+    if let Some(prev) = latest_pre.filter(|prev| next <= **prev) {
+        return Err(ReleaseError::Message(format!(
+            "{next} wouldn't sort above the existing {prev}; use a later channel or release {core}"
+        )));
+    }
+    Ok(next)
+}
+
+/// `x.y.z` without pre-release or build metadata.
+const fn release_core(version: &Version) -> Version {
+    Version::new(version.major, version.minor, version.patch)
+}
+
+/// A channel must be one semver identifier, so `rc` works but not `rc.1`.
+fn validate_channel(channel: &str) -> Result<()> {
+    let valid = !channel.is_empty()
+        && channel
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+        && !channel.chars().all(|c| c.is_ascii_digit());
+    if valid {
+        Ok(())
+    } else {
+        Err(ReleaseError::Message(format!(
+            "invalid pre-release channel {channel:?}: use a name like alpha, beta or rc"
+        )))
+    }
+}
 // -- Walking --
 
 /// Find a commit in `since..@` whose description contains `trigger`.
@@ -131,24 +211,21 @@ fn classify(description: &str) -> BumpKind {
 /// Apply a bump to a version, returning the new version.
 #[must_use]
 pub fn apply_bump(current: &Version, bump: BumpKind) -> Version {
-    let mut next = current.clone();
+    let mut next = Version::new(current.major, current.minor, current.patch);
+    let pre = !current.pre.is_empty();
     match bump {
-        BumpKind::Major => {
+        BumpKind::Major if !(pre && next.minor == 0 && next.patch == 0) => {
             next.major += 1;
             next.minor = 0;
             next.patch = 0;
         }
-        BumpKind::Minor => {
+        BumpKind::Minor if !(pre && next.patch == 0) => {
             next.minor += 1;
             next.patch = 0;
         }
-        BumpKind::Patch => next.patch += 1,
-
-        BumpKind::None => {}
+        BumpKind::Patch if !pre => next.patch += 1,
+        _ => {}
     }
-    // Clear pre-release and build metadata on a real release.
-    next.pre = Prerelease::EMPTY;
-    next.build = BuildMetadata::EMPTY;
     next
 }
 
@@ -156,6 +233,20 @@ pub fn apply_bump(current: &Version, bump: BumpKind) -> Version {
 mod tests {
     use super::*;
     use crate::test_helpers::mock::MockBackend;
+
+    fn tags(versions: &[&str]) -> Vec<Tag> {
+        versions
+            .iter()
+            .map(|v| Tag {
+                name: format!("v{v}"),
+                version: Version::parse(v).unwrap(),
+            })
+            .collect()
+    }
+
+    fn v(s: &str) -> Version {
+        Version::parse(s).unwrap()
+    }
 
     #[test]
     fn latest_version_tag_finds_highest() {
@@ -326,5 +417,83 @@ mod tests {
         assert_eq!(commits.len(), 1);
         // verify the call was recorded
         assert_eq!(backend.calls.borrow()[0], "root()..@");
+    }
+
+    #[test]
+    fn first_prerelease_is_numbered_one() {
+        let next = next_prerelease(&v("1.0.0"), "rc", &tags(&["0.9.0"])).unwrap();
+        assert_eq!(next, v("1.0.0-rc.1"));
+    }
+
+    #[test]
+    fn prerelease_increments_numerically() {
+        let existing = tags(&["0.9.0", "1.0.0-rc.9", "1.0.0-rc.10"]);
+        assert_eq!(
+            next_prerelease(&v("1.0.0"), "rc", &existing).unwrap(),
+            v("1.0.0-rc.11")
+        );
+    }
+
+    #[test]
+    fn later_channel_restarts_numbering() {
+        let existing = tags(&["1.0.0-beta.3"]);
+        assert_eq!(
+            next_prerelease(&v("1.0.0"), "rc", &existing).unwrap(),
+            v("1.0.0-rc.1")
+        );
+    }
+
+    #[test]
+    fn earlier_channel_is_refused() {
+        let existing = tags(&["1.0.0-rc.1"]);
+        assert!(next_prerelease(&v("1.0.0"), "beta", &existing).is_err());
+    }
+
+    #[test]
+    fn other_versions_prereleases_are_ignored() {
+        let existing = tags(&["1.0.0", "2.0.0-rc.3"]);
+        assert_eq!(
+            next_prerelease(&v("1.1.0"), "rc", &existing).unwrap(),
+            v("1.1.0-rc.1")
+        );
+    }
+
+    #[test]
+    fn prerelease_target_uses_its_core() {
+        let existing = tags(&["1.0.0-rc.1"]);
+        assert_eq!(
+            next_prerelease(&v("1.0.0-rc.1"), "rc", &existing).unwrap(),
+            v("1.0.0-rc.2")
+        );
+    }
+
+    #[test]
+    fn released_target_is_refused() {
+        assert!(next_prerelease(&v("1.0.0"), "rc", &tags(&["1.0.0"])).is_err());
+    }
+
+    #[test]
+    fn invalid_channels_are_refused() {
+        for channel in ["", "rc.1", "123", "r c", "rc_1"] {
+            assert!(
+                next_prerelease(&v("1.0.0"), channel, &[]).is_err(),
+                "{channel:?}"
+            );
+        }
+    }
+    #[test]
+    fn bump_completes_prerelease() {
+        let cases = [
+            ("1.0.0-rc.1", BumpKind::Major, "1.0.0"),
+            ("1.0.0-rc.1", BumpKind::Patch, "1.0.0"),
+            ("1.2.0-rc.1", BumpKind::Minor, "1.2.0"),
+            ("1.2.0-rc.1", BumpKind::Major, "2.0.0"),
+            ("1.2.3-rc.1", BumpKind::Patch, "1.2.3"),
+            ("1.2.3-rc.1", BumpKind::Minor, "1.3.0"),
+            ("1.2.3-rc.1", BumpKind::None, "1.2.3"),
+        ];
+        for (from, bump, expected) in cases {
+            assert_eq!(apply_bump(&v(from), bump), v(expected), "{from} {bump:?}");
+        }
     }
 }

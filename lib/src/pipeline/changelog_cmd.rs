@@ -180,7 +180,7 @@ impl PendingChanges {
         fileset: Option<&str>,
     ) -> Result<Self> {
         let latest = commits::latest_version_tag(ctx.backend, prefix)?;
-        let since = latest.as_ref().map_or("root()", |tag| tag.name.as_str());
+        let since = commits::since_revision(latest.as_ref());
         let commits = log_commits(ctx, &format!("{since}..@"), fileset)?;
         Ok(Self { latest, commits })
     }
@@ -196,6 +196,10 @@ impl PendingChanges {
         let latest = self.latest_version();
         if latest.is_some_and(|latest| current <= latest) {
             return None;
+        }
+        // A pre-release manifest is chosen with `--pre`, not computed from commits.
+        if !current.pre.is_empty() {
+            return Some(current.clone());
         }
         let bump = commits::compute_bump(&self.commits);
         Some(bump::next_version(latest, current, bump))
@@ -406,7 +410,7 @@ fn full_releases(
     let mut prev: Option<&Tag> = None;
 
     for tag in &tags {
-        let since = prev.map_or("root()", |t| t.name.as_str());
+        let since = commits::since_revision(prev);
         let commits = log_commits(ctx, &format!("{since}..{}", tag.name), fileset)?;
 
         if fileset.is_none() || !commits.is_empty() {
@@ -426,7 +430,7 @@ fn full_releases(
         prev = Some(tag);
     }
 
-    let since = prev.map_or("root()", |t| t.name.as_str());
+    let since = commits::since_revision(prev);
     let tip = log_commits(ctx, &format!("{since}..@"), fileset)?;
     if !tip.is_empty() {
         releases.push(Release {

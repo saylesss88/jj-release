@@ -103,6 +103,9 @@ pub struct BumpConfig {
     /// Force a specific bump kind regardless of commit analysis.
     /// One of "major", "minor", "patch", or unset for automatic.
     pub force: Option<String>,
+    /// Release as the next pre-release on this channel (`alpha`, `beta`, `rc`)
+    /// instead of a stable version.
+    pub pre: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
