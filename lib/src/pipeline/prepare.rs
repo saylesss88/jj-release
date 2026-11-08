@@ -59,7 +59,7 @@ pub fn plan_release(
 
 /// Where release history starts: the latest release tag (of any member, for
 /// an independent workspace), or `root()` before the first release.
-fn release_since(backend: &dyn JjBackend, config: &Config) -> Result<String> {
+pub(super) fn release_since(backend: &dyn JjBackend, config: &Config) -> Result<String> {
     match independent_workspace(config) {
         Some(ws) => independent_since(backend, config, ws),
         None => resolve_since(backend, config),

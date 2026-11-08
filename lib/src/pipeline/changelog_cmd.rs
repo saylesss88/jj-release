@@ -474,6 +474,7 @@ fn build_independent_full_changelog(
             Some(&member.name),
         )?);
     }
+    releases.retain(|r| !changelog::render_body(&r.commits, &config.changelog).is_empty());
 
     // `render_changelog` takes oldest first. Unreleased sections (no date) go
     // last, so they render at the top. The sort is stable, so a member's

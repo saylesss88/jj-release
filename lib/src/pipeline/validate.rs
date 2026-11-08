@@ -114,7 +114,7 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
         }
     }
 
-    let since = prepare::resolve_since(ctx.backend, config).map_err(|e| e.to_string());
+    let since = prepare::release_since(ctx.backend, config).map_err(|e| e.to_string());
 
     run_check(
         "trigger commit",
