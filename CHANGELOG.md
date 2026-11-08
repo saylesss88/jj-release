@@ -5,11 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/saylesss88/jj-release/compare/v0.10.0...HEAD)
+## [0.11.0] - 2026-11-08
 
 ### ✨ Added
 
-- **(changelog)** add an option for keeping track of both independent workspace members and the root changelog tracking everything at the same time
+- configurable semantic versioning settings
+- add a --bump flag for overrides
+- add pre-release channels with --pre
+- **(cli)** add `-p` flag to force publishing to crates.io
+- **(workspace)** reusable member_prefix helper function
+- tie in ChangelogLayout::Both
 - dependency bump propagation
 - add check to ensure the same tag isn't created twice
 - **(workspace)** write detect_member_tags function
@@ -26,8 +31,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ♻️ Changed
 
+- **(validate)** break fn validate into helper functions
+- **(pipeline)** release.rs is long and convoluted
+- **(changelog)** pass the release date from the lib
+- **(changelog)** move what can be in the changelog crate into it
+- **(commits)** reorganize and streamline commits.rS
+- **(changelog)** make render.rs more idiomatic and readable
+- **(changelog)** reorganize module and extract workspace helpers
+- **(changelog)** unify write operations with emit and WriteMode
+- **(changelog)** extract Remote struct for compare links
+- **(changelog)** encapsulate pending changes logic
+- **(changelog)** encapsulate output target path resolution
+- **(pipeline)** give the repeated tag/range/commit logic it's own type
+- **(pipeline)** make pending-output handling consistent
+- **(pipeline)** consolidate file reading and prepending into functions
 - **(workspace)** move workspace.rs into workspace/ dir and split into submodules
-- **BREAKING** split PreparedRelease into unified and independent plans
+- **BREAKING** **(pipeline)** split PreparedRelease into unified and independent plans
 - **(main)** slim down fn run with helper functions
 - **(changelog)** split up changelog.rs into sub-modules to make the code easier to read
 - **(changelog)** create a new jj_release_changelog workspace member and move the changelog logic there
@@ -35,6 +54,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🛠️ Fixed
 
+- **(lib/config)** add fields to output of jj-release init
+- **(pipeline)** break prepare_release into separate functions allowing next-version to work without a trigger commit
+- **(pipeline)** make print_next_version use prepare_release
+- **(cli)** add global = true to Cli fields
+- **(changelog)** using .get(..11) is fragile rewrite has_changelog_title
+- rename the libs changelog to changelog_cmd
+- **(lib)** tie everything in and tweaks for working with complex workspaces in different modes
+- get prefix from new member_prefix function
+- **(changelog)** split header check into own function
 - **(lib/Cargo.toml)** pruned features causing issue
 - **(pipeline/prepare)** return None from prepare_release when an independent release has nothing to release
 - **(test)** failing test missing parameter
@@ -48,11 +76,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🪲 Bug
 
+- **(validate)** for the since variable in fn validate, call prepare::release_since instead of prepare::resolve_since
+- **(validate)** validate doesn't understand independent workspaces
+- **(pipeline)** auto-bumping to 1.0.0
+- independent + `Both` layout mismatch
+- `latest_version_tag` considers every tag in the repo, so a tag created on a side branch or fork can become the baseline.
 - **(changelog)** every historical release gets todays date
 - **(validate)** add check to make sure release.toml members match the members defined in Cargo.toml
 
 ### 📚 Documentation
 
+- update configuration chapter
+- **(mdbook)** update config chapter
+- **(mdbook)** update workspaces.md with new behavior
+- **(mdBook)** update changelog.md
 - **(mdbook)** add faster ci setup
 - **(changelog)** add user facing examples
 - **(changelog)** add basic README.md for changelog workspace

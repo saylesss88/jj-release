@@ -5,10 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased](https://github.com/saylesss88/jj-release/compare/v0.10.0...HEAD)
+## [0.11.0] - 2026-11-08
 
 ### ✨ Added
 
+- add a --bump flag for overrides
+- add pre-release channels with --pre
+- **(cli)** add `-p` flag to force publishing to crates.io
 - dependency bump propagation
 - **(init)** detect tag prefixes from existing tags
 - **(changelog)** add --write flag to changelog subcommand
@@ -18,15 +21,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### ♻️ Changed
 
-- **BREAKING** split PreparedRelease into unified and independent plans
+- **BREAKING** **(pipeline)** split PreparedRelease into unified and independent plans
 - **(main)** slim down fn run with helper functions
 - **(changelog)** create a new jj_release_changelog workspace member and move the changelog logic there
 
 ### 🛠️ Fixed
 
+- **(cli)** add global = true to Cli fields
+- **(lib)** tie everything in and tweaks for working with complex workspaces in different modes
 - use statements calling old changelog module
 - **(config)** move `manifest_backend` key to the top of `release.toml`
 - use prepared.baseline_version for pr.rs and release.rs in the cli
+
+### 🪲 Bug
+
+- `latest_version_tag` considers every tag in the repo, so a tag created on a side branch or fork can become the baseline.
 
 ## [0.10.0](https://github.com/saylesss88/jj-release/compare/v0.9.0...v0.10.0) - 2026-10-10
 

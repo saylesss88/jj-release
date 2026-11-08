@@ -38,7 +38,7 @@ toml = { version = "1.1.8", features = [
 toml_edit = "0.25.17"
 ureq = { workspace = true, optional = true, features = ["json"] }
 which = "8.0.6"
-jj_release_changelog = { path = "../changelog", version = "0.10.0", features = [
+jj_release_changelog = { path = "../changelog", version = "0.11.0", features = [
   "serde",
 ] }
 
