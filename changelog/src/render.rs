@@ -189,7 +189,19 @@ pub fn render_release(release: &Release, config: &ChangelogConfig) -> String {
 pub fn render_changelog(releases: &[Release], config: &ChangelogConfig) -> String {
     let mut out = CHANGELOG_HEADER.to_owned();
     for release in releases.iter().rev() {
-        out.push_str(&render_release(release, config));
+        let body = render_body(&release.commits, config);
+        // An empty [Unreleased] says nothing. A tagged release still
+        // records that a version shipped, so it's kept.
+        if release.version.is_none() && body.is_empty() {
+            continue;
+        }
+        out.push_str(&render_heading(
+            release.name.as_deref(),
+            release.version.as_ref(),
+            release.date.as_deref(),
+            release.compare_url.as_deref(),
+        ));
+        out.push_str(&body);
         out.push('\n');
     }
     out
@@ -437,6 +449,7 @@ mod tests {
         assert!(out.contains("## [0.1.0] - 2026-01-05"));
         assert!(out.contains("## [0.2.0] - 2026-03-10"));
     }
+
     #[test]
     fn release_heading_includes_member_name() {
         let release = Release {
@@ -448,5 +461,25 @@ mod tests {
         };
         let out = render_release(&release, &ChangelogConfig::default());
         assert!(out.starts_with("## core [0.2.0] - 2026-11-07\n"));
+    }
+
+    #[test]
+    fn empty_unreleased_is_omitted() {
+        let releases = vec![
+            Release {
+                version: Some(Version::new(0, 1, 0)),
+                date: Some("2026-01-05".into()),
+                commits: vec!["feat: a".into()],
+                ..Default::default()
+            },
+            Release {
+                version: None,
+                commits: vec!["chore: tidy".into()],
+                ..Default::default()
+            },
+        ];
+        let out = render_changelog(&releases, &ChangelogConfig::default().strict(true));
+        assert!(!out.contains("[Unreleased]"));
+        assert!(out.contains("## [0.1.0] - 2026-01-05"));
     }
 }
