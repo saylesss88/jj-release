@@ -269,6 +269,9 @@ create_release = false
 [publish]
 cargo = false
 
+# [bump]
+# features_bump_patch_before_1_0 = true
+
 [changelog]
 enabled = true
 strict = true
@@ -293,6 +296,7 @@ strict = true
 # [publish.copr]
 # Required: your COPR project as owner/project
 # project = "your-username/my-cli-tool"
+# update_local = true    # bump local versions
 # fail_on_error = false
 
 # Required: path to the spec, relative to the repo root
