@@ -2,24 +2,33 @@
 
 use std::path::Path;
 
-use crate::commits;
-use crate::config::Config;
-use crate::errors::Result;
-use crate::pipeline::{ReleaseContext, prepare};
+use crate::pipeline::{self, ReleaseContext};
+use crate::{ReleasePlan, config::Config, errors::Result, workspace};
 
-/// Computes and prints the next release version to stdout based on
-/// conventional commits since the last version tag.
+/// Print the version(s) the next release would produce: the same plan
+/// `jj-release` and `--dry-run` use.
 ///
 /// # Errors
 ///
 /// Returns an error if reading the version manifest, resolving the last
 /// version tag, or fetching commit logs fails.
 pub fn print_next_version(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Result<()> {
-    let current = ctx.manifest.read_version(root)?;
-    let since = prepare::resolve_since(ctx.backend, config)?;
-    let commits = ctx.backend.log_commits(&format!("{since}..@"))?;
-    let bump = commits::resolve_bump(config.bump.force.as_deref(), &commits)?;
-    let next = commits::apply_bump(&current, bump);
-    println!("{next}");
+    let Some(prepared) = pipeline::plan_release(ctx.backend, ctx.manifest, config, root)? else {
+        eprintln!("Nothing to release (no trigger commit or no releasable commits).");
+        return Ok(());
+    };
+    match &prepared.plan {
+        ReleasePlan::Unified(plan) => println!("{}", plan.next_version),
+        ReleasePlan::Independent(members) => {
+            let Some(ws) = pipeline::independent_workspace(config) else {
+                return Ok(());
+            };
+            for member in workspace::ordered_members(&ws.members)? {
+                if let Some(plan) = members.get(&member.name).filter(|p| p.is_released()) {
+                    println!("{} {}", member.name, plan.next);
+                }
+            }
+        }
+    }
     Ok(())
 }
