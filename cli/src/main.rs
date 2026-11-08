@@ -62,12 +62,17 @@ struct Cli {
     publish_cargo: bool,
 
     /// Override the changelog layout (root, per-member, both).
-    #[arg(long, global = true)]
+    #[arg(long, global = true, ignore_case = true, value_parser = ["root", "per-member", "both"])]
     layout: Option<String>,
 
     /// Release as the next pre-release on CHANNEL (e.g. `rc` → 1.0.0-rc.1, 1.0.0-rc.2, …).
     #[arg(long, global = true, value_name = "CHANNEL")]
     pre: Option<String>,
+
+    /// Override the computed bump for this run. On a 0.x crate,
+    /// `--bump major` releases 1.0.0.
+    #[arg(long, global = true, value_name = "LEVEL", value_parser = ["major", "minor", "patch"])]
+    bump: Option<String>,
 }
 
 #[derive(clap::Subcommand, Debug, Clone)]
@@ -115,13 +120,7 @@ fn main() {
 fn run() -> Result<(), errors::ReleaseError> {
     let cli = Cli::parse();
     let root = resolve_repo_root(cli.repo.clone())?;
-    let config = load_config(
-        &root,
-        cli.no_publish,
-        cli.publish_cargo,
-        cli.layout.as_deref(),
-        cli.pre.as_deref(),
-    )?;
+    let config = load_config(&root, &cli)?;
 
     let backend = ShellBackend::new(&root)?;
     let publisher = build_publisher(&config);
@@ -148,21 +147,15 @@ fn resolve_repo_root(repo_arg: Option<PathBuf>) -> Result<PathBuf, ReleaseError>
     }
 }
 
-fn load_config(
-    root: &Path,
-    no_publish: bool,
-    publish_cargo: bool,
-    layout_override: Option<&str>,
-    pre: Option<&str>,
-) -> Result<Config, ReleaseError> {
+fn load_config(root: &Path, cli: &Cli) -> Result<Config, ReleaseError> {
     let mut config = config::load(root)?;
-    if publish_cargo {
+    if cli.publish_cargo {
         config.publish.cargo = true;
-    } else if no_publish {
+    } else if cli.no_publish {
         config.publish.cargo = false;
     }
 
-    if let Some(layout_str) = layout_override {
+    if let Some(layout_str) = cli.layout.as_deref() {
         match layout_str.to_lowercase().as_str() {
             "root" => config.changelog.layout = ChangelogLayout::Root,
             "per-member" => config.changelog.layout = ChangelogLayout::PerMember,
@@ -173,8 +166,11 @@ fn load_config(
         }
     }
 
-    if let Some(pre) = pre {
-        config.bump.pre = Some(pre.to_owned());
+    if let Some(bump) = &cli.bump {
+        config.bump.force = Some(bump.clone());
+    }
+    if let Some(pre) = &cli.pre {
+        config.bump.pre = Some(pre.clone());
     }
 
     if !root.join("release.toml").exists() {

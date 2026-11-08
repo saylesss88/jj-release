@@ -24,6 +24,14 @@ jj-release -p
 # Print the next version that would be released
 jj-release next-version
 
+# Override next bump
+jj-release --bump major
+
+# Release candidates
+jj-release --bump major --pre rc   # 1.0.0-rc.1
+jj-release --pre rc                # 1.0.0-rc.2
+jj-release                         # 1.0.0
+
 # Preview the next changelog section
 jj-release changelog
 
