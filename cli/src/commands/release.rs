@@ -10,7 +10,7 @@ use jj_release_core::{
     MemberPlan, ReleasePlan, UnifiedPlan, bump,
     config::{Config, WorkspaceMember},
     distro,
-    errors::Result,
+    errors::{ReleaseError, Result},
     manifest,
     pipeline::{self, PreparedRelease, ReleaseContext},
     workspace,
@@ -18,6 +18,18 @@ use jj_release_core::{
 
 macro_rules! info {
     ($quiet:expr, $($t:tt)*) => { if !$quiet { println!($($t)*); } };
+}
+
+/// How far a release got before failing: decides how to recover.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reached {
+    /// Only local changes: restoring the start operation undoes everything.
+    Local,
+    /// Publishing to crates.io, nothing pushed yet. Restoring is still safe,
+    /// and a re-run skips crates that are already published.
+    Publishing,
+    /// Something was pushed: restoring would only undo the local side.
+    Pushed,
 }
 
 pub fn release_pipeline(
@@ -48,11 +60,20 @@ pub fn release_pipeline(
         return Ok(());
     }
 
-    // Mode-specific steps: decided once, by what prepare_release produced.
-    match &prepared.plan {
-        ReleasePlan::Unified(plan) => release_unified(ctx, config, root, &prepared, plan, quiet),
-        ReleasePlan::Independent(_) => release_independent(ctx, config, root, &prepared, quiet),
-    }
+    // Everything from here changes the repo. Record where it started, so a
+    // failure can say how to undo it.
+    let start_op = ctx.backend.current_operation()?;
+    let mut reached = Reached::Local;
+
+    let result = match &prepared.plan {
+        ReleasePlan::Unified(plan) => {
+            release_unified(ctx, config, root, &prepared, plan, quiet, &mut reached)
+        }
+        ReleasePlan::Independent(_) => {
+            release_independent(ctx, config, root, &prepared, quiet, &mut reached)
+        }
+    };
+    result.map_err(|e| with_recovery_hint(&e, &start_op, reached))
 }
 
 fn release_unified(
@@ -62,10 +83,14 @@ fn release_unified(
     prepared: &PreparedRelease,
     plan: &UnifiedPlan,
     quiet: bool,
+    reached: &mut Reached,
 ) -> Result<()> {
     create_release_commit(ctx, config, root, prepared, plan, quiet)?;
 
+    *reached = Reached::Publishing;
     pipeline::run_publish(ctx, config, root, prepared)?;
+
+    *reached = Reached::Pushed;
 
     info!(quiet, "→ Pushing bookmark and tags...");
     ctx.backend
@@ -88,6 +113,7 @@ fn release_independent(
     root: &Path,
     prepared: &PreparedRelease,
     quiet: bool,
+    reached: &mut Reached,
 ) -> Result<()> {
     // Written before the per-member commits, so the changelog files land in
     // the first member's release commit.
@@ -96,6 +122,8 @@ fn release_independent(
         pipeline::update_changelog(ctx, root, config, prepared)?;
     }
 
+    // Each member's tag is pushed as it's published.
+    *reached = Reached::Pushed;
     // Per member: bump, commit, tag, push tag, publish.
     pipeline::run_publish(ctx, config, root, prepared)?;
 
@@ -349,4 +377,26 @@ fn print_independent_member(
             member.name, member.path, plan.current, plan.next
         );
     }
+}
+
+/// `error`, followed by how to recover from where the release stopped.
+fn with_recovery_hint(error: &ReleaseError, start_op: &str, reached: Reached) -> ReleaseError {
+    let hint = match reached {
+        Reached::Local | Reached::Publishing => {
+            let mut hint = format!(
+                "Nothing was pushed. To undo this release's local changes and try again:\n  \
+             jj op restore {start_op}"
+            );
+            if reached == Reached::Publishing {
+                hint.push_str(
+                    "\nCrates already on crates.io are skipped when you run jj-release again.",
+                );
+            }
+            hint
+        }
+        Reached::Pushed => "The release was already pushed, so don't restore: that would only \
+                        undo your local side. Finish the remaining steps by hand."
+            .to_owned(),
+    };
+    ReleaseError::Message(format!("{error}\n\n{hint}"))
 }

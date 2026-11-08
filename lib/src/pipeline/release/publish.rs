@@ -351,6 +351,9 @@ mod tests {
             // (If it returned true, commit_and_tag_members would abort!)
             Ok(false)
         }
+        fn current_operation(&self) -> Result<String> {
+            Ok("0123456789ab".to_owned())
+        }
     }
 
     #[test]

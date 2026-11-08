@@ -56,5 +56,8 @@ pub mod mock {
         fn tag_exists(&self, tag: &str) -> Result<bool> {
             Ok(self.tags.contains(&tag.to_owned()))
         }
+        fn current_operation(&self) -> Result<String> {
+            Ok("0123456789ab".to_owned())
+        }
     }
 }

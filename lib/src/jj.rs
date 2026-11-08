@@ -105,6 +105,13 @@ pub trait JjBackend {
     ///
     /// Returns an error if the underlying command fails.
     fn tag_exists(&self, tag: &str) -> Result<bool>;
+
+    /// The current operation's ID, to restore to if a release fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying command fails.
+    fn current_operation(&self) -> Result<String>;
 }
 
 // Shell implementation
@@ -307,6 +314,11 @@ impl JjBackend for ShellBackend {
             .map_err(|e| ReleaseError::Message(format!("failed to spawn jj: {e}")))?;
 
         Ok(out.status.success())
+    }
+
+    fn current_operation(&self) -> Result<String> {
+        let out = self.run(&["op", "log", "--no-graph", "-n", "1", "-T", "id.short()"])?;
+        Ok(out.trim().to_owned())
     }
 }
 
