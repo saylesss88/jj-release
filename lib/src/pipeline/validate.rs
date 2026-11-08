@@ -8,7 +8,7 @@
 use std::{env, path::Path};
 
 use crate::{
-    Config, PublishBackend, ReleaseContext, Tag,
+    Config, PublishBackend, ReleaseContext, WorkspaceConfig,
     commits::{self, BumpKind},
     detect, distro,
     errors::{ReleaseError, Result},
@@ -40,13 +40,17 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
         }
     };
 
+    // Independent workspaces have no repo-wide version or tag: checks that
+    // read one look at each member instead.
+    let independent = pipeline::independent_workspace(config);
+
     if distro::any_configured(config) {
         if !config.publish.cargo {
             run_check(
                 "distro packages",
                 Ok("skipped (publish.cargo = false)".to_owned()),
             );
-        } else if pipeline::independent_workspace(config).is_some() {
+        } else if independent.is_some() {
             run_check(
                 "distro packages",
                 Ok("skipped (independent versioning)".to_owned()),
@@ -62,14 +66,23 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
         }
     }
 
-    let tag = commits::latest_version_tag(ctx.backend, &config.release.tag_prefix)
-        .map_err(|e| e.to_string());
-
     run_check("jj identity", check_jj_identity(ctx));
     run_check("forge CLI", check_forge_cli(config));
-    run_check("manifest", check_manifest(ctx, root));
+    run_check(
+        "manifest",
+        match independent {
+            Some(ws) => check_member_manifests(ws, root),
+            None => check_manifest(ctx, root),
+        },
+    );
     run_check("workspace members", check_workspace_members(config, root));
-    run_check("version tag", check_version_tag(&tag));
+    run_check(
+        "version tag",
+        match independent {
+            Some(ws) => check_member_tags(ctx, config, ws),
+            None => check_version_tag(ctx, config),
+        },
+    );
 
     if config.publish.cargo {
         run_check(
@@ -84,12 +97,21 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
     }
 
     if config.publish.cargo && config.publish.semver_checks {
-        run_check("cargo-semver-checks", check_semver(ctx, config, root));
+        let result = if independent.is_some() {
+            Ok("skipped (not used for independent versioning)".to_owned())
+        } else {
+            check_semver(ctx, config, root)
+        };
+        run_check("cargo-semver-checks", result);
     }
-    if config.publish.cargo
-        && let Some(result) = check_crates_io(ctx, root)
-    {
-        run_check("crates.io", result);
+    if config.publish.cargo {
+        let result = match independent {
+            Some(ws) => Some(check_members_on_crates_io(ws, root)),
+            None => check_crates_io(ctx, root),
+        };
+        if let Some(result) = result {
+            run_check("crates.io", result);
+        }
     }
 
     let since = prepare::resolve_since(ctx.backend, config).map_err(|e| e.to_string());
@@ -102,13 +124,14 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
             .and_then(|s| check_trigger(ctx, config, s)),
     );
 
-    run_check(
-        "version bump",
-        since
+    let bump = match independent {
+        Some(_) => check_member_bumps(ctx, config, root),
+        None => since
             .as_ref()
             .map_err(Clone::clone)
             .and_then(|s| check_bump(ctx, config, s)),
-    );
+    };
+    run_check("version bump", bump);
 
     if config.publish.cargo {
         run_check("CARGO_REGISTRY_TOKEN", check_cargo_token());
@@ -195,12 +218,58 @@ fn check_manifest(ctx: &ReleaseContext<'_>, root: &Path) -> CheckResult {
         .map_err(|e| e.to_string())
 }
 
-fn check_version_tag(tag: &Result<Option<Tag>, String>) -> CheckResult {
-    match tag {
-        Ok(Some(t)) => Ok(format!("found {}", t.name)),
-        Ok(None) => Ok("none (first release mode)".to_owned()),
-        Err(e) => Err(e.clone()),
+/// Every member's version can be read. The release would otherwise treat a
+/// member without one as 0.0.0.
+fn check_member_manifests(ws: &WorkspaceConfig, root: &Path) -> CheckResult {
+    let versions = workspace::member_versions(root).map_err(|e| e.to_string())?;
+    let missing: Vec<&str> = ws
+        .members
+        .iter()
+        .map(|m| m.name.as_str())
+        .filter(|name| !versions.contains_key(*name))
+        .collect();
+
+    if missing.is_empty() {
+        Ok(format!("versions read for {} members", ws.members.len()))
+    } else {
+        Err(format!("no version found for: {}", missing.join(", ")))
     }
+}
+
+fn check_version_tag(ctx: &ReleaseContext<'_>, config: &Config) -> CheckResult {
+    match commits::latest_version_tag(ctx.backend, &config.release.tag_prefix) {
+        Ok(Some(tag)) => Ok(format!("found {}", tag.name)),
+        Ok(None) => Ok("none (first release mode)".to_owned()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Which members have a tag of their own; the rest are on their first release.
+fn check_member_tags(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    ws: &WorkspaceConfig,
+) -> CheckResult {
+    let mut untagged = Vec::new();
+    for member in &ws.members {
+        let since =
+            workspace::member_since(ctx.backend, member, &config.release.tag_prefix, "root()")
+                .map_err(|e| e.to_string())?;
+        if since == "root()" {
+            untagged.push(member.name.as_str());
+        }
+    }
+
+    let total = ws.members.len();
+    let tagged = total - untagged.len();
+    Ok(if untagged.is_empty() {
+        format!("all {total} members tagged")
+    } else {
+        format!(
+            "{tagged} of {total} members tagged; first release for: {}",
+            untagged.join(", ")
+        )
+    })
 }
 
 fn check_crates_io(ctx: &ReleaseContext<'_>, root: &Path) -> Option<CheckResult> {
@@ -219,6 +288,36 @@ fn check_crates_io(ctx: &ReleaseContext<'_>, root: &Path) -> Option<CheckResult>
         });
 
     Some(result)
+}
+
+/// Each member's manifest version against its latest crates.io release.
+/// Like the single-crate check, a mismatch is reported, not failed.
+fn check_members_on_crates_io(ws: &WorkspaceConfig, root: &Path) -> CheckResult {
+    let versions = workspace::member_versions(root).map_err(|e| e.to_string())?;
+
+    let mut out_of_sync = Vec::new();
+    for member in &ws.members {
+        let Some(version) = versions.get(&member.name) else {
+            continue; // reported by the manifest check
+        };
+        let published = registry::latest_version_on_crates_io(&member.name)
+            .map_err(|e| format!("{}: {e}", member.name))?;
+        if let Some(published) = published.filter(|p| p != version) {
+            out_of_sync.push(format!(
+                "{} (v{published} published, manifest v{version})",
+                member.name
+            ));
+        }
+    }
+
+    Ok(if out_of_sync.is_empty() {
+        format!(
+            "all {} members in sync with their manifests",
+            ws.members.len()
+        )
+    } else {
+        format!("out of sync: {}", out_of_sync.join(", "))
+    })
 }
 
 fn check_trigger(ctx: &ReleaseContext<'_>, config: &Config, since: &str) -> CheckResult {
@@ -266,6 +365,28 @@ fn check_bump(ctx: &ReleaseContext<'_>, config: &Config, since: &str) -> Result<
     } else {
         Ok("releasable commits found".to_owned())
     }
+}
+
+/// The members the release would publish, from the same plan the release uses.
+fn check_member_bumps(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> CheckResult {
+    let prepared = prepare::plan_release(ctx.backend, ctx.manifest, config, root)
+        .map_err(|e| e.to_string())?
+        .ok_or("no member has releasable commits since its last tag")?;
+
+    let mut released: Vec<&str> = prepared
+        .members()
+        .into_iter()
+        .flatten()
+        .filter(|(_, plan)| plan.is_released())
+        .map(|(name, _)| name.as_str())
+        .collect();
+    released.sort_unstable();
+
+    Ok(format!(
+        "{} member(s) to release: {}",
+        released.len(),
+        released.join(", ")
+    ))
 }
 
 #[cfg(test)]
