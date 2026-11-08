@@ -14,9 +14,13 @@ pub mod mock {
 
     impl JjBackend for MockBackend {
         fn list_tags(&self, revset: &str) -> Result<Vec<String>> {
-            assert_eq!(
-                revset, "tags() & ::@",
-                "Release pipeline must restrict tag searches to the current branch ancestry"
+            // Version baselines must stay on the current branch's ancestry. The one
+            // exception is pre-release numbering (`apply_channel`), which has to see
+            // every tag so it never reuses an existing `-rc.N`.
+            assert!(
+                matches!(revset, "tags() & ::@" | "tags()"),
+                "Release pipeline must restrict tag searches to the current branch ancestry \
+     (or to all tags, for pre-release numbering); got {revset:?}"
             );
             Ok(self.tags.clone())
         }

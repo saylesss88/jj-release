@@ -85,6 +85,9 @@ pub fn prepare_release(
     let commits = backend.log_commits(&format!("{since}..@"))?;
 
     let mut bump = commits::resolve_bump(config.bump.force.as_deref(), &commits)?;
+    if config.bump.force.is_none() {
+        bump = commits::initial_development_bump(bump, &baseline_version);
+    }
     if !is_first_release {
         bump = upgrade_for_breaking_changes(config, root, &current_version, bump)?;
     }
@@ -100,6 +103,8 @@ pub fn prepare_release(
         )
     };
 
+    let next_version = apply_channel(backend, config, &config.release.tag_prefix, next_version)?;
+
     let tag_name = config.tag_name(&next_version);
 
     Ok(Some(PreparedRelease {
@@ -113,6 +118,22 @@ pub fn prepare_release(
             bump,
         }),
     }))
+}
+
+/// `next` as-is, or as the next pre-release on the `bump.pre` channel.
+/// Numbering looks at every tag, not just ancestors of `@`, so a pre-release
+/// tagged on another branch is never reused.
+fn apply_channel(
+    backend: &dyn JjBackend,
+    config: &Config,
+    prefix: &str,
+    next: Version,
+) -> Result<Version> {
+    let Some(channel) = config.bump.pre.as_deref() else {
+        return Ok(next);
+    };
+    let tags = commits::version_tags(backend, prefix, "tags()")?;
+    commits::next_prerelease(&next, channel, &tags)
 }
 
 /// Trigger search range for independent workspaces: since the most recent
@@ -207,10 +228,24 @@ fn plan_member_versions(
                 == "root()";
 
         let next = if first_release {
-            current.clone()
+            Some(current.clone())
         } else {
             let bump = bumps.get(&member.name).copied().unwrap_or(BumpKind::None);
-            commits::apply_bump(&current, bump)
+            let bump = if config.bump.force.is_none() {
+                commits::initial_development_bump(bump, &current)
+            } else {
+                bump
+            };
+            (bump != BumpKind::None).then(|| commits::apply_bump(&current, bump))
+        };
+        let next = match next {
+            Some(next) => apply_channel(
+                backend,
+                config,
+                workspace::member_prefix(member, &config.release.tag_prefix),
+                next,
+            )?,
+            None => current.clone(),
         };
 
         plans.insert(
@@ -225,7 +260,7 @@ fn plan_member_versions(
         );
     }
     let reqs = workspace::member_requirements(&root.join("Cargo.toml"))?;
-    propagate_dependency_bumps(ws, &reqs, &mut plans)?;
+    propagate_dependency_bumps(backend, config, ws, &reqs, &mut plans)?;
     Ok(plans)
 }
 
@@ -242,7 +277,13 @@ pub(super) fn resolve_since(backend: &dyn JjBackend, config: &Config) -> Result<
 /// Release dependents whose requirement on a released member no longer
 /// accepts that member's new version. Members are visited dependencies-first,
 /// so a propagated release can cascade further down the graph.
+///
+/// A pre-release never matches an ordinary requirement (`"1.0"` doesn't accept
+/// `1.0.0-rc.1`), so every dependent of a pre-released member is released too,
+/// on the same `bump.pre` channel.
 fn propagate_dependency_bumps(
+    backend: &dyn JjBackend,
+    config: &Config,
     ws: &WorkspaceConfig,
     reqs: &HashMap<String, HashMap<String, VersionReq>>,
     plans: &mut HashMap<String, MemberPlan>,
@@ -270,7 +311,9 @@ fn propagate_dependency_bumps(
             continue;
         };
         if !plan.is_released() {
-            plan.next = commits::apply_bump(&plan.current, BumpKind::Patch);
+            let next = commits::apply_bump(&plan.current, BumpKind::Patch);
+            let prefix = workspace::member_prefix(member, &config.release.tag_prefix);
+            plan.next = apply_channel(backend, config, prefix, next)?;
             plan.propagated = true;
         }
         plan.updated_deps = outdated;
@@ -448,6 +491,15 @@ mod tests {
         }
     }
 
+    /// Propagate with no tags and the default config (no `bump.pre`).
+    fn propagate(
+        reqs: &HashMap<String, HashMap<String, VersionReq>>,
+        plans: &mut HashMap<String, MemberPlan>,
+    ) {
+        let backend = MockBackend::default();
+        propagate_dependency_bumps(&backend, &Config::default(), &ws(), reqs, plans).unwrap();
+    }
+
     #[test]
     fn breaking_bump_releases_direct_dependents() {
         let reqs = reqs(&[
@@ -460,7 +512,7 @@ mod tests {
             ("ripgrep".to_owned(), plan("15.2.0", "15.2.0")),
         ]);
 
-        propagate_dependency_bumps(&ws(), &reqs, &mut plans).unwrap();
+        propagate(&reqs, &mut plans);
 
         let ignore = &plans["ignore"];
         assert_eq!(ignore.next, Version::new(0, 4, 35));
@@ -480,7 +532,7 @@ mod tests {
             ("ripgrep".to_owned(), plan("15.2.0", "15.2.0")),
         ]);
 
-        propagate_dependency_bumps(&ws(), &reqs, &mut plans).unwrap();
+        propagate(&reqs, &mut plans);
 
         assert!(!plans["ignore"].is_released());
     }
@@ -497,7 +549,7 @@ mod tests {
             ("ripgrep".to_owned(), plan("15.2.0", "15.2.0")),
         ]);
 
-        propagate_dependency_bumps(&ws(), &reqs, &mut plans).unwrap();
+        propagate(&reqs, &mut plans);
 
         assert!(plans["ignore"].propagated);
         assert!(plans["ripgrep"].propagated);
@@ -513,11 +565,35 @@ mod tests {
             ("ripgrep".to_owned(), plan("15.2.0", "15.2.0")),
         ]);
 
-        propagate_dependency_bumps(&ws(), &reqs, &mut plans).unwrap();
+        propagate(&reqs, &mut plans);
 
         let ignore = &plans["ignore"];
         assert_eq!(ignore.next, Version::new(0, 5, 0));
         assert!(!ignore.propagated);
         assert_eq!(ignore.updated_deps, ["globset"]);
+    }
+
+    #[test]
+    fn pre_release_dependency_propagates_on_the_same_channel() {
+        let reqs = reqs(&[("ignore", "globset", "0.4.21")]);
+        let mut plans = HashMap::from([
+            ("globset".to_owned(), plan("0.4.21", "0.5.0-rc.1")),
+            ("ignore".to_owned(), plan("0.4.34", "0.4.34")),
+            ("ripgrep".to_owned(), plan("15.2.0", "15.2.0")),
+        ]);
+        let config = Config {
+            bump: config::BumpConfig {
+                pre: Some("rc".into()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        propagate_dependency_bumps(&MockBackend::default(), &config, &ws(), &reqs, &mut plans)
+            .unwrap();
+
+        let ignore = &plans["ignore"];
+        assert_eq!(ignore.next, Version::parse("0.4.35-rc.1").unwrap());
+        assert!(ignore.propagated);
     }
 }
