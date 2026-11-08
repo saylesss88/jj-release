@@ -1,5 +1,6 @@
 use std::{fmt::Write, fs, path::Path};
 
+use semver::Version;
 use toml_edit::DocumentMut;
 
 use crate::{
@@ -9,7 +10,7 @@ use crate::{
     errors::Result,
     manifest,
     pipeline::{PreparedRelease, ReleaseContext},
-    workspace,
+    registry, workspace,
 };
 
 /// Publishes the release to the configured package registry.
@@ -34,7 +35,7 @@ pub fn run_publish(
 
     match &prepared.plan {
         ReleasePlan::Independent(_) => publish_independent(ctx, config, prepared, root),
-        ReleasePlan::Unified(_) => publish_unified(ctx, config, root),
+        ReleasePlan::Unified(_) => publish_unified(ctx, config, root, prepared),
     }?;
 
     Ok(())
@@ -188,6 +189,9 @@ fn publish_members(
     })?;
 
     for member in workspace::ordered_members(&ws.members)? {
+        if !member.publish {
+            continue;
+        }
         let Some(plan) = bumps.get(&member.name) else {
             continue;
         };
@@ -195,9 +199,13 @@ fn publish_members(
             continue;
         }
 
-        let member_root = root.join(&member.path);
-        ctx.publisher
-            .publish(&member_root, &config.publish.cargo_flags)?;
+        publish_crate(
+            ctx,
+            config,
+            &root.join(&member.path),
+            &member.name,
+            &plan.next,
+        )?;
     }
 
     Ok(())
@@ -207,7 +215,10 @@ pub(super) fn publish_unified(
     ctx: &ReleaseContext<'_>,
     config: &Config,
     root: &Path,
+    prepared: &PreparedRelease,
 ) -> Result<()> {
+    let version = &unified_plan(prepared)?.next_version;
+
     if let Some(ws) = config
         .workspace
         .as_ref()
@@ -217,14 +228,39 @@ pub(super) fn publish_unified(
             .into_iter()
             .filter(|m| m.publish)
         {
-            ctx.publisher
-                .publish(&root.join(&member.path), &config.publish.cargo_flags)?;
+            publish_crate(ctx, config, &root.join(&member.path), &member.name, version)?;
         }
         return Ok(());
     }
 
-    // For single crates or unified workspaces, we just publish from the project root
-    ctx.publisher.publish(root, &config.publish.cargo_flags)
+    // Single crate: publish from the project root.
+    match manifest::read_name(&root.join("Cargo.toml")) {
+        Ok(name) => publish_crate(ctx, config, root, &name, version),
+        // Not a Cargo project (npm, go): nothing to look up on crates.io.
+        Err(_) => ctx.publisher.publish(root, &config.publish.cargo_flags),
+    }
+}
+
+/// Publish the crate in `dir`, unless this exact version is already on
+/// crates.io, so a re-run after a failed release picks up where it stopped.
+fn publish_crate(
+    ctx: &ReleaseContext<'_>,
+    config: &Config,
+    dir: &Path,
+    name: &str,
+    version: &Version,
+) -> Result<()> {
+    match registry::version_exists_on_crates_io(name, version) {
+        Ok(true) => {
+            println!("  ↷ {name} {version} is already on crates.io, skipping");
+            return Ok(());
+        }
+        Ok(false) => {}
+        // Can't tell: publish anyway. If it is there, cargo fails with a
+        // clear "already exists" error.
+        Err(e) => eprintln!("⚠ couldn't check crates.io for {name} {version}: {e}"),
+    }
+    ctx.publisher.publish(dir, &config.publish.cargo_flags)
 }
 
 pub(super) fn unified_plan(prepared: &PreparedRelease) -> Result<&UnifiedPlan> {

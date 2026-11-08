@@ -5,7 +5,7 @@
 //! and publish tokens, and reports pass/fail for each before any
 //! mutations occur.
 
-use std::{env, path::Path};
+use std::path::Path;
 
 use crate::{
     Config, PublishBackend, ReleaseContext, WorkspaceConfig,
@@ -388,14 +388,14 @@ fn check_trigger(ctx: &ReleaseContext<'_>, config: &Config, since: &str) -> Chec
 }
 
 fn check_cargo_token() -> CheckResult {
-    let has_env_token = env::var("CARGO_REGISTRY_TOKEN").is_ok();
-    let has_credentials =
-        dirs::home_dir().is_some_and(|h| h.join(".cargo/credentials.toml").exists());
-
-    if has_env_token || has_credentials {
-        Ok("configured".to_owned())
-    } else {
-        Err("not set and no ~/.cargo/credentials.toml found, needed for cargo publish".to_owned())
+    match registry::token_status() {
+        Ok(registry::TokenStatus::Accepted) => Ok("accepted by crates.io".to_owned()),
+        Ok(registry::TokenStatus::Rejected) => Err(
+            "rejected by crates.io (expired or revoked?), run `cargo login` with a new token"
+                .to_owned(),
+        ),
+        Ok(registry::TokenStatus::Unknown(why)) => Ok(format!("couldn't verify: {why}")),
+        Err(e) => Ok(format!("couldn't verify: {e}")),
     }
 }
 
