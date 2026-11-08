@@ -60,10 +60,10 @@ pub fn plan_release(
 /// Where release history starts: the latest release tag (of any member, for
 /// an independent workspace), or `root()` before the first release.
 pub(super) fn release_since(backend: &dyn JjBackend, config: &Config) -> Result<String> {
-    match independent_workspace(config) {
-        Some(ws) => independent_since(backend, config, ws),
-        None => resolve_since(backend, config),
-    }
+    independent_workspace(config).map_or_else(
+        || resolve_since(backend, config),
+        |ws| independent_since(backend, config, ws),
+    )
 }
 
 /// The release plan for the commits since `since`.
@@ -109,7 +109,11 @@ fn plan_since(
 
     let mut bump = commits::resolve_bump(config.bump.force.as_deref(), &commits)?;
     if config.bump.force.is_none() {
-        bump = commits::initial_development_bump(bump, &baseline_version);
+        bump = commits::initial_development_bump(
+            bump,
+            &baseline_version,
+            config.bump.features_bump_patch_before_1_0,
+        );
     }
     if !is_first_release {
         bump = upgrade_for_breaking_changes(config, root, &current_version, bump)?;
@@ -254,7 +258,11 @@ fn plan_member_versions(
         } else {
             let bump = bumps.get(&member.name).copied().unwrap_or(BumpKind::None);
             let bump = if config.bump.force.is_none() {
-                commits::initial_development_bump(bump, &current)
+                commits::initial_development_bump(
+                    bump,
+                    &current,
+                    config.bump.features_bump_patch_before_1_0,
+                )
             } else {
                 bump
             };

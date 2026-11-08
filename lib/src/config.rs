@@ -106,6 +106,10 @@ pub struct BumpConfig {
     /// Release as the next pre-release on this channel (`alpha`, `beta`, `rc`)
     /// instead of a stable version.
     pub pre: Option<String>,
+    /// Before 1.0, release features as patch versions (0.4.21 → 0.4.22)
+    /// instead of minor ones (→ 0.5.0). Cargo treats a 0.x patch as
+    /// compatible, so dependents get the feature without a requirement change.
+    pub features_bump_patch_before_1_0: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

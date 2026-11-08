@@ -70,18 +70,18 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
     run_check("forge CLI", check_forge_cli(config));
     run_check(
         "manifest",
-        match independent {
-            Some(ws) => check_member_manifests(ws, root),
-            None => check_manifest(ctx, root),
-        },
+        independent.map_or_else(
+            || check_manifest(ctx, root),
+            |ws| check_member_manifests(ws, root),
+        ),
     );
     run_check("workspace members", check_workspace_members(config, root));
     run_check(
         "version tag",
-        match independent {
-            Some(ws) => check_member_tags(ctx, config, ws),
-            None => check_version_tag(ctx, config),
-        },
+        independent.map_or_else(
+            || check_version_tag(ctx, config),
+            |ws| check_member_tags(ctx, config, ws),
+        ),
     );
 
     if config.publish.cargo {
@@ -105,10 +105,10 @@ pub fn validate(ctx: &ReleaseContext<'_>, config: &Config, root: &Path) -> Resul
         run_check("cargo-semver-checks", result);
     }
     if config.publish.cargo {
-        let result = match independent {
-            Some(ws) => Some(check_members_on_crates_io(ws, root)),
-            None => check_crates_io(ctx, root),
-        };
+        let result = independent.map_or_else(
+            || check_crates_io(ctx, root),
+            |ws| Some(check_members_on_crates_io(ws, root)),
+        );
         if let Some(result) = result {
             run_check("crates.io", result);
         }

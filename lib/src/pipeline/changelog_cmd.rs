@@ -192,7 +192,7 @@ impl PendingChanges {
     /// The version the pending section is headed with: `None` renders
     /// `[Unreleased]` (the manifest hasn't been bumped past the latest tag),
     /// `Some` is the next version.
-    fn next_version(&self, current: &Version) -> Option<Version> {
+    fn next_version(&self, current: &Version, config: &Config) -> Option<Version> {
         let latest = self.latest_version();
         if latest.is_some_and(|latest| current <= latest) {
             return None;
@@ -201,7 +201,11 @@ impl PendingChanges {
         if !current.pre.is_empty() {
             return Some(current.clone());
         }
-        let bump = commits::compute_bump(&self.commits);
+        let bump = commits::initial_development_bump(
+            commits::compute_bump(&self.commits),
+            latest.unwrap_or(current),
+            config.bump.features_bump_patch_before_1_0,
+        );
         Some(bump::next_version(latest, current, bump))
     }
 }
@@ -215,7 +219,7 @@ fn repo_pending(
 ) -> Result<(PendingChanges, Option<Version>)> {
     let current = ctx.manifest.read_version(root)?;
     let pending = PendingChanges::since_last_tag(ctx, &config.release.tag_prefix, None)?;
-    let version = pending.next_version(&current);
+    let version = pending.next_version(&current, config);
     Ok((pending, version))
 }
 
@@ -292,7 +296,7 @@ fn pending_independent_root(
             continue;
         }
 
-        let version = pending.next_version(&member_current_version(root, member)?);
+        let version = pending.next_version(&member_current_version(root, member)?, config);
         sections.extend(changelog::render_pending_section(
             Some(&member.name),
             &pending.commits,
@@ -346,7 +350,7 @@ fn pending_members(
         }
         let version = match &unified_version {
             Some(version) => version.clone(),
-            None => pending.next_version(&member_current_version(root, member)?),
+            None => pending.next_version(&member_current_version(root, member)?, config),
         };
         let Some(section) = changelog::render_pending_section(
             None,

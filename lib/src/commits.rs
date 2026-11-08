@@ -194,11 +194,18 @@ pub fn resolve_bump(force: Option<&str>, commits: &[CommitInfo]) -> Result<BumpK
 /// Before 1.0, a breaking change bumps the minor version (Cargo treats 0.x
 /// minors as breaking). Reaching 1.0.0 takes `bump.force = "major"`.
 #[must_use]
-pub(crate) fn initial_development_bump(bump: BumpKind, baseline: &Version) -> BumpKind {
-    if baseline.major == 0 && bump == BumpKind::Major {
-        BumpKind::Minor
-    } else {
-        bump
+pub(crate) const fn initial_development_bump(
+    bump: BumpKind,
+    baseline: &Version,
+    features_bump_patch: bool,
+) -> BumpKind {
+    if baseline.major != 0 {
+        return bump;
+    }
+    match bump {
+        BumpKind::Major => BumpKind::Minor,
+        BumpKind::Minor if features_bump_patch => BumpKind::Patch,
+        other => other,
     }
 }
 
@@ -507,23 +514,22 @@ mod tests {
             assert_eq!(apply_bump(&v(from), bump), v(expected), "{from} {bump:?}");
         }
     }
+
     #[test]
-    fn breaking_change_before_1_0_bumps_minor() {
+    fn bumps_move_down_before_1_0() {
+        let bump = initial_development_bump;
+        // Breaking changes always move down.
+        assert_eq!(bump(BumpKind::Major, &v("0.10.0"), false), BumpKind::Minor);
         assert_eq!(
-            initial_development_bump(BumpKind::Major, &v("0.10.0")),
+            bump(BumpKind::Major, &v("0.11.0-rc.1"), false),
             BumpKind::Minor
         );
-        assert_eq!(
-            initial_development_bump(BumpKind::Major, &v("0.11.0-rc.1")),
-            BumpKind::Minor
-        );
-        assert_eq!(
-            initial_development_bump(BumpKind::Major, &v("1.2.0")),
-            BumpKind::Major
-        );
-        assert_eq!(
-            initial_development_bump(BumpKind::Patch, &v("0.10.0")),
-            BumpKind::Patch
-        );
+        // Features only with the option.
+        assert_eq!(bump(BumpKind::Minor, &v("0.4.21"), false), BumpKind::Minor);
+        assert_eq!(bump(BumpKind::Minor, &v("0.4.21"), true), BumpKind::Patch);
+        assert_eq!(bump(BumpKind::Patch, &v("0.4.21"), true), BumpKind::Patch);
+        // Nothing changes from 1.0 on.
+        assert_eq!(bump(BumpKind::Major, &v("1.2.0"), true), BumpKind::Major);
+        assert_eq!(bump(BumpKind::Minor, &v("1.2.0"), true), BumpKind::Minor);
     }
 }
