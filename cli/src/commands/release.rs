@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     io::{self, IsTerminal, Write},
     path::Path,
+    process::Command,
 };
 
 use jiff::Zoned;
@@ -223,6 +224,7 @@ fn create_release_commit(
     ctx.manifest.write_version(root, &plan.next_version)?;
     pipeline::update_workspace_dependencies(root, config, &plan.next_version)?;
     apply_file_bumps(config, root, &plan.next_version.to_string(), quiet)?;
+    sync_lockfile(root)?;
 
     let message = format!("chore: release {}", plan.tag_name);
     info!(quiet, "→ Creating commit {message:?}…");
@@ -244,6 +246,26 @@ fn apply_file_bumps(config: &Config, root: &Path, version: &str, quiet: bool) ->
         bump::apply_replacements(&config.replacements, &crate_name, version, &date)?;
     }
     bump::bump_flake_nix(root, version)
+}
+
+/// Version bumps change workspace members' entries in Cargo.lock. Refresh
+/// them now so the lockfile lands in the release commit instead of being
+/// rewritten by `cargo publish` afterwards.
+fn sync_lockfile(root: &Path) -> Result<()> {
+    if !root.join("Cargo.lock").exists() {
+        return Ok(());
+    }
+    let status = Command::new("cargo")
+        .args(["update", "--workspace"])
+        .current_dir(root)
+        .status()
+        .map_err(|e| ReleaseError::Message(format!("spawning cargo update: {e}")))?;
+    if !status.success() {
+        return Err(ReleaseError::Message(
+            "cargo update --workspace failed".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn move_bookmark_and_export(ctx: &ReleaseContext<'_>, config: &Config, quiet: bool) -> Result<()> {
